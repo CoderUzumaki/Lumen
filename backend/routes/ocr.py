@@ -88,7 +88,11 @@ def extract_invoice_data():
         print("Normalizing transaction data...")
         try:
             normalized = normalize_transaction(structured_data)
+            print(f"✅ Normalization successful: {normalized}")
         except Exception as e:
+            print(f"❌ Normalization error: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return jsonify({
                 'success': False,
                 'error': f'Normalization failed: {str(e)}',

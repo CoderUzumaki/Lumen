@@ -391,9 +391,10 @@ export const ocrApi = {
 	/**
 	 * Extract invoice data from a single file (PDF or image)
 	 */
-	extractInvoice: async (file: File) => {
+	extractInvoice: async (file: File, userId: string) => {
 		const formData = new FormData();
 		formData.append("file", file);
+		formData.append("user_id", userId);
 
 		const response = await apiClient.post("/extract", formData, {
 			headers: {
