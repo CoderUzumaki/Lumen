@@ -1,16 +1,13 @@
 def clean_amount(value):
-    if value is None or value == "":
+    if value is None:
         return None
-    try:
-        return float(
-            str(value)
-            .replace("$", "")
-            .replace("₹", "")
-            .replace(",", "")
-            .strip()
-        )
-    except (ValueError, AttributeError):
-        return None
+    return float(
+        str(value)
+        .replace("$", "")
+        .replace("₹", "")
+        .replace(",", "")
+        .strip()
+    )
 
 
 def normalize_transaction(data):
@@ -33,24 +30,15 @@ def normalize_transaction(data):
     # Normalize items
     items_norm = []
     for item in data.get("items", []):
-        try:
-            unit_price = clean_amount(item.get("price"))
-            quantity = int(item.get("quantity", 1))
-            
-            # Skip items with invalid data
-            if unit_price is None or quantity <= 0:
-                continue
+        unit_price = clean_amount(item.get("price"))
+        quantity = int(item.get("quantity", 1))
 
-            items_norm.append({
-                "item_name": item.get("item_name") or "Unknown Item",
-                "quantity": quantity,
-                "unit_price": unit_price,
-                "total_price": unit_price * quantity
-            })
-        except (ValueError, TypeError, AttributeError) as e:
-            # Skip items that can't be normalized
-            print(f"⚠️  Skipping item due to error: {e}")
-            continue
+        items_norm.append({
+            "item_name": item.get("item_name"),
+            "quantity": quantity,
+            "unit_price": unit_price,
+            "total_price": unit_price * quantity
+        })
 
     normalized["items"] = items_norm
 

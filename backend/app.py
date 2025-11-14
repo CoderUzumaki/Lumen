@@ -40,6 +40,7 @@ if __name__ == '__main__':
     print("   POST /extract-batch - Multi-page PDF extraction")
     print("   POST /chat - Natural language query interface (requires user_id)")
     print("   GET /chat/suggestions - Get sample query suggestions")
+    print("   GET /analytics/summary?user_id=X - Get spending analytics")
     print("   GET /health - Health check")
     
     app.run(debug=True, host='0.0.0.0', port=5000)
