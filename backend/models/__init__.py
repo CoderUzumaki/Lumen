@@ -104,7 +104,15 @@ class EmbeddingMeta(db.Model):
     chunk_text = db.Column(db.Text, nullable=True)
     # `metadata` is a reserved attribute name on Declarative classes (SQLAlchemy).
     # use `meta` as the Python attribute but keep the DB column name as "metadata"
+<<<<<<< HEAD
     # Store JSON as TEXT in SQLite
     meta = db.Column("metadata", db.Text)
+=======
+    meta = db.Column("metadata", JSONB)
+<<<<<<< HEAD
+    embedding_metadata = db.Column(JSONB)
+=======
+>>>>>>> 27869b7f88f4aecc2beb6c9ada3c4a2b1e72c57e
+>>>>>>> 80ad3a03a004fbd02822c1329489fb9b802c7c0c
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
