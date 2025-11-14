@@ -104,6 +104,9 @@ class EmbeddingMeta(db.Model):
     # `metadata` is a reserved attribute name on Declarative classes (SQLAlchemy).
     # use `meta` as the Python attribute but keep the DB column name as "metadata"
     meta = db.Column("metadata", JSONB)
+<<<<<<< HEAD
     embedding_metadata = db.Column(JSONB)
+=======
+>>>>>>> 27869b7f88f4aecc2beb6c9ada3c4a2b1e72c57e
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
