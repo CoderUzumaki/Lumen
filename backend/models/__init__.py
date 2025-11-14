@@ -1,112 +1,106 @@
-from sqlalchemy import (
-    Column, String, Integer, Float, DateTime, ForeignKey, 
-    UniqueConstraint, JSON
-)
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship
 import uuid
 from datetime import datetime
-from database import Base
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from database import db
 
 
-class User(Base):
+class User(db.Model):
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String, unique=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = db.Column(db.String, unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-class Receipt(Base):
+class Receipt(db.Model):
     __tablename__ = "receipts"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    file_url = Column(String, nullable=False)
-    raw_text = Column(String, nullable=True)
-    file_type = Column(String, nullable=True)
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
 
-    user = relationship("User")
+    file_url = db.Column(db.String, nullable=False)
+    raw_text = db.Column(db.Text, nullable=True)
+    file_type = db.Column(db.String, nullable=True)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User")
 
 
-class Transaction(Base):
+class Transaction(db.Model):
     __tablename__ = "transactions"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    receipt_id = Column(UUID(as_uuid=True), ForeignKey("receipts.id"), nullable=True)
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    receipt_id = db.Column(UUID(as_uuid=True), db.ForeignKey("receipts.id"), nullable=True)
 
-    vendor_name = Column(String, nullable=True)
-    invoice_number = Column(String, nullable=True)
+    vendor_name = db.Column(db.String, nullable=True)
+    invoice_number = db.Column(db.String, nullable=True)
+    date = db.Column(db.String, nullable=True)
 
-    date = Column(String, nullable=True)
+    total_amount = db.Column(db.Float, nullable=True)
+    tax_amount = db.Column(db.Float, nullable=True)
+    payment_method = db.Column(db.String, nullable=True)
 
-    total_amount = Column(Float, nullable=True)
-    tax_amount = Column(Float, nullable=True)
-    payment_method = Column(String, nullable=True)
+    address = db.Column(db.String, nullable=True)
+    category = db.Column(db.String, nullable=True)
 
-    address = Column(String, nullable=True)
-    category = Column(String, nullable=True)  # Grocery, Electronics, etc.
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    # Prevent duplicate invoice numbers across same vendor
     __table_args__ = (
-        UniqueConstraint("vendor_name", "invoice_number", name="u_vendor_invoice"),
+        db.UniqueConstraint("vendor_name", "invoice_number", name="u_vendor_invoice"),
     )
 
-    items = relationship("TransactionItem", backref="transaction")
-    anomalies = relationship("Anomaly", backref="transaction")
+    items = db.relationship("TransactionItem", backref="transaction")
+    anomalies = db.relationship("Anomaly", backref="transaction")
 
 
-class TransactionItem(Base):
+class TransactionItem(db.Model):
     __tablename__ = "transaction_items"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    transaction_id = Column(UUID(as_uuid=True), ForeignKey("transactions.id"), nullable=False)
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    transaction_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"), nullable=False)
 
-    item_name = Column(String, nullable=False)
-    quantity = Column(Integer, default=1)
-    unit_price = Column(Float, nullable=True)
-    total_price = Column(Float, nullable=True)
+    item_name = db.Column(db.String, nullable=False)
+    quantity = db.Column(db.Integer, default=1)
+    unit_price = db.Column(db.Float, nullable=True)
+    total_price = db.Column(db.Float, nullable=True)
 
 
-class Anomaly(Base):
+class Anomaly(db.Model):
     __tablename__ = "anomalies"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    transaction_id = Column(UUID(as_uuid=True), ForeignKey("transactions.id"), nullable=False)
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    transaction_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"), nullable=False)
 
-    risk_score = Column(Integer, nullable=False)
-    anomalies = Column(JSONB)
-    explanation = Column(String, nullable=True)
+    risk_score = db.Column(db.Integer, nullable=False)
+    anomalies = db.Column(JSONB)
+    explanation = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
 
-
-class Insight(Base):
+class Insight(db.Model):
     __tablename__ = "insights"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    transaction_id = Column(UUID(as_uuid=True), ForeignKey("transactions.id"))
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"))
+    transaction_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"))
 
-    insight = Column(String, nullable=True)
-    reminder = Column(String, nullable=True)
-    advice = Column(String, nullable=True)
+    insight = db.Column(db.Text, nullable=True)
+    reminder = db.Column(db.Text, nullable=True)
+    advice = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
 
-
-class EmbeddingMeta(Base):
+class EmbeddingMeta(db.Model):
     __tablename__ = "embeddings_metadata"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    transaction_id = Column(UUID(as_uuid=True), ForeignKey("transactions.id"))
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    transaction_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"))
 
-    embedding_vector_id = Column(String, nullable=False)  # stores the Vector DB ID
-    chunk_text = Column(String, nullable=True)
-    metadata = Column(JSONB)
+    # This is the ID you get when adding docs to ChromaDB
+    chroma_doc_id = db.Column(db.String, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    chunk_text = db.Column(db.Text, nullable=True)
+    metadata = db.Column(JSONB)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
