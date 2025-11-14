@@ -2,11 +2,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Calendar, LayoutGrid, MoreHorizontal } from "lucide-react";
-import { AppSidebar } from "@/components/app-sidebar";
-import {
-	SidebarInset,
-	SidebarProvider,
-} from "@/components/ui/sidebar";
 import Sidebar from "@/components/chatbot/Sidebar";
 import Header from "@/components/chatbot/Header";
 import ChatPane from "@/components/chatbot/ChatPane";
@@ -17,6 +12,7 @@ import {
 	INITIAL_TEMPLATES,
 	INITIAL_FOLDERS,
 } from "@/components/chatbot/mockData";
+import { chatApi } from "@/lib/api/client";
 
 interface MessageType {
 	id: string;
@@ -162,6 +158,22 @@ export default function AIAssistantUI() {
 
 	const [isThinking, setIsThinking] = useState(false);
 	const [thinkingConvId, setThinkingConvId] = useState<string | null>(null);
+	const [suggestions, setSuggestions] = useState<string[]>([]);
+
+	// Load suggestions from backend
+	useEffect(() => {
+		const loadSuggestions = async () => {
+			try {
+				const response = await chatApi.getSuggestions();
+				if (response.suggestions) {
+					setSuggestions(response.suggestions);
+				}
+			} catch (error) {
+				console.error("Failed to load suggestions:", error);
+			}
+		};
+		loadSuggestions();
+	}, []);
 
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
@@ -252,16 +264,17 @@ export default function AIAssistantUI() {
 		]);
 	}
 
-	function sendMessage(convId: string, content: string) {
+	async function sendMessage(convId: string, content: string) {
 		if (!content.trim()) return;
 		const now = new Date().toISOString();
 		const userMsg: MessageType = {
-			id: "1",
+			id: Math.random().toString(36).slice(2),
 			role: "user",
 			content,
 			createdAt: now,
 		};
 
+		// Add user message to conversation
 		setConversations((prev) =>
 			prev.map((c) => {
 				if (c.id !== convId) return c;
@@ -279,32 +292,66 @@ export default function AIAssistantUI() {
 		setIsThinking(true);
 		setThinkingConvId(convId);
 
-		const currentConvId = convId;
-		setTimeout(() => {
-			// Always clear thinking state and generate response for this specific conversation
+		try {
+			// Call the backend chat API
+			const response = await chatApi.sendMessage(content, "1");
+
+			// Process the response
 			setIsThinking(false);
 			setThinkingConvId(null);
+
+			if (response.success) {
+				const aiResponse = response.data.answer || "I received your message.";
+				const asstMsg: MessageType = {
+					id: Math.random().toString(36).slice(2),
+					role: "assistant",
+					content: aiResponse,
+					createdAt: new Date().toISOString(),
+				};
+
+				setConversations((prev) =>
+					prev.map((c) => {
+						if (c.id !== convId) return c;
+						const msgs = [...(c.messages || []), asstMsg];
+						return {
+							...c,
+							messages: msgs,
+							updatedAt: new Date().toISOString(),
+							messageCount: msgs.length,
+							preview: aiResponse.slice(0, 80),
+						};
+					})
+				);
+			} else {
+				throw new Error(response.error || "Failed to get response");
+			}
+		} catch (error) {
+			console.error("Error sending message:", error);
+			setIsThinking(false);
+			setThinkingConvId(null);
+
+			// Add error message
+			const errorMsg: MessageType = {
+				id: Math.random().toString(36).slice(2),
+				role: "assistant",
+				content: "Sorry, I encountered an error. Please make sure the backend server is running and try again.",
+				createdAt: new Date().toISOString(),
+			};
+
 			setConversations((prev) =>
 				prev.map((c) => {
-					if (c.id !== currentConvId) return c;
-					const ack = `Got it — I'll help with that.`;
-					const asstMsg: MessageType = {
-						id: Math.random().toString(36).slice(2),
-						role: "assistant",
-						content: ack,
-						createdAt: new Date().toISOString(),
-					};
-					const msgs = [...(c.messages || []), asstMsg];
+					if (c.id !== convId) return c;
+					const msgs = [...(c.messages || []), errorMsg];
 					return {
 						...c,
 						messages: msgs,
 						updatedAt: new Date().toISOString(),
 						messageCount: msgs.length,
-						preview: asstMsg.content.slice(0, 80),
+						preview: errorMsg.content.slice(0, 80),
 					};
 				})
 			);
-		}, 2000);
+		}
 	}
 
 	function editMessage(
@@ -357,99 +404,83 @@ export default function AIAssistantUI() {
 	const selected = conversations.find((c) => c.id === selectedId) || null;
 
 	return (
-		<>
-			<SidebarProvider>
-				<AppSidebar />
-				<SidebarInset>
-					<div className="h-screen w-full bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-						<div className="md:hidden sticky top-0 z-40 flex items-center gap-2 border-b border-zinc-200/60 bg-white/80 px-3 py-2 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/70">
-							<div className="ml-1 flex items-center gap-2 text-sm font-semibold tracking-tight">
-								<span className="inline-flex h-4 w-4 items-center justify-center">
-									✱
-								</span>{" "}
-								AI Assistant
-							</div>
-							<div className="ml-auto flex items-center gap-2">
-								<GhostIconButton label="Schedule">
-									<Calendar className="h-4 w-4" />
-								</GhostIconButton>
-								<GhostIconButton label="Apps">
-									<LayoutGrid className="h-4 w-4" />
-								</GhostIconButton>
-								<GhostIconButton label="More">
-									<MoreHorizontal className="h-4 w-4" />
-								</GhostIconButton>
-								<ThemeToggle
-									theme={theme}
-									setTheme={setTheme}
-								/>
-							</div>
-						</div>
+		<div className="h-screen w-full bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+			<div className="md:hidden sticky top-0 z-40 flex items-center gap-2 border-b border-zinc-200/60 bg-white/80 px-3 py-2 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/70">
+				<div className="ml-1 flex items-center gap-2 text-sm font-semibold tracking-tight">
+					<span className="inline-flex h-4 w-4 items-center justify-center">
+						✱
+					</span>{" "}
+					AI Assistant
+				</div>
+				<div className="ml-auto flex items-center gap-2">
+					<GhostIconButton label="Schedule">
+						<Calendar className="h-4 w-4" />
+					</GhostIconButton>
+					<GhostIconButton label="Apps">
+						<LayoutGrid className="h-4 w-4" />
+					</GhostIconButton>
+					<GhostIconButton label="More">
+						<MoreHorizontal className="h-4 w-4" />
+					</GhostIconButton>
+					<ThemeToggle theme={theme} setTheme={setTheme} />
+				</div>
+			</div>
 
-						<div className="mx-auto flex h-[calc(100vh-0px)] max-w-[1400px]">
-							<Sidebar
-								open={sidebarOpen}
-								onClose={() => setSidebarOpen(false)}
-								theme={theme}
-								setTheme={setTheme}
-								collapsed={collapsed}
-								setCollapsed={setCollapsed}
-								sidebarCollapsed={sidebarCollapsed}
-								setSidebarCollapsed={setSidebarCollapsed}
-								conversations={conversations}
-								pinned={pinned}
-								recent={recent}
-								folders={folders}
-								folderCounts={folderCounts}
-								selectedId={selectedId}
-								onSelect={(id) => setSelectedId(id)}
-								togglePin={togglePin}
-								query={query}
-								setQuery={setQuery}
-								searchRef={searchRef}
-								createFolder={createFolder}
-								createNewChat={createNewChat}
-								templates={templates}
-								setTemplates={setTemplates}
-								onUseTemplate={handleUseTemplate}
-							/>
+			<div className="mx-auto flex h-[calc(100vh-0px)] max-w-[1400px]">
+				<Sidebar
+					open={sidebarOpen}
+					onClose={() => setSidebarOpen(false)}
+					theme={theme}
+					setTheme={setTheme}
+					collapsed={collapsed}
+					setCollapsed={setCollapsed}
+					sidebarCollapsed={sidebarCollapsed}
+					setSidebarCollapsed={setSidebarCollapsed}
+					conversations={conversations}
+					pinned={pinned}
+					recent={recent}
+					folders={folders}
+					folderCounts={folderCounts}
+					selectedId={selectedId}
+					onSelect={(id) => setSelectedId(id)}
+					togglePin={togglePin}
+					query={query}
+					setQuery={setQuery}
+					searchRef={searchRef}
+					createFolder={createFolder}
+					createNewChat={createNewChat}
+					templates={templates}
+					setTemplates={setTemplates}
+					onUseTemplate={handleUseTemplate}
+				/>
 
-							<main className="relative flex min-w-0 flex-1 flex-col">
-								<Header
-									createNewChat={createNewChat}
-									sidebarCollapsed={sidebarCollapsed}
-									setSidebarOpen={setSidebarOpen}
-								/>
-								<ChatPane
-									ref={composerRef}
-									conversation={selected}
-									onSend={(content) => {
-										if (selected)
-											sendMessage(selected.id, content);
-									}}
-									onEditMessage={(messageId, newContent) =>
-										selected &&
-										editMessage(
-											selected.id,
-											messageId,
-											newContent
-										)
-									}
-									onResendMessage={(messageId) =>
-										selected &&
-										resendMessage(selected.id, messageId)
-									}
-									isThinking={
-										isThinking &&
-										thinkingConvId === selected?.id
-									}
-									onPauseThinking={pauseThinking}
-								/>
-							</main>
-						</div>
-					</div>
-				</SidebarInset>
-			</SidebarProvider>
-		</>
+				<main className="relative flex min-w-0 flex-1 flex-col">
+					<Header
+						createNewChat={createNewChat}
+						sidebarCollapsed={sidebarCollapsed}
+						setSidebarOpen={setSidebarOpen}
+					/>
+					<ChatPane
+						ref={composerRef}
+						conversation={selected}
+						onSend={(content) => {
+							if (selected) sendMessage(selected.id, content);
+						}}
+						onEditMessage={(messageId, newContent) =>
+							selected &&
+							editMessage(selected.id, messageId, newContent)
+						}
+						onResendMessage={(messageId) =>
+							selected && resendMessage(selected.id, messageId)
+						}
+						isThinking={
+							isThinking && thinkingConvId === selected?.id
+						}
+						onPauseThinking={pauseThinking}
+						suggestions={suggestions}
+					/>
+				</main>
+			</div>
+		</div>
 	);
 }

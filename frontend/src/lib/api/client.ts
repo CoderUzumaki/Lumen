@@ -420,6 +420,30 @@ export const ocrApi = {
 };
 
 /**
+ * Chat API endpoints
+ */
+export const chatApi = {
+	/**
+	 * Send a chat message and get AI response
+	 */
+	sendMessage: async (query: string, userId: string = "1") => {
+		const response = await apiClient.post("/chat", {
+			query,
+			user_id: userId,
+		});
+		return response.data;
+	},
+
+	/**
+	 * Get suggested questions
+	 */
+	getSuggestions: async () => {
+		const response = await apiClient.get("/chat/suggestions");
+		return response.data;
+	},
+};
+
+/**
  * Check if user is authenticated
  */
 export const isAuthenticated = (): boolean => {

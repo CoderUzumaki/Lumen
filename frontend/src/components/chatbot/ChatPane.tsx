@@ -57,6 +57,7 @@ interface ChatPaneProps {
 	onResendMessage?: (messageId: string) => void;
 	isThinking: boolean;
 	onPauseThinking: () => void;
+	suggestions?: string[];
 }
 
 interface ComposerHandle {
@@ -76,6 +77,7 @@ const ChatPane = forwardRef<ChatPaneHandle, ChatPaneProps>(function ChatPane(
 		onResendMessage,
 		isThinking,
 		onPauseThinking,
+		suggestions = [],
 	},
 	ref
 ) {
@@ -146,8 +148,28 @@ const ChatPane = forwardRef<ChatPaneHandle, ChatPaneProps>(function ChatPane(
 				</div>
 
 				{messages.length === 0 ? (
-					<div className="rounded-xl border border-dashed border-zinc-300 p-6 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-						No messages yet. Say hello to start.
+					<div className="space-y-4">
+						<div className="rounded-xl border border-dashed border-zinc-300 p-6 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+							No messages yet. Ask me anything about your finances!
+						</div>
+						{suggestions.length > 0 && (
+							<div className="space-y-3">
+								<p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+									Try asking:
+								</p>
+								<div className="grid gap-2">
+									{suggestions.slice(0, 4).map((suggestion, idx) => (
+										<button
+											key={idx}
+											onClick={() => onSend?.(suggestion)}
+											className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left text-sm hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+										>
+											{suggestion}
+										</button>
+									))}
+								</div>
+							</div>
+						)}
 					</div>
 				) : (
 					<>
