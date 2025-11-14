@@ -4,6 +4,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from routes import register_routes
 from utils.openrouter import get_api_config
+from models.database import init_db
 
 # Load environment variables
 load_dotenv()
@@ -11,6 +12,9 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)
+
+# Initialize database
+init_db(app)
 
 # Register all routes
 register_routes(app)
@@ -32,7 +36,7 @@ if __name__ == '__main__':
     print("\n🚀 Starting LUMEN Financial Intelligence API...")
     print("📝 Endpoints available:")
     print("   GET / - API documentation")
-    print("   POST /extract - Single page extraction")
+    print("   POST /extract - Extract invoice from image/PDF and store to DB (requires user_id)")
     print("   POST /extract-batch - Multi-page PDF extraction")
     print("   GET /health - Health check")
     

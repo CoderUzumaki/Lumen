@@ -15,7 +15,18 @@ ocr_bp = Blueprint('ocr', __name__)
 
 @ocr_bp.route('/extract', methods=['POST'])
 def extract_invoice_data():
-    """Main endpoint to extract invoice data from uploaded file"""
+    """
+    Combined endpoint: OCR image/PDF and store transaction directly to database
+    Expects: 
+    - file: image or PDF file (form-data)
+    - user_id: user identifier (form-data or query param)
+    """
+    # Validate user_id
+    user_id = request.form.get('user_id') or request.args.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'user_id is required (provide in form-data or query param)'}), 400
+    
+    # Validate file
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
     
@@ -37,22 +48,17 @@ def extract_invoice_data():
             'webp': 'image/webp'
         }
         
+        # Step 1: Perform OCR
         if file_ext == 'pdf':
-            # Convert PDF to images and process first page (or all pages)
+            # Convert PDF to images and process first page
             print("Converting PDF to images...")
             images = convert_pdf_to_images(file_content)
             
             if not images:
                 return jsonify({'error': 'No pages found in PDF'}), 400
             
-            # Process first page only for speed (can be extended to all pages)
-            # For multi-page support, you can loop through all images
             first_page = images[0]
-            
-            # Convert PIL Image to bytes
             img_bytes = pil_image_to_bytes(first_page, format='PNG')
-            
-            # Convert to base64
             image_base64 = image_to_base64(img_bytes)
             media_type = 'image/png'
             
@@ -78,9 +84,36 @@ def extract_invoice_data():
         structured_data['source_file'] = file.filename
         structured_data['file_type'] = file_ext
         
+        # Step 2: Normalize the OCR data
+        print("Normalizing transaction data...")
+        try:
+            normalized = normalize_transaction(structured_data)
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': f'Normalization failed: {str(e)}',
+                'ocr_data': structured_data
+            }), 500
+        
+        # Step 3: Save to database
+        print(f"Saving transaction to database for user {user_id}...")
+        try:
+            transaction_id = save_transaction(user_id, normalized)
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': f'Database save failed: {str(e)}',
+                'normalized_data': normalized
+            }), 500
+        
+        # Step 4: Return success response
+        print(f"✅ Transaction {transaction_id} created successfully")
         return jsonify({
             'success': True,
-            'data': structured_data
+            'message': 'Transaction extracted and stored successfully',
+            'transaction_id': str(transaction_id),
+            'data': normalized,
+            'ocr_data': structured_data
         }), 200
     
     except Exception as e:
@@ -89,36 +122,3 @@ def extract_invoice_data():
             'success': False,
             'error': str(e)
         }), 500
-
-
-
-
-
-
-
-@ocr_bp.route("/transaction/create", methods=["POST"])
-def create_transaction():
-    payload = request.json
-    if not payload or "user_id" not in payload or "ocr_data" not in payload:
-        return jsonify({"error": "user_id and ocr_data are required"}), 400
-
-    user_id = payload["user_id"]
-    ocr_data = payload["ocr_data"]     
-    try:
-        normalized = normalize_transaction(ocr_data)
-    except Exception as e:
-        return jsonify({"error": f"Normalization failed: {str(e)}"}), 500
-
-    # (3) Save to database (transaction + items)
-    try:
-        transaction_id = save_transaction(user_id, normalized)
-    except Exception as e:
-        return jsonify({"error": f"Database save failed: {str(e)}"}), 500
-
-    # (4) Return success response
-    return jsonify({
-        "success": True,
-        "message": "Transaction stored successfully",
-        "transaction_id": str(transaction_id),
-        "normalized_data": normalized
-    }), 200

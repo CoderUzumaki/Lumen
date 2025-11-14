@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from database import db
+from models.database import db
 
 
 class User(db.Model):
@@ -101,6 +101,8 @@ class EmbeddingMeta(db.Model):
     chroma_doc_id = db.Column(db.String, nullable=False)
 
     chunk_text = db.Column(db.Text, nullable=True)
-    metadata = db.Column(JSONB)
+    # `metadata` is a reserved attribute name on Declarative classes (SQLAlchemy).
+    # use `meta` as the Python attribute but keep the DB column name as "metadata"
+    meta = db.Column("metadata", JSONB)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
