@@ -9,32 +9,28 @@ from risk_assessment import RiskAssessmentEngine
 from typing import Dict, Any,List
 import json
 from datetime import datetime
+from models.database import db
 
 class AnalyticsOrchestrator:
     """Coordinates all analytics agents and provides unified interface"""
     
-    def __init__(self, db_path: str):
+    def __init__(self):
         """
         Initialize analytics orchestrator
-        
-        Args:
-            db_path: Path to SQLite database
         """
         print("🚀 Initializing Analytics Orchestrator...")
         
-        self.db_path = db_path
-        
         # Initialize all agents
-        self.pattern_agent = PatternDetectionAgent(db_path)
+        self.pattern_agent = PatternDetectionAgent()
         print("   ✅ Pattern Detection Agent ready")
         
-        self.fraud_agent = FraudDetectionAgent(db_path)
+        self.fraud_agent = FraudDetectionAgent()
         print("   ✅ Fraud Detection Agent ready")
         
-        self.forecast_agent = ForecastingAgent(db_path)
+        self.forecast_agent = ForecastingAgent()
         print("   ✅ Forecasting Agent ready")
         
-        self.risk_engine = RiskAssessmentEngine(db_path)
+        self.risk_engine = RiskAssessmentEngine()
         print("   ✅ Risk Assessment Engine ready")
         
         print("✅ Analytics Orchestrator initialized!\n")
@@ -146,20 +142,15 @@ class AnalyticsOrchestrator:
         reminders = pattern_results['reminders'][:5]  # Top 5
         
         # Check for recent anomalies
-        import sqlite3
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute("""
+        result = db.session.execute(db.text("""
             SELECT COUNT(*) as count
             FROM anomalies
-            WHERE user_id = ?
+            WHERE user_id = :user_id
             AND created_at >= datetime('now', '-7 days')
             AND risk_level = 'HIGH'
-        """, (user_id,))
+        """), {'user_id': user_id})
         
-        high_risk_anomalies = cursor.fetchone()[0]
-        conn.close()
+        high_risk_anomalies = result.scalar() or 0
         
         return {
             'user_id': user_id,
@@ -185,28 +176,21 @@ class AnalyticsOrchestrator:
             user_id: User ID
             risk_level: Filter by risk level ('HIGH', 'MEDIUM', 'LOW')
         """
-        import sqlite3
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        query = """
-            SELECT a.*, t.vendor_name, t.amount, t.transaction_date
+        query = db.text("""
+            SELECT a.*, t.vendor_name, t.total_amount as amount, t.date as transaction_date
             FROM anomalies a
             JOIN transactions t ON a.transaction_id = t.id
-            WHERE a.user_id = ?
-        """
-        params = [user_id]
+            WHERE a.user_id = :user_id
+            """ + (" AND a.risk_level = :risk_level" if risk_level else "") + """
+            ORDER BY a.created_at DESC LIMIT 20
+        """)
         
+        params = {'user_id': user_id}
         if risk_level:
-            query += " AND a.risk_level = ?"
-            params.append(risk_level)
+            params['risk_level'] = risk_level
         
-        query += " ORDER BY a.created_at DESC LIMIT 20"
-        
-        cursor.execute(query, params)
-        anomalies = [dict(row) for row in cursor.fetchall()]
-        conn.close()
+        result = db.session.execute(query, params)
+        anomalies = [dict(row._mapping) for row in result]
         
         return anomalies
     
@@ -226,12 +210,8 @@ class AnalyticsOrchestrator:
             user_id: User ID
             insight: Insight dictionary with type, title, description, etc.
         """
-        import sqlite3
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
         # Create insights table if not exists
-        cursor.execute("""
+        db.session.execute(db.text("""
             CREATE TABLE IF NOT EXISTS insights (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -247,26 +227,26 @@ class AnalyticsOrchestrator:
                 expires_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """)
+        """))
         
-        cursor.execute("""
+        db.session.execute(db.text("""
             INSERT INTO insights 
             (user_id, insight_type, title, description, severity, 
              metadata, confidence_score, is_actionable)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            user_id,
-            insight.get('type', 'general'),
-            insight.get('title', ''),
-            insight.get('description', ''),
-            insight.get('severity', 'info'),
-            json.dumps(insight.get('metadata', {})),
-            insight.get('confidence', 1.0),
-            insight.get('is_actionable', False)
-        ))
+            VALUES (:user_id, :insight_type, :title, :description, :severity, 
+                    :metadata, :confidence_score, :is_actionable)
+        """), {
+            'user_id': user_id,
+            'insight_type': insight.get('type', 'general'),
+            'title': insight.get('title', ''),
+            'description': insight.get('description', ''),
+            'severity': insight.get('severity', 'info'),
+            'metadata': json.dumps(insight.get('metadata', {})),
+            'confidence_score': insight.get('confidence', 1.0),
+            'is_actionable': insight.get('is_actionable', False)
+        })
         
-        conn.commit()
-        conn.close()
+        db.session.commit()
     
     def generate_insights_from_analysis(self, analysis_results: Dict) -> List[Dict]:
         """
@@ -338,50 +318,23 @@ class AnalyticsOrchestrator:
         return insights
 
 
-# Test
+# Test/Example Usage
 if __name__ == "__main__":
-    import sys
-    
-    if len(sys.argv) < 2:
-        print("Usage: python analytics_orchestrator.py <db_path> [user_id]")
-        sys.exit(1)
-    
-    db_path = sys.argv[1]
-    user_id = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-    
-    orchestrator = AnalyticsOrchestrator(db_path)
-    
-    print("\n" + "="*60)
-    print("TEST 1: Quick Dashboard Summary")
     print("="*60)
-    
-    summary = orchestrator.get_dashboard_summary(user_id)
-    print(f"\n📊 Dashboard Summary:")
-    print(f"   Risk Score: {summary['risk_score']}/100 ({summary['risk_level']})")
-    print(f"   Status: {summary['health_status']}")
-    print(f"   Active Reminders: {summary['active_reminders']}")
-    print(f"   High-Risk Anomalies: {summary['high_risk_anomalies']}")
-    print(f"   Patterns Detected: {summary['patterns_detected']}")
-    
-    print("\n" + "="*60)
-    print("TEST 2: Complete Analysis (with LLM)")
+    print("Analytics Orchestrator Module")
     print("="*60)
+    print("\n⚠️  This module should be imported and used within the Flask app context.")
+    print("\n📘 Example usage:")
+    print("""
+    from flask import Flask
+    from models.database import init_db
+    from ai.analytics_orchestrator import AnalyticsOrchestrator
     
-    results = orchestrator.run_complete_analysis(
-        user_id,
-        include_fraud_detection=True,
-        include_forecasting=True,
-        include_risk_assessment=True,
-        use_llm_reasoning=True  # Set to False for faster testing
-    )
-    
-    print("\n" + "="*60)
-    print("GENERATING INSIGHTS")
+    # Use the existing Flask app from app.py
+    with app.app_context():
+        orchestrator = AnalyticsOrchestrator()
+        results = orchestrator.run_complete_analysis(user_id=123)
+        print(results)
+    """)
+    print("\n✅ See app.py for proper Flask application initialization.")
     print("="*60)
-    
-    insights = orchestrator.generate_insights_from_analysis(results)
-    print(f"\n📝 Generated {len(insights)} insights:")
-    for i, insight in enumerate(insights, 1):
-        print(f"\n{i}. [{insight['type'].upper()}] {insight['title']}")
-        print(f"   {insight['description']}")
-        print(f"   Severity: {insight['severity']} | Confidence: {insight['confidence']:.1%}")

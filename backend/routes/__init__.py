@@ -1,12 +1,11 @@
 """Routes package initialization"""
-from flask import Blueprint
 
 # Import blueprints
 from .ocr import ocr_bp
 from .batch import batch_bp
 from .health import health_bp
 from .chat import chat_bp
-from .analytics import analytics_bp
+from .ai_analytics import analytics_bp
 from .database_query import database_query_bp
 
 

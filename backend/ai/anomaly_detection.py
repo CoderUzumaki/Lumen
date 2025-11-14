@@ -1,5 +1,4 @@
 
-import sqlite3
 import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
@@ -7,6 +6,7 @@ import statistics
 import json
 import requests
 import os
+from models.database import db
 
 
 try:
@@ -24,38 +24,24 @@ class FraudDetectionAgent:
     OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
     OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'anthropic/claude-3.5-sonnet')
     
-    def __init__(self, db_path: str):
+    def __init__(self):
         """
         Initialize fraud detection agent
-        
-        Args:
-            db_path: Path to SQLite database
         """
-        self.db_path = db_path
         self.scaler = StandardScaler() if SKLEARN_AVAILABLE else None
-    
-    def get_connection(self):
-        """Get database connection"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
     
     def get_user_transactions(self, user_id: int, days_back: int = 90) -> List[Dict]:
         """Get recent transactions for user"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
         cutoff_date = (datetime.now() - timedelta(days=days_back)).date().isoformat()
         
-        cursor.execute("""
+        result = db.session.execute(db.text("""
             SELECT * FROM transactions
-            WHERE user_id = ?
-            AND transaction_date >= ?
-            ORDER BY transaction_date DESC
-        """, (user_id, cutoff_date))
+            WHERE user_id = :user_id
+            AND date >= :cutoff_date
+            ORDER BY date DESC
+        """), {'user_id': str(user_id), 'cutoff_date': cutoff_date})
         
-        transactions = [dict(row) for row in cursor.fetchall()]
-        conn.close()
+        transactions = [dict(row._mapping) for row in result]
         
         return transactions
     
@@ -143,7 +129,7 @@ class FraudDetectionAgent:
             
             # Time-based anomaly (midnight to 5am)
             try:
-                txn_datetime = datetime.fromisoformat(txn['transaction_date'])
+                txn_datetime = datetime.fromisoformat(txn['date'])
                 if 0 <= txn_datetime.hour < 5:
                     flags.append("unusual_time_midnight")
                     risk_score += 0.2
@@ -151,12 +137,12 @@ class FraudDetectionAgent:
                 pass
             
             # Duplicate detection (same amount within 24 hours)
-            key = f"{vendor}_{txn['amount']}"
+            key = f"{vendor}_{txn['total_amount']}"
             if key in recent_txns:
                 prev_txn = recent_txns[key]
                 try:
-                    time_diff = abs((datetime.fromisoformat(txn['transaction_date']) - 
-                                datetime.fromisoformat(prev_txn['transaction_date'])).total_seconds())
+                    time_diff = abs((datetime.fromisoformat(txn['date']) - 
+                                datetime.fromisoformat(prev_txn['date'])).total_seconds())
                     if time_diff < 86400:  # 24 hours
                         flags.append("potential_duplicate")
                         risk_score += 0.25
@@ -193,7 +179,7 @@ class FraudDetectionAgent:
         for txn in transactions:
             # Extract hour from datetime
             try:
-                txn_dt = datetime.fromisoformat(txn['transaction_date'])
+                txn_dt = datetime.fromisoformat(txn['date'])
                 hour = txn_dt.hour
                 day_of_week = txn_dt.weekday()
             except:
@@ -201,7 +187,7 @@ class FraudDetectionAgent:
                 day_of_week = 0
             
             feature_vector = [
-                txn['amount'],
+                txn['total_amount'],
                 hour,
                 day_of_week,
                 len(txn.get('vendor_name', '')),  # Vendor name length
@@ -259,10 +245,10 @@ class FraudDetectionAgent:
         prompt = f"""You are a fraud detection expert analyzing a flagged transaction.
 
 Transaction Details:
-- Amount: ₹{txn['amount']}
+- Amount: ₹{txn['total_amount']}
 - Vendor: {txn.get('vendor_name', 'Unknown')}
 - Category: {txn.get('category', 'Unknown')}
-- Date: {txn['transaction_date']}
+- Date: {txn['date']}
 - Payment Method: {txn.get('payment_method', 'Unknown')}
 
 Flags Raised:
@@ -416,15 +402,12 @@ Respond in JSON format:
     
     def save_anomalies_to_db(self, user_id: int, anomalies: List[Dict]):
         """Save anomalies to database"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
         # Create anomalies table
-        cursor.execute("""
+        db.session.execute(db.text("""
             CREATE TABLE IF NOT EXISTS anomalies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                transaction_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
+                transaction_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
                 anomaly_type VARCHAR(50),
                 detection_method VARCHAR(50),
                 risk_score REAL,
@@ -437,68 +420,49 @@ Respond in JSON format:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (transaction_id) REFERENCES transactions(id)
             )
-        """)
+        """))
         
         # Insert anomalies
         for anomaly in anomalies:
-            cursor.execute("""
+            db.session.execute(db.text("""
                 INSERT INTO anomalies 
                 (transaction_id, user_id, anomaly_type, detection_method,
                  risk_score, risk_level, explanation, flags, llm_explanation, recommendation)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                anomaly['transaction_id'],
-                user_id,
-                anomaly['anomaly_type'],
-                anomaly['detection_method'],
-                anomaly['risk_score'],
-                anomaly.get('risk_level', 'LOW'),
-                anomaly['explanation'],
-                json.dumps(anomaly['flags']),
-                anomaly.get('llm_explanation'),
-                anomaly.get('recommendation')
-            ))
+                VALUES (:transaction_id, :user_id, :anomaly_type, :detection_method,
+                        :risk_score, :risk_level, :explanation, :flags, :llm_explanation, :recommendation)
+            """), {
+                'transaction_id': anomaly['transaction_id'],
+                'user_id': str(user_id),
+                'anomaly_type': anomaly['anomaly_type'],
+                'detection_method': anomaly['detection_method'],
+                'risk_score': anomaly['risk_score'],
+                'risk_level': anomaly.get('risk_level', 'LOW'),
+                'explanation': anomaly['explanation'],
+                'flags': json.dumps(anomaly['flags']),
+                'llm_explanation': anomaly.get('llm_explanation'),
+                'recommendation': anomaly.get('recommendation')
+            })
         
-        conn.commit()
-        conn.close()
+        db.session.commit()
 
 
-# Test
+# Test/Example Usage
 if __name__ == "__main__":
-    import sys
-    
-    if len(sys.argv) < 2:
-        print("Usage: python fraud_detection_agent.py <db_path> [user_id]")
-        sys.exit(1)
-    
-    db_path = sys.argv[1]
-    user_id = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-    
-    agent = FraudDetectionAgent(db_path)
-    
     print("="*60)
-    print("Fraud Detection Agent Test")
+    print("Fraud Detection Agent Module")
     print("="*60)
+    print("\n⚠️  This module should be imported and used within the Flask app context.")
+    print("\n📘 Example usage:")
+    print("""
+    from flask import Flask
+    from models.database import init_db
+    from ai.anomaly_detection import FraudDetectionAgent
     
-    results = agent.detect_anomalies(user_id, use_llm=True)
-    
-    print("\n" + "="*60)
-    print("RESULTS")
+    # Use the existing Flask app from app.py
+    with app.app_context():
+        agent = FraudDetectionAgent()
+        results = agent.detect_anomalies(user_id=123, use_llm=True)
+        print(f"Detected {results['anomalies_detected']} anomalies")
+    """)
+    print("\n✅ See app.py for proper Flask application initialization.")
     print("="*60)
-    print(f"Transactions Analyzed: {results['transactions_analyzed']}")
-    print(f"Anomalies Detected: {results['anomalies_detected']}")
-    print(f"  HIGH Risk: {results['high_risk_count']}")
-    print(f"  MEDIUM Risk: {results['medium_risk_count']}")
-    print(f"  LOW Risk: {results['low_risk_count']}")
-    
-    print("\n" + "-"*60)
-    print("TOP ANOMALIES:")
-    print("-"*60)
-    for anomaly in results['anomalies'][:5]:
-        txn = anomaly['transaction']
-        print(f"\n  {txn.get('vendor_name', 'Unknown')} - ₹{txn['amount']}")
-        print(f"   Date: {txn['transaction_date']}")
-        print(f"   Risk: {anomaly.get('risk_level', 'UNKNOWN')} ({anomaly['risk_score']:.2f})")
-        print(f"   Flags: {', '.join(anomaly['flags'])}")
-        if 'llm_explanation' in anomaly:
-            print(f"   Analysis: {anomaly['llm_explanation']}")

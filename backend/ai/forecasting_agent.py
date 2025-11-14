@@ -2,7 +2,6 @@
 Forecasting Agent - Predicts future spending using time-series analysis
 """
 
-import sqlite3
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -10,6 +9,7 @@ from typing import Dict, List, Any
 import json
 import requests
 import os
+from models.database import db
 
 class ForecastingAgent:
     """Time-series forecasting for spending predictions"""
@@ -17,19 +17,11 @@ class ForecastingAgent:
     OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
     OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'anthropic/claude-3.5-sonnet')
     
-    def __init__(self, db_path: str):
+    def __init__(self):
         """
         Initialize forecasting agent
-        
-        Args:
-            db_path: Path to SQLite database
         """
-        self.db_path = db_path
-    
-    def get_connection(self):
-        """Get database connection"""
-        conn = sqlite3.connect(self.db_path)
-        return conn
+        pass
     
     def get_historical_data(self, user_id: int, days_back: int = 180) -> pd.DataFrame:
         """
@@ -42,25 +34,22 @@ class ForecastingAgent:
         Returns:
             DataFrame with daily aggregated spending
         """
-        conn = self.get_connection()
-        
         cutoff_date = (datetime.now() - timedelta(days=days_back)).date().isoformat()
         
-        query = """
+        query = db.text("""
             SELECT 
-                transaction_date as date,
-                SUM(amount) as total_amount,
+                date as date,
+                SUM(total_amount) as total_amount,
                 COUNT(*) as transaction_count,
                 category
             FROM transactions
-            WHERE user_id = ?
-            AND transaction_date >= ?
-            GROUP BY transaction_date, category
-            ORDER BY transaction_date
-        """
+            WHERE user_id = :user_id
+            AND date >= :cutoff_date
+            GROUP BY date, category
+            ORDER BY date
+        """)
         
-        df = pd.read_sql_query(query, conn, params=(user_id, cutoff_date))
-        conn.close()
+        df = pd.read_sql_query(query, db.session.connection(), params={'user_id': str(user_id), 'cutoff_date': cutoff_date})
         
         if not df.empty:
             df['date'] = pd.to_datetime(df['date'])
@@ -225,10 +214,8 @@ class ForecastingAgent:
     
     def forecast_by_category(self, user_id: int, days_ahead: int = 30) -> List[Dict]:
         """Forecast spending by category"""
-        conn = self.get_connection()
-        
         # Get last 90 days per category
-        query = """
+        query = db.text("""
             SELECT 
                 category,
                 AVG(daily_amount) as avg_daily,
@@ -236,21 +223,19 @@ class ForecastingAgent:
             FROM (
                 SELECT 
                     category,
-                    transaction_date,
-                    SUM(amount) as daily_amount
+                    date,
+                    SUM(total_amount) as daily_amount
                 FROM transactions
-                WHERE user_id = ?
-                AND transaction_date >= date('now', '-90 days')
-                GROUP BY category, transaction_date
+                WHERE user_id = :user_id
+                AND date >= date('now', '-90 days')
+                GROUP BY category, date
             )
             GROUP BY category
             ORDER BY total_90days DESC
-        """
+        """)
         
-        cursor = conn.cursor()
-        cursor.execute(query, (user_id,))
-        results = cursor.fetchall()
-        conn.close()
+        result = db.session.execute(query, {'user_id': str(user_id)})
+        results = result.fetchall()
         
         category_forecasts = []
         for row in results:
@@ -339,53 +324,24 @@ Return as JSON array of strings:
             ]
 
 
-# Test
+# Test/Example Usage
 if __name__ == "__main__":
-    import sys
-    
-    if len(sys.argv) < 2:
-        print("Usage: python forecasting_agent.py <db_path> [user_id] [days_ahead]")
-        sys.exit(1)
-    
-    db_path = sys.argv[1]
-    user_id = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-    days_ahead = int(sys.argv[3]) if len(sys.argv) > 3 else 30
-    
-    agent = ForecastingAgent(db_path)
-    
     print("="*60)
-    print(f"Forecasting Agent Test - {days_ahead} Day Forecast")
+    print("Forecasting Agent Module")
     print("="*60)
+    print("\n⚠️  This module should be imported and used within the Flask app context.")
+    print("\n📘 Example usage:")
+    print("""
+    from flask import Flask
+    from models.database import init_db
+    from ai.forecasting_agent import ForecastingAgent
     
-    results = agent.forecast_spending(user_id, days_ahead)
-    
-    if results['success']:
-        print("\n" + "="*60)
-        print("HISTORICAL STATS")
-        print("="*60)
-        stats = results['historical_stats']
-        print(f"Daily Average: ₹{stats['mean_daily']:.0f}")
-        print(f"Daily Median: ₹{stats['median_daily']:.0f}")
-        print(f"Last 30 Days Total: ₹{stats['total_last_30_days']:.0f}")
-        print(f"Trend: {results['trend'].upper()}")
-        
-        print("\n" + "="*60)
-        print("FORECAST")
-        print("="*60)
-        forecast = results['forecast']
-        print(f"Predicted Total ({days_ahead} days): ₹{forecast['total_predicted']:.0f}")
-        print(f"Confidence Range: ₹{forecast['lower_bound'][0]:.0f} - ₹{forecast['upper_bound'][0]:.0f} daily")
-        
-        print("\n" + "-"*60)
-        print("CATEGORY FORECAST:")
-        print("-"*60)
-        for cat in results['category_forecast'][:5]:
-            print(f"  {cat['category']}: ₹{cat['predicted_total']:.0f}")
-        
-        print("\n" + "-"*60)
-        print("INSIGHTS:")
-        print("-"*60)
-        for insight in results['insights']:
-            print(f"  • {insight}")
-    else:
-        print(f"\n❌ {results['message']}")
+    # Use the existing Flask app from app.py
+    with app.app_context():
+        agent = ForecastingAgent()
+        results = agent.forecast_spending(user_id=123, days_ahead=30)
+        if results['success']:
+            print(f"30-day forecast: ₹{results['forecast']['total_predicted']:.0f}")
+    """)
+    print("\n✅ See app.py for proper Flask application initialization.")
+    print("="*60)
