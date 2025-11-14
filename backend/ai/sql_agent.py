@@ -1,39 +1,53 @@
 # sql_agent.py
 
 import requests
-import psycopg2
+import sqlite3
 import json
 from typing import Dict, Any
 import os
 class SQLAgent:
     """Converts natural language to SQL and executes queries"""
     
-    def __init__(self, db_connection_string: str):
-        self.conn = psycopg2.connect(db_connection_string)
+    def __init__(self, db_path: str = "instance/lumen.db"):
+        """Initialize SQLAgent with SQLite database"""
+        self.db_path = db_path
         
     SQL_GENERATION_PROMPT = """
-    You are an expert SQL query generator for a financial transactions database.
+    You are an expert SQL query generator for a financial transactions database using SQLite.
     
     Database Schema:
     - Table: transactions
     - Columns:
-      * id (INTEGER)
-      * user_id (INTEGER)
-      * transaction_date (DATE)
-      * amount (DECIMAL)
-      * vendor_name (VARCHAR)
-      * category (VARCHAR) - Values: Groceries, Restaurant, Utilities, Transport, Healthcare, Shopping, Entertainment, Other
-      * payment_method (VARCHAR)
-      * items (JSONB) - Array of items
-      * description (TEXT)
+      * id (TEXT) - UUID as string
+      * user_id (TEXT) - UUID as string
+      * date (TEXT) - Date as string in YYYY-MM-DD format
+      * total_amount (REAL)
+      * tax_amount (REAL)
+      * vendor_name (TEXT)
+      * invoice_number (TEXT)
+      * category (TEXT) - Values: Groceries, Restaurant, Utilities, Transport, Healthcare, Shopping, Entertainment, Other
+      * payment_method (TEXT)
+      * address (TEXT)
+      * created_at (TEXT) - Timestamp
+    
+    - Table: transaction_items
+    - Columns:
+      * id (TEXT) - UUID as string
+      * transaction_id (TEXT) - Foreign key
+      * item_name (TEXT)
+      * quantity (INTEGER)
+      * unit_price (REAL)
+      * total_price (REAL)
     
     Rules:
-    1. ALWAYS include user_id filter (user_id = {user_id})
-    2. Use proper date functions for time-based queries
+    1. ALWAYS include user_id filter (user_id = '{user_id}')
+    2. Use SQLite date functions (date(), datetime(), strftime())
     3. Return ONLY the SQL query, no explanation
     4. Use LIMIT to prevent huge results
     5. For aggregations, use appropriate GROUP BY
     6. Handle NULL values gracefully
+    7. Use single quotes for string literals
+    8. UUIDs are stored as TEXT strings
     
     User Question: {query}
     Current Date: {current_date}
@@ -77,13 +91,15 @@ class SQLAgent:
         return sql
     
     def execute_sql(self, sql: str) -> Dict[str, Any]:
-        """Execute SQL and return results"""
+        """Execute SQL and return results using SQLite"""
         try:
-            cursor = self.conn.cursor()
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row  # Enable column access by name
+            cursor = conn.cursor()
             cursor.execute(sql)
             
             # Get column names
-            columns = [desc[0] for desc in cursor.description]
+            columns = [desc[0] for desc in cursor.description] if cursor.description else []
             
             # Fetch results
             rows = cursor.fetchall()
@@ -92,6 +108,7 @@ class SQLAgent:
             results = [dict(zip(columns, row)) for row in rows]
             
             cursor.close()
+            conn.close()
             
             return {
                 'success': True,
@@ -105,7 +122,7 @@ class SQLAgent:
                 'error': str(e)
             }
     
-    def query(self, natural_language_query: str, user_id: int) -> Dict[str, Any]:
+    def query(self, natural_language_query: str, user_id: str) -> Dict[str, Any]:
         """Full pipeline: NL → SQL → Results"""
         sql = self.generate_sql(natural_language_query, user_id)
         results = self.execute_sql(sql)

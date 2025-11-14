@@ -95,26 +95,34 @@ def extract_invoice_data():
                 'ocr_data': structured_data
             }), 500
         
-        # Step 3: Save to database
+        # Step 3: Save to database (optional - graceful degradation)
+        transaction_id = None
+        db_warning = None
         print(f"Saving transaction to database for user {user_id}...")
         try:
             transaction_id = save_transaction(user_id, normalized)
+            print(f"✅ Transaction {transaction_id} saved to database")
         except Exception as e:
-            return jsonify({
-                'success': False,
-                'error': f'Database save failed: {str(e)}',
-                'normalized_data': normalized
-            }), 500
+            db_warning = f"Database save failed: {str(e)}"
+            print(f"⚠️  {db_warning}")
+            print("   Continuing without database storage (OCR successful)")
         
         # Step 4: Return success response
-        print(f"✅ Transaction {transaction_id} created successfully")
-        return jsonify({
+        response_data = {
             'success': True,
-            'message': 'Transaction extracted and stored successfully',
-            'transaction_id': str(transaction_id),
+            'message': 'Transaction extracted successfully',
             'data': normalized,
             'ocr_data': structured_data
-        }), 200
+        }
+        
+        if transaction_id:
+            response_data['transaction_id'] = str(transaction_id)
+            response_data['message'] = 'Transaction extracted and stored successfully'
+        else:
+            response_data['warning'] = 'Database unavailable - transaction not persisted'
+            response_data['db_error'] = db_warning
+        
+        return jsonify(response_data), 200
     
     except Exception as e:
         print(f"Error: {str(e)}")

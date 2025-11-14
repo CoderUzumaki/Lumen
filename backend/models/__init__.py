@@ -1,13 +1,14 @@
 import uuid
 from datetime import datetime
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import String, Text, Integer, Float, DateTime, ForeignKey
 from models.database import db
+import json
 
 
 class User(db.Model):
     __tablename__ = "users"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = db.Column(db.String, unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -15,8 +16,8 @@ class User(db.Model):
 class Receipt(db.Model):
     __tablename__ = "receipts"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(String(36), db.ForeignKey("users.id"), nullable=False)
 
     file_url = db.Column(db.String, nullable=False)
     raw_text = db.Column(db.Text, nullable=True)
@@ -29,9 +30,9 @@ class Receipt(db.Model):
 class Transaction(db.Model):
     __tablename__ = "transactions"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
-    receipt_id = db.Column(UUID(as_uuid=True), db.ForeignKey("receipts.id"), nullable=True)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(String(36), db.ForeignKey("users.id"), nullable=False)
+    receipt_id = db.Column(String(36), db.ForeignKey("receipts.id"), nullable=True)
 
     vendor_name = db.Column(db.String, nullable=True)
     invoice_number = db.Column(db.String, nullable=True)
@@ -57,8 +58,8 @@ class Transaction(db.Model):
 class TransactionItem(db.Model):
     __tablename__ = "transaction_items"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    transaction_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"), nullable=False)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    transaction_id = db.Column(String(36), db.ForeignKey("transactions.id"), nullable=False)
 
     item_name = db.Column(db.String, nullable=False)
     quantity = db.Column(db.Integer, default=1)
@@ -69,11 +70,11 @@ class TransactionItem(db.Model):
 class Anomaly(db.Model):
     __tablename__ = "anomalies"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    transaction_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"), nullable=False)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    transaction_id = db.Column(String(36), db.ForeignKey("transactions.id"), nullable=False)
 
     risk_score = db.Column(db.Integer, nullable=False)
-    anomalies = db.Column(JSONB)
+    anomalies = db.Column(db.Text)  # Store JSON as TEXT in SQLite
     explanation = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -81,9 +82,9 @@ class Anomaly(db.Model):
 class Insight(db.Model):
     __tablename__ = "insights"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"))
-    transaction_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"))
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(String(36), db.ForeignKey("users.id"))
+    transaction_id = db.Column(String(36), db.ForeignKey("transactions.id"))
 
     insight = db.Column(db.Text, nullable=True)
     reminder = db.Column(db.Text, nullable=True)
@@ -94,8 +95,8 @@ class Insight(db.Model):
 class EmbeddingMeta(db.Model):
     __tablename__ = "embeddings_metadata"
 
-    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    transaction_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"))
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    transaction_id = db.Column(String(36), db.ForeignKey("transactions.id"))
 
     # This is the ID you get when adding docs to ChromaDB
     chroma_doc_id = db.Column(db.String, nullable=False)
@@ -103,6 +104,7 @@ class EmbeddingMeta(db.Model):
     chunk_text = db.Column(db.Text, nullable=True)
     # `metadata` is a reserved attribute name on Declarative classes (SQLAlchemy).
     # use `meta` as the Python attribute but keep the DB column name as "metadata"
-    meta = db.Column("metadata", JSONB)
+    # Store JSON as TEXT in SQLite
+    meta = db.Column("metadata", db.Text)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
