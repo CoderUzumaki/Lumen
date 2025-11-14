@@ -56,6 +56,11 @@ const data = {
 			url: "/chatbot",
 			icon: Bot,
 		},
+		{
+			name: "AI Analytics",
+			url: "/ai-analytics",
+			icon: PieChart,
+		},
 	],
 };
 
