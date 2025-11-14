@@ -445,6 +445,105 @@ export const chatApi = {
 };
 
 /**
+ * Transaction API endpoints (database-backed)
+ */
+export const transactionApi = {
+	/**
+	 * Get all transactions for a user with filters and pagination
+	 */
+	getTransactions: async (
+		userId: string,
+		params?: {
+			page?: number;
+			page_size?: number;
+			date_from?: string;
+			date_to?: string;
+			category?: string;
+			vendor?: string;
+			min_amount?: number;
+			max_amount?: number;
+			sort_by?: string;
+			sort_order?: "asc" | "desc";
+		}
+	) => {
+		const queryParams = new URLSearchParams();
+		if (params?.page) queryParams.append("page", params.page.toString());
+		if (params?.page_size)
+			queryParams.append("page_size", params.page_size.toString());
+		if (params?.date_from)
+			queryParams.append("date_from", params.date_from);
+		if (params?.date_to) queryParams.append("date_to", params.date_to);
+		if (params?.category) queryParams.append("category", params.category);
+		if (params?.vendor) queryParams.append("vendor", params.vendor);
+		if (params?.min_amount)
+			queryParams.append("min_amount", params.min_amount.toString());
+		if (params?.max_amount)
+			queryParams.append("max_amount", params.max_amount.toString());
+		if (params?.sort_by) queryParams.append("sort_by", params.sort_by);
+		if (params?.sort_order)
+			queryParams.append("sort_order", params.sort_order);
+
+		const response = await apiClient.get(
+			`/transactions/${userId}?${queryParams.toString()}`
+		);
+		return response.data;
+	},
+
+	/**
+	 * Update a transaction
+	 */
+	updateTransaction: async (
+		transactionId: string,
+		data: {
+			vendor_name?: string;
+			invoice_number?: string;
+			date?: string;
+			total_amount?: number;
+			tax_amount?: number;
+			payment_method?: string;
+			address?: string;
+			category?: string;
+			items?: Array<{
+				item_name: string;
+				quantity: number;
+				unit_price: number;
+				total_price: number;
+			}>;
+		}
+	) => {
+		const response = await apiClient.put(
+			`/transactions/${transactionId}`,
+			data
+		);
+		return response.data;
+	},
+
+	/**
+	 * Create a new transaction
+	 */
+	createTransaction: async (data: {
+		user_id: string;
+		vendor_name: string;
+		invoice_number?: string;
+		date?: string;
+		total_amount?: number;
+		tax_amount?: number;
+		payment_method?: string;
+		address?: string;
+		category?: string;
+		items?: Array<{
+			item_name: string;
+			quantity: number;
+			unit_price: number;
+			total_price: number;
+		}>;
+	}) => {
+		const response = await apiClient.post("/transactions", data);
+		return response.data;
+	},
+};
+
+/**
  * Check if user is authenticated
  */
 export const isAuthenticated = (): boolean => {

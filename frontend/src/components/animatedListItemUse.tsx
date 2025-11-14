@@ -4,21 +4,26 @@ import { useEffect, useState } from "react";
 import { Button } from "./ui/button";
 import { InvoiceEditDialog } from "@/components/invoiceEditDialog";
 import { RefreshCw } from "lucide-react";
+import { transactionApi } from "@/lib/api/client";
+import { eventBus, EVENTS } from "@/lib/events";
 
 interface Invoice {
-	id: number;
-	file_name: string;
-	invoice_id: string | null;
+	id: string; // UUID from database
 	vendor_name: string | null;
-	amount_due: number | null;
-	due_date: string | null;
-	invoice_date: string | null;
-	currency_code: string | null;
-	confidence_score: number | null;
-	status: string;
+	invoice_number: string | null;
+	date: string | null;
+	total_amount: number | null;
+	tax_amount: number | null;
+	payment_method: string | null;
+	address: string | null;
+	category: string | null;
 	created_at: string;
-	updated_at: string;
-	owner_id: number;
+	items?: Array<{
+		item_name: string;
+		quantity: number;
+		unit_price: number;
+		total_price: number;
+	}>;
 }
 
 export default function AnimatedListItemUse() {
@@ -35,19 +40,43 @@ export default function AnimatedListItemUse() {
 			setLoading(true);
 			setError(null);
 
-			// Read from localStorage instead of API
-			const storedInvoices = localStorage.getItem("invoices");
-			const invoices = storedInvoices ? JSON.parse(storedInvoices) : [];
-			console.log("Fetched invoices from localStorage:", invoices);
+			// Fetch from database API
+			const userId = "1"; // TODO: Get from auth context
+			const response = await transactionApi.getTransactions(userId, {
+				page: 1,
+				page_size: 100,
+				sort_by: "created_at",
+				sort_order: "desc",
+			});
 
-			setItems(invoices);
+			if (response.success && response.data) {
+				console.log(
+					"Fetched transactions from database:",
+					response.data
+				);
+				setItems(response.data);
+			} else {
+				setItems([]);
+			}
 		} catch (error) {
-			console.error("Error fetching invoices:", error);
-			setItems([]);
+			console.error("Error fetching transactions:", error);
+
+			// Fallback to localStorage if API fails
+			try {
+				const storedInvoices = localStorage.getItem("invoices");
+				const invoices = storedInvoices
+					? JSON.parse(storedInvoices)
+					: [];
+				console.log("Using localStorage fallback:", invoices);
+				setItems(invoices);
+			} catch (localError) {
+				setItems([]);
+			}
+
 			const errorMessage =
 				error instanceof Error
 					? error.message
-					: "Failed to fetch invoices";
+					: "Failed to fetch transactions";
 			setError(errorMessage);
 		} finally {
 			setLoading(false);
@@ -58,9 +87,20 @@ export default function AnimatedListItemUse() {
 		await fetchInvoices();
 	};
 
-	// Load invoices on component mount
+	// Load invoices on component mount and listen for updates
 	useEffect(() => {
 		fetchInvoices();
+
+		// Listen for invoice updates
+		const handleInvoiceUpdate = () => {
+			fetchInvoices();
+		};
+
+		eventBus.on(EVENTS.INVOICE_UPDATED, handleInvoiceUpdate);
+
+		return () => {
+			eventBus.off(EVENTS.INVOICE_UPDATED, handleInvoiceUpdate);
+		};
 	}, []);
 
 	const handleOpenDialog = (invoice: Invoice) => {
@@ -133,50 +173,26 @@ export default function AnimatedListItemUse() {
 
 	// Transform backend data to match the AnimatedList component format
 	const transformedItems = items.map((item) => {
-		// Backend uses: "pending", "processing", "completed", "failed"
-		// Use database status directly - don't filter by confidence score
-		const isCompleted = item.status === "completed";
-		const isFailed = item.status === "failed";
-		const needsReview =
-			item.status === "pending" ||
-			item.status === "processing" ||
-			isFailed;
-
 		return {
-			invoiceNumber: item.invoice_id || "N/A",
-			invoiceDate: item.invoice_date || "N/A",
-			dueDate: item.due_date || "N/A",
-			amountPayable: item.amount_due?.toString() || "N/A",
-			currency: item.currency_code || "USD",
+			invoiceNumber: item.invoice_number || "N/A",
+			invoiceDate: item.date || "N/A",
+			dueDate: "N/A", // Not in Transaction model
+			amountPayable: item.total_amount?.toString() || "N/A",
+			currency: "USD", // Not in Transaction model
 			vendorName: item.vendor_name || "N/A",
-			customerName: "N/A", // Backend doesn't have customer name
-			ConfidenceScore: item.confidence_score
-				? `${(item.confidence_score * 100).toFixed(0)}%`
-				: "N/A",
-			status: item.status, // Use actual database status
+			customerName: "N/A", // Not in Transaction model
+			ConfidenceScore: "N/A", // Not in Transaction model
+			status: item.category || "Other", // Using category as status display
 			actions: (
 				<Button
 					onClick={(e) => {
 						e.stopPropagation();
 						handleOpenDialog(item);
 					}}
-					variant={
-						isCompleted
-							? "secondary"
-							: needsReview
-							? "default"
-							: "default"
-					}
+					variant="default"
 					size="sm"
-					className={
-						isFailed
-							? "bg-red-500 hover:bg-red-600 text-white"
-							: needsReview
-							? "bg-orange-500 hover:bg-orange-600 text-white"
-							: ""
-					}
 				>
-					{isCompleted ? "View" : isFailed ? "Fix" : "Review"}
+					Edit
 				</Button>
 			),
 		};

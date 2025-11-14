@@ -12,21 +12,25 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { FileText, Save, CheckCircle } from "lucide-react";
 import { eventBus, EVENTS } from "@/lib/events";
+import { transactionApi } from "@/lib/api/client";
 
 interface Invoice {
-	id: number;
-	file_name: string;
-	invoice_id: string | null;
+	id: string; // UUID from database
 	vendor_name: string | null;
-	amount_due: number | null;
-	due_date: string | null;
-	invoice_date: string | null;
-	currency_code: string | null;
-	confidence_score: number | null;
-	status: string;
+	invoice_number: string | null;
+	date: string | null;
+	total_amount: number | null;
+	tax_amount: number | null;
+	payment_method: string | null;
+	address: string | null;
+	category: string | null;
 	created_at: string;
-	updated_at: string;
-	owner_id: number;
+	items?: Array<{
+		item_name: string;
+		quantity: number;
+		unit_price: number;
+		total_price: number;
+	}>;
 }
 
 interface InvoiceEditDialogProps {
@@ -45,82 +49,57 @@ export function InvoiceEditDialog({
 	const [saving, setSaving] = useState(false);
 
 	// Editable fields
-	const [invoiceId, setInvoiceId] = useState(invoice.invoice_id || "");
+	const [invoiceNumber, setInvoiceNumber] = useState(
+		invoice.invoice_number || ""
+	);
 	const [vendorName, setVendorName] = useState(invoice.vendor_name || "");
-	const [amountDue, setAmountDue] = useState(
-		invoice.amount_due?.toString() || ""
+	const [totalAmount, setTotalAmount] = useState(
+		invoice.total_amount?.toString() || ""
 	);
-	const [currencyCode, setCurrencyCode] = useState(
-		invoice.currency_code || "USD"
+	const [taxAmount, setTaxAmount] = useState(
+		invoice.tax_amount?.toString() || ""
 	);
-	const [invoiceDate, setInvoiceDate] = useState(invoice.invoice_date || "");
-	const [dueDate, setDueDate] = useState(invoice.due_date || "");
+	const [date, setDate] = useState(invoice.date || "");
+	const [category, setCategory] = useState(invoice.category || "Other");
+	const [paymentMethod, setPaymentMethod] = useState(
+		invoice.payment_method || ""
+	);
+	const [address, setAddress] = useState(invoice.address || "");
 
 	const handleSaveAndApprove = async () => {
 		try {
 			setSaving(true);
 
-			// Update in localStorage
-			const storedInvoices = localStorage.getItem("invoices");
-			const invoices = storedInvoices ? JSON.parse(storedInvoices) : [];
+			// Update via database API
+			const updateData = {
+				vendor_name: vendorName,
+				invoice_number: invoiceNumber,
+				date: date,
+				total_amount: parseFloat(totalAmount) || 0,
+				tax_amount: parseFloat(taxAmount) || 0,
+				payment_method: paymentMethod,
+				address: address,
+				category: category,
+			};
 
-			const invoiceIndex = invoices.findIndex(
-				(inv: Invoice) => inv.id === invoice.id
+			const response = await transactionApi.updateTransaction(
+				invoice.id,
+				updateData
 			);
-			if (invoiceIndex !== -1) {
-				invoices[invoiceIndex] = {
-					...invoices[invoiceIndex],
-					invoice_id: invoiceId,
-					vendor_name: vendorName,
-					amount_due: parseFloat(amountDue),
-					currency_code: currencyCode,
-					invoice_date: invoiceDate,
-					due_date: dueDate,
-					status: "completed",
-					updated_at: new Date().toISOString(),
-				};
-				localStorage.setItem("invoices", JSON.stringify(invoices));
+
+			if (response.success) {
+				// Emit event to refresh all invoice lists
+				eventBus.emit(EVENTS.INVOICE_UPDATED);
+
+				// Close dialog and refresh
+				onOpenChange(false);
+				onSuccess();
+			} else {
+				throw new Error("Failed to update transaction");
 			}
-
-			// Emit event to refresh all invoice lists
-			eventBus.emit(EVENTS.INVOICE_UPDATED);
-
-			// Close dialog and refresh
-			onOpenChange(false);
-			onSuccess();
 		} catch (error) {
 			console.error("Error updating invoice:", error);
 			alert("Failed to update invoice. Please try again.");
-		} finally {
-			setSaving(false);
-		}
-	};
-
-	const handleApproveOnly = async () => {
-		try {
-			setSaving(true);
-
-			// Update status in localStorage
-			const storedInvoices = localStorage.getItem("invoices");
-			const invoices = storedInvoices ? JSON.parse(storedInvoices) : [];
-
-			const invoiceIndex = invoices.findIndex(
-				(inv: Invoice) => inv.id === invoice.id
-			);
-			if (invoiceIndex !== -1) {
-				invoices[invoiceIndex].status = "completed";
-				invoices[invoiceIndex].updated_at = new Date().toISOString();
-				localStorage.setItem("invoices", JSON.stringify(invoices));
-			}
-
-			// Emit event to refresh all invoice lists
-			eventBus.emit(EVENTS.INVOICE_UPDATED);
-
-			onOpenChange(false);
-			onSuccess();
-		} catch (error) {
-			console.error("Error approving invoice:", error);
-			alert("Failed to approve invoice. Please try again.");
 		} finally {
 			setSaving(false);
 		}
@@ -140,48 +119,21 @@ export function InvoiceEditDialog({
 					{/* Left Side: Edit Form */}
 					<div className="w-1/2 p-6 overflow-y-auto border-r border-gray-300 bg-white/50">
 						<div className="space-y-4">
-							<div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-								<h3 className="text-sm font-medium text-gray-700 mb-2">
-									Confidence Score
-								</h3>
-								<div className="flex items-center gap-2">
-									<div className="flex-1 bg-gray-200 rounded-full h-2">
-										<div
-											className="bg-primary h-2 rounded-full transition-all"
-											style={{
-												width: `${
-													(invoice.confidence_score ||
-														0) * 100
-												}%`,
-											}}
-										/>
-									</div>
-									<span className="text-gray-800 font-medium">
-										{(
-											(invoice.confidence_score || 0) *
-											100
-										).toFixed(1)}
-										%
-									</span>
-								</div>
-							</div>
-
-							{/* Invoice ID */}
+							{/* Invoice Number */}
 							<div className="space-y-2">
 								<Label className="text-gray-700 text-sm font-medium">
-									Invoice ID
+									Invoice Number
 								</Label>
 								<Input
 									type="text"
-									value={invoiceId}
+									value={invoiceNumber}
 									onChange={(e) =>
-										setInvoiceId(e.target.value)
+										setInvoiceNumber(e.target.value)
 									}
-									placeholder="Enter invoice ID"
+									placeholder="Enter invoice number"
 									className="bg-white border-gray-300 text-gray-900"
 								/>
 							</div>
-
 							{/* Vendor Name */}
 							<div className="space-y-2">
 								<Label className="text-gray-700 text-sm font-medium">
@@ -197,92 +149,74 @@ export function InvoiceEditDialog({
 									className="bg-white border-gray-300 text-gray-900"
 								/>
 							</div>
-
-							{/* Amount and Currency */}
-							<div className="grid grid-cols-3 gap-3">
-								<div className="col-span-2 space-y-2">
-									<Label className="text-gray-700 text-sm font-medium">
-										Amount Due
-									</Label>
-									<Input
-										type="number"
-										value={amountDue}
-										onChange={(e) =>
-											setAmountDue(e.target.value)
-										}
-										placeholder="0.00"
-										step="0.01"
-										className="bg-white border-gray-300 text-gray-900"
-									/>
-								</div>
-								<div className="space-y-2">
-									<Label className="text-gray-700 text-sm font-medium">
-										Currency
-									</Label>
-									<select
-										value={currencyCode}
-										onChange={(e) =>
-											setCurrencyCode(e.target.value)
-										}
-										className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary h-10"
-									>
-										<option value="USD">USD</option>
-										<option value="EUR">EUR</option>
-										<option value="GBP">GBP</option>
-										<option value="INR">INR</option>
-										<option value="CAD">CAD</option>
-										<option value="AUD">AUD</option>
-										<option value="JPY">JPY</option>
-									</select>
-								</div>
-							</div>
-
-							{/* Invoice Date */}
+							{/* Total Amount */}
 							<div className="space-y-2">
 								<Label className="text-gray-700 text-sm font-medium">
-									Invoice Date
+									Total Amount
 								</Label>
 								<Input
-									type="date"
-									value={invoiceDate}
+									type="number"
+									value={totalAmount}
 									onChange={(e) =>
-										setInvoiceDate(e.target.value)
+										setTotalAmount(e.target.value)
 									}
+									placeholder="0.00"
+									step="0.01"
 									className="bg-white border-gray-300 text-gray-900"
 								/>
 							</div>
-
-							{/* Due Date */}
+							{/* Tax Amount */}
 							<div className="space-y-2">
 								<Label className="text-gray-700 text-sm font-medium">
-									Due Date
+									Tax Amount
+								</Label>
+								<Input
+									type="number"
+									value={taxAmount}
+									onChange={(e) =>
+										setTaxAmount(e.target.value)
+									}
+									placeholder="0.00"
+									step="0.01"
+									className="bg-white border-gray-300 text-gray-900"
+								/>
+							</div>{" "}
+							{/* Transaction Date */}
+							<div className="space-y-2">
+								<Label className="text-gray-700 text-sm font-medium">
+									Transaction Date
 								</Label>
 								<Input
 									type="date"
-									value={dueDate}
-									onChange={(e) => setDueDate(e.target.value)}
+									value={date}
+									onChange={(e) => setDate(e.target.value)}
 									className="bg-white border-gray-300 text-gray-900"
 								/>
 							</div>
-
+							{/* Category */}
+							<div className="space-y-2">
+								<Label className="text-gray-700 text-sm font-medium">
+									Category
+								</Label>
+								<Input
+									type="text"
+									value={category}
+									onChange={(e) =>
+										setCategory(e.target.value)
+									}
+									placeholder="e.g. Restaurant, Office Supplies"
+									className="bg-white border-gray-300 text-gray-900"
+								/>
+							</div>{" "}
 							{/* Action Buttons */}
-							<div className="space-y-3 pt-4 border-t border-gray-300">
+							<div className="pt-4 border-t border-gray-300">
 								<Button
 									onClick={handleSaveAndApprove}
 									disabled={saving}
 									className="w-full"
 								>
 									<Save className="w-4 h-4 mr-2" />
-									{saving ? "Saving..." : "Save & Approve"}
-								</Button>
-								<Button
-									onClick={handleApproveOnly}
-									disabled={saving}
-									variant="outline"
-									className="w-full border-gray-300 hover:bg-gray-100"
-								>
-									<CheckCircle className="w-4 h-4 mr-2" />
-									Approve Without Changes
+									{saving ? "Saving..." : "Save Changes"}
 								</Button>
 							</div>
 						</div>
@@ -295,65 +229,27 @@ export function InvoiceEditDialog({
 								Invoice Reference
 							</h3>
 
-							{/* File Info */}
-							<div className="bg-white p-4 rounded-lg border border-gray-300 shadow-sm">
-								<div className="flex items-start gap-3">
-									<FileText className="w-5 h-5 text-gray-600 mt-1" />
-									<div className="flex-1">
-										<h4 className="text-sm font-medium text-gray-800 mb-1">
-											Source File
-										</h4>
-										<p className="text-sm text-gray-600 break-all">
-											{invoice.file_name}
-										</p>
-									</div>
-								</div>
-							</div>
-
 							{/* Current Data Preview */}
 							<div className="bg-white p-4 rounded-lg border border-gray-300 shadow-sm space-y-3">
 								<h4 className="text-sm font-medium text-gray-800 mb-3">
-									Current Invoice Data
+									Transaction Details
 								</h4>
 
 								<div className="grid grid-cols-2 gap-3 text-sm">
 									<div>
 										<span className="text-gray-600">
-											Invoice ID:
+											Database ID:
 										</span>
-										<p className="text-gray-900 font-medium mt-1">
-											{invoice.invoice_id || "N/A"}
+										<p className="text-gray-900 font-mono font-bold mt-1">
+											#{invoice.id}
 										</p>
 									</div>
 									<div>
 										<span className="text-gray-600">
-											Status:
+											Invoice Number:
 										</span>
 										<p className="text-gray-900 font-medium mt-1">
-											<span
-												className={`inline-block px-2 py-1 rounded text-xs ${
-													invoice.status ===
-													"completed"
-														? "bg-green-100 text-green-700"
-														: invoice.status ===
-														  "failed"
-														? "bg-red-100 text-red-700"
-														: invoice.status ===
-														  "processing"
-														? "bg-blue-100 text-blue-700"
-														: "bg-yellow-100 text-yellow-700"
-												}`}
-											>
-												{invoice.status === "completed"
-													? "Completed"
-													: invoice.status ===
-													  "failed"
-													? "Failed"
-													: invoice.status ===
-													  "processing"
-													? "Processing"
-													: "Pending"}
-											</span>
+											{invoice.invoice_number || "N/A"}
 										</p>
 									</div>
 									<div>
@@ -366,28 +262,46 @@ export function InvoiceEditDialog({
 									</div>
 									<div>
 										<span className="text-gray-600">
-											Amount:
+											Total Amount:
 										</span>
 										<p className="text-gray-900 font-medium mt-1">
-											{invoice.currency_code || "USD"}{" "}
-											{invoice.amount_due?.toFixed(2) ||
+											$
+											{invoice.total_amount?.toFixed(2) ||
 												"0.00"}
 										</p>
 									</div>
 									<div>
 										<span className="text-gray-600">
-											Invoice Date:
+											Tax Amount:
 										</span>
 										<p className="text-gray-900 font-medium mt-1">
-											{invoice.invoice_date || "N/A"}
+											$
+											{invoice.tax_amount?.toFixed(2) ||
+												"0.00"}
 										</p>
 									</div>
 									<div>
 										<span className="text-gray-600">
-											Due Date:
+											Date:
 										</span>
 										<p className="text-gray-900 font-medium mt-1">
-											{invoice.due_date || "N/A"}
+											{invoice.date || "N/A"}
+										</p>
+									</div>
+									<div>
+										<span className="text-gray-600">
+											Category:
+										</span>
+										<p className="text-gray-900 font-medium mt-1">
+											{invoice.category || "N/A"}
+										</p>
+									</div>
+									<div>
+										<span className="text-gray-600">
+											Payment Method:
+										</span>
+										<p className="text-gray-900 font-medium mt-1">
+											{invoice.payment_method || "N/A"}
 										</p>
 									</div>
 								</div>
