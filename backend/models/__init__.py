@@ -101,12 +101,9 @@ class EmbeddingMeta(db.Model):
     chroma_doc_id = db.Column(db.String, nullable=False)
 
     chunk_text = db.Column(db.Text, nullable=True)
-<<<<<<< HEAD
     # `metadata` is a reserved attribute name on Declarative classes (SQLAlchemy).
     # use `meta` as the Python attribute but keep the DB column name as "metadata"
     meta = db.Column("metadata", JSONB)
-=======
     embedding_metadata = db.Column(JSONB)
->>>>>>> 2ff2e8e2dcbc724a33f90cf36dd5d964e036391b
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
