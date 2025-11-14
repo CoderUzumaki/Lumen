@@ -301,7 +301,8 @@ export default function AIAssistantUI() {
 			setThinkingConvId(null);
 
 			if (response.success) {
-				const aiResponse = response.data.answer || "I received your message.";
+				const aiResponse =
+					response.data.answer || "I received your message.";
 				const asstMsg: MessageType = {
 					id: Math.random().toString(36).slice(2),
 					role: "assistant",
@@ -334,7 +335,8 @@ export default function AIAssistantUI() {
 			const errorMsg: MessageType = {
 				id: Math.random().toString(36).slice(2),
 				role: "assistant",
-				content: "Sorry, I encountered an error. Please make sure the backend server is running and try again.",
+				content:
+					"Sorry, I encountered an error. Please make sure the backend server is running and try again.",
 				createdAt: new Date().toISOString(),
 			};
 
