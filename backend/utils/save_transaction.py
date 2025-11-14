@@ -31,5 +31,25 @@ def save_transaction(user_id, normalized):
         ))
 
     db.session.commit()
+    
+    # Add to ChromaDB for semantic search
+    try:
+        from ai.rag_system import RAGSystem
+        rag = RAGSystem()
+        rag.add_transaction({
+            'id': tx.id,
+            'user_id': str(user_id),
+            'vendor_name': tx.vendor_name,
+            'category': tx.category,
+            'total_amount': tx.total_amount,
+            'date': tx.date,
+            'items': normalized["items"],
+            'payment_method': tx.payment_method,
+            'invoice_number': tx.invoice_number,
+            'address': tx.address
+        })
+    except Exception as e:
+        print(f"⚠️  Warning: Failed to add transaction to ChromaDB: {e}")
+        print("   Transaction saved to SQLite but not available for semantic search")
 
     return tx.id

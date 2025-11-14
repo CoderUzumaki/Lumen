@@ -31,18 +31,20 @@ class RAGSystem:
         # Create searchable text from transaction
         searchable_text = self._create_searchable_text(transaction)
         
-        # Add to ChromaDB
+        # Add to ChromaDB with user_id in metadata for filtering
         self.collection.add(
             documents=[searchable_text],
             metadatas=[{
-                'transaction_id': transaction['id'],
-                'vendor_name': transaction['vendor_name'],
-                'category': transaction['category'],
-                'amount': str(transaction['amount']),
-                'date': transaction['transaction_date'].isoformat()
+                'transaction_id': str(transaction['id']),
+                'user_id': str(transaction['user_id']),
+                'vendor_name': str(transaction['vendor_name'] or ''),
+                'category': str(transaction.get('category') or 'Other'),
+                'amount': str(transaction.get('total_amount', 0)),
+                'date': str(transaction.get('date', ''))
             }],
             ids=[f"txn_{transaction['id']}"]
         )
+        print(f"✅ Added transaction {transaction['id']} to ChromaDB")
     
     def _create_searchable_text(self, transaction: Dict[str, Any]) -> str:
         """Create rich text representation for embedding"""
@@ -51,16 +53,18 @@ class RAGSystem:
             items = transaction['items']
             if isinstance(items, str):
                 items = json.loads(items)
-            items_text = ", ".join([item.get('item_name', '') for item in items])
+            if isinstance(items, list):
+                items_text = ", ".join([item.get('item_name', '') for item in items])
         
         text = f"""
-        Date: {transaction['transaction_date']}
-        Vendor: {transaction['vendor_name']}
-        Category: {transaction['category']}
-        Amount: {transaction['amount']} {transaction.get('currency', 'INR')}
+        Date: {transaction.get('date', 'Unknown')}
+        Vendor: {transaction.get('vendor_name', 'Unknown')}
+        Category: {transaction.get('category', 'Other')}
+        Amount: {transaction.get('total_amount', 0)} INR
         Items: {items_text}
         Payment: {transaction.get('payment_method', 'Unknown')}
-        Description: {transaction.get('description', '')}
+        Invoice: {transaction.get('invoice_number', '')}
+        Address: {transaction.get('address', '')}
         """
         
         return text.strip()
