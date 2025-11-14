@@ -24,7 +24,7 @@ export default function SettingsPopover({ children }: SettingsPopoverProps) {
 			<PopoverContent className="w-80 p-0" align="start" side="top">
 				<div className="p-4">
 					<div className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
-						j@gmail.com
+						abhinav.mishra.x.viii@gmail.com
 					</div>
 
 					<div className="flex items-center gap-3 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 mb-4">

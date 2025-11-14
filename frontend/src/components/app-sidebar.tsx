@@ -32,19 +32,15 @@ const data = {
 			items: [
 				{
 					title: "Weekly",
-					url: "#",
+					url: "/analytics?tab=weekly",
 				},
 				{
 					title: "Monthly",
-					url: "#",
+					url: "/analytics?tab=monthly",
 				},
 				{
 					title: "Yearly",
-					url: "#",
-				},
-				{
-					title: "Custom",
-					url: "#",
+					url: "/analytics?tab=yearly",
 				},
 			],
 		},
