@@ -65,24 +65,24 @@ class RAGSystem:
         
         return text.strip()
     
-    def search(self, query: str, user_id: int, n_results: int = 5) -> List[Dict]:
+    def search(self, query: str, user_id: str, n_results: int = 5) -> List[Dict]:
         """Semantic search for transactions"""
         results = self.collection.query(
             query_texts=[query],
             n_results=n_results,
-            where={"user_id": user_id}  # Filter by user
+            where={"user_id": str(user_id)}  # Ensure user_id is string
         )
         
         return results
     
     def search_with_filter(self, 
                           query: str, 
-                          user_id: int,
+                          user_id: str,
                           category: str = None,
                           date_from: str = None,
                           n_results: int = 5) -> List[Dict]:
         """Semantic search with metadata filters"""
-        where_clause = {"user_id": user_id}
+        where_clause = {"user_id": str(user_id)}
         
         if category:
             where_clause["category"] = category

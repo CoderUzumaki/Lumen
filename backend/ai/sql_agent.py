@@ -59,36 +59,49 @@ class SQLAgent:
         """Generate SQL from natural language"""
         from datetime import datetime
         
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "anthropic/claude-3.5-sonnet",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": self.SQL_GENERATION_PROMPT.format(
-                            query=query,
-                            user_id=user_id,
-                            current_date=datetime.now().strftime('%Y-%m-%d')
-                        )
-                    }
-                ],
-                "temperature": 0,
-                "max_tokens": 500
-            }
-        )
-        
-        result = response.json()
-        sql = result['choices'][0]['message']['content'].strip()
-        
-        # Clean up markdown formatting
-        sql = sql.replace('```sql', '').replace('```', '').strip()
-        
-        return sql
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "anthropic/claude-3.5-sonnet",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": self.SQL_GENERATION_PROMPT.format(
+                                query=query,
+                                user_id=user_id,
+                                current_date=datetime.now().strftime('%Y-%m-%d')
+                            )
+                        }
+                    ],
+                    "temperature": 0,
+                    "max_tokens": 500
+                }
+            )
+            
+            result = response.json()
+            
+            # Check for API errors
+            if 'error' in result:
+                print(f"OpenRouter API error in SQL generation: {result['error']}")
+                # Return a basic SELECT query as fallback
+                return f"SELECT * FROM transactions WHERE user_id = '{user_id}' LIMIT 10"
+            
+            sql = result['choices'][0]['message']['content'].strip()
+            
+            # Clean up markdown formatting
+            sql = sql.replace('```sql', '').replace('```', '').strip()
+            
+            return sql
+            
+        except Exception as e:
+            print(f"Error generating SQL: {e}")
+            # Return a safe default query
+            return f"SELECT * FROM transactions WHERE user_id = '{user_id}' LIMIT 10"
     
     def execute_sql(self, sql: str) -> Dict[str, Any]:
         """Execute SQL and return results using SQLite"""

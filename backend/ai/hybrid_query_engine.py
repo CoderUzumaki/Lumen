@@ -1,8 +1,8 @@
 # hybrid_query_engine.py
 
-from query_classifier import QueryClassifier
-from sql_agent import SQLAgent
-from rag_system import RAGSystem
+from .query_classifier import QueryClassifier
+from .sql_agent import SQLAgent
+from .rag_system import RAGSystem
 import requests
 import os
 from typing import Dict, Any
@@ -10,12 +10,12 @@ import json
 class HybridQueryEngine:
     """Orchestrates SQL Agent and RAG System"""
     
-    def __init__(self, db_connection_string: str):
+    def __init__(self, db_path: str = "instance/lumen.db"):
         self.classifier = QueryClassifier()
-        self.sql_agent = SQLAgent(db_connection_string)
+        self.sql_agent = SQLAgent(db_path)
         self.rag_system = RAGSystem()
     
-    def query(self, user_query: str, user_id: int) -> Dict[str, Any]:
+    def query(self, user_query: str, user_id: str) -> Dict[str, Any]:
         """
         Main entry point for all queries
         Routes to appropriate system and synthesizes response
@@ -72,18 +72,35 @@ class HybridQueryEngine:
         Answer:
         """
         
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "anthropic/claude-3.5-sonnet",
-                "messages": [{"role": "user", "content": synthesis_prompt}],
-                "temperature": 0.7,
-                "max_tokens": 500
-            }
-        )
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "anthropic/claude-3.5-sonnet",
+                    "messages": [{"role": "user", "content": synthesis_prompt}],
+                    "temperature": 0.7,
+                    "max_tokens": 500
+                }
+            )
+            
+            response_data = response.json()
+            
+            # Log response for debugging
+            print(f"OpenRouter response status: {response.status_code}")
+            if response.status_code != 200:
+                print(f"OpenRouter error: {response_data}")
+                return f"Error generating response: {response_data.get('error', {}).get('message', 'Unknown error')}"
+            
+            return response_data['choices'][0]['message']['content']
         
-        return response.json()['choices'][0]['message']['content']
+        except KeyError as e:
+            print(f"KeyError in response: {e}")
+            print(f"Full response: {response_data}")
+            return "Error: Unable to generate natural language response. Raw results available in 'raw_results' field."
+        except Exception as e:
+            print(f"Error synthesizing response: {e}")
+            return f"Error generating response: {str(e)}"
