@@ -1,41 +1,38 @@
-"use client";
+import { GlassmorphismNav } from "@/components/landing/glassmorphism-nav";
+import { HeroSection } from "@/components/landing/hero-section";
+import { ProblemSolutionSection } from "@/components/landing/problem-solution-section";
+import Aurora from "@/components/landing/Aurora";
+import { FeaturesSection } from "@/components/landing/features-section";
+import { AITeamSection } from "@/components/landing/ai-team-section";
+import { TestimonialsSection } from "@/components/landing/testimonials-section";
+import { ROICalculatorSection } from "@/components/landing/roi-calculator-section";
+import { CTASection } from "@/components/landing/cta-section";
+import { Footer } from "@/components/landing/footer";
 
-import { useState, useEffect } from "react";
-import styles from "./page.module.css";
-
-export default function Home() {
-	const [message, setMessage] = useState<string>("");
-	const [loading, setLoading] = useState<boolean>(true);
-
-	useEffect(() => {
-		fetchData();
-	}, []);
-
-	const fetchData = async () => {
-		try {
-			const response = await fetch(
-				`${process.env.NEXT_PUBLIC_API_URL}/`
-			);
-			const data = await response.json();
-			setMessage(data.name);
-		} catch (error) {
-			console.error("Error fetching data:", error);
-			setMessage("Error connecting to backend");
-		} finally {
-			setLoading(false);
-		}
-	};
-
+export default function HomePage() {
 	return (
-		<main className={styles.main}>
-			<div className={styles.container}>
-				<h1>Lumen</h1>
-				<p>Next.js + Flask Application</p>
-				<div className={styles.card}>
-					<h2>Backend Status</h2>
-					{loading ? <p>Connecting...</p> : <p>{message}</p>}
+		<div className="min-h-screen bg-black overflow-hidden">
+			<main className="min-h-screen relative overflow-hidden">
+				<div className="fixed inset-0 w-full h-full">
+					<Aurora
+						colorStops={["#475569", "#64748b", "#475569"]}
+						amplitude={1.2}
+						blend={0.6}
+						speed={0.8}
+					/>
 				</div>
-			</div>
-		</main>
+				<div className="relative z-10">
+					<GlassmorphismNav />
+					<HeroSection />
+					<ProblemSolutionSection />
+					<FeaturesSection />
+					<AITeamSection />
+					<TestimonialsSection />
+					<ROICalculatorSection />
+					<CTASection />
+					<Footer />
+				</div>
+			</main>
+		</div>
 	);
 }

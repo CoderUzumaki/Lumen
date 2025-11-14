@@ -12,6 +12,8 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { analyticsApi, tokenManager } from "@/lib/api/client";
 
 interface SelectedPeriod {
 	year: number;
@@ -24,160 +26,12 @@ interface SpendingTrendChartProps {
 	selectedPeriod: SelectedPeriod;
 }
 
-// Mock data for different time ranges - comparing current vs previous period
-const getMockChartData = (
-	timeRange: string,
-	selectedPeriod: SelectedPeriod
-) => {
-	const data = {
-		weekly: [
-			{
-				date: "Mon",
-				currentSpending: 120.5,
-				previousSpending: 135.2,
-				transactions: 5,
-			},
-			{
-				date: "Tue",
-				currentSpending: 245.75,
-				previousSpending: 198.4,
-				transactions: 8,
-			},
-			{
-				date: "Wed",
-				currentSpending: 189.25,
-				previousSpending: 225.6,
-				transactions: 6,
-			},
-			{
-				date: "Thu",
-				currentSpending: 356.0,
-				previousSpending: 320.5,
-				transactions: 12,
-			},
-			{
-				date: "Fri",
-				currentSpending: 425.5,
-				previousSpending: 380.2,
-				transactions: 15,
-			},
-			{
-				date: "Sat",
-				currentSpending: 512.25,
-				previousSpending: 475.8,
-				transactions: 18,
-			},
-			{
-				date: "Sun",
-				currentSpending: 178.0,
-				previousSpending: 195.3,
-				transactions: 7,
-			},
-		],
-		monthly: [
-			{
-				date: "Week 1",
-				currentSpending: 1250.0,
-				previousSpending: 1180.0,
-				transactions: 45,
-			},
-			{
-				date: "Week 2",
-				currentSpending: 1580.5,
-				previousSpending: 1720.3,
-				transactions: 52,
-			},
-			{
-				date: "Week 3",
-				currentSpending: 1420.75,
-				previousSpending: 1350.8,
-				transactions: 48,
-			},
-			{
-				date: "Week 4",
-				currentSpending: 1890.25,
-				previousSpending: 2100.5,
-				transactions: 65,
-			},
-		],
-		yearly: [
-			{
-				date: "Jan",
-				currentSpending: 5240.0,
-				previousSpending: 4890.0,
-				transactions: 125,
-			},
-			{
-				date: "Feb",
-				currentSpending: 4890.5,
-				previousSpending: 5120.0,
-				transactions: 118,
-			},
-			{
-				date: "Mar",
-				currentSpending: 6120.75,
-				previousSpending: 5650.0,
-				transactions: 145,
-			},
-			{
-				date: "Apr",
-				currentSpending: 5580.0,
-				previousSpending: 5890.0,
-				transactions: 132,
-			},
-			{
-				date: "May",
-				currentSpending: 6890.25,
-				previousSpending: 6320.0,
-				transactions: 156,
-			},
-			{
-				date: "Jun",
-				currentSpending: 5670.5,
-				previousSpending: 6100.0,
-				transactions: 138,
-			},
-			{
-				date: "Jul",
-				currentSpending: 7240.0,
-				previousSpending: 6890.0,
-				transactions: 168,
-			},
-			{
-				date: "Aug",
-				currentSpending: 6580.75,
-				previousSpending: 7020.0,
-				transactions: 152,
-			},
-			{
-				date: "Sep",
-				currentSpending: 5920.5,
-				previousSpending: 5450.0,
-				transactions: 142,
-			},
-			{
-				date: "Oct",
-				currentSpending: 6340.25,
-				previousSpending: 6780.0,
-				transactions: 148,
-			},
-			{
-				date: "Nov",
-				currentSpending: 7120.0,
-				previousSpending: 6540.0,
-				transactions: 165,
-			},
-			{
-				date: "Dec",
-				currentSpending: 8450.5,
-				previousSpending: 7890.0,
-				transactions: 185,
-			},
-		],
-	};
-
-	return data[timeRange as keyof typeof data];
-};
+interface ChartDataPoint {
+	date: string;
+	currentSpending: number;
+	previousSpending: number;
+	transactions: number;
+}
 
 const getPeriodLabels = (timeRange: string, selectedPeriod: SelectedPeriod) => {
 	if (timeRange === "yearly") {
@@ -256,8 +110,51 @@ export default function SpendingTrendChart({
 	timeRange,
 	selectedPeriod,
 }: SpendingTrendChartProps) {
-	const data = getMockChartData(timeRange, selectedPeriod);
-	const labels = getPeriodLabels(timeRange, selectedPeriod);
+	const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+	const [loading, setLoading] = useState(true);
+
+	useEffect(() => {
+		const fetchChartData = async () => {
+			try {
+				setLoading(true);
+				const user = tokenManager.getUser();
+				if (!user?.id) return;
+
+				const response = await analyticsApi.getTimeRangeAnalytics(
+					user.id as string,
+					timeRange,
+					selectedPeriod.year,
+					selectedPeriod.month,
+					selectedPeriod.week
+				);
+
+				if (response.success && response.chart_data) {
+					setChartData(response.chart_data);
+				}
+			} catch (error) {
+				console.error("Error fetching chart data:", error);
+			} finally {
+				setLoading(false);
+			}
+		};
+
+		fetchChartData();
+	}, [timeRange, selectedPeriod]);
+
+	const periodLabels = getPeriodLabels(timeRange, selectedPeriod);
+
+	if (loading) {
+		return (
+			<Card className="col-span-full">
+				<CardHeader>
+					<div className="h-6 w-48 bg-muted rounded animate-pulse"></div>
+				</CardHeader>
+				<CardContent>
+					<div className="h-[400px] w-full bg-muted rounded animate-pulse"></div>
+				</CardContent>
+			</Card>
+		);
+	}
 
 	return (
 		<Card className="w-full">
@@ -269,18 +166,18 @@ export default function SpendingTrendChart({
 				<p className="text-sm text-muted-foreground">
 					Comparing{" "}
 					<span className="font-semibold text-primary">
-						{labels.current}
+						{periodLabels.current}
 					</span>{" "}
 					vs{" "}
 					<span className="font-semibold text-muted-foreground/80">
-						{labels.previous}
+						{periodLabels.previous}
 					</span>
 				</p>
 			</CardHeader>
 			<CardContent>
 				<ResponsiveContainer width="100%" height={400}>
 					<AreaChart
-						data={data}
+						data={chartData}
 						margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
 					>
 						<defs>

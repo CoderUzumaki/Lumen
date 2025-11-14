@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from "react";
 import { EmailStatusCard } from "./emailStatusCard";
 import { eventBus, EVENTS } from "@/lib/events";
+import { transactionApi, tokenManager } from "@/lib/api/client";
 
 interface Invoice {
 	id: number;
@@ -27,17 +28,44 @@ export function SectionCards() {
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
-		const fetchInvoices = () => {
+		const fetchInvoices = async () => {
 			try {
-				// Read from localStorage instead of API
+				const user = tokenManager.getUser();
+				if (!user?.id) {
+					// Fallback to localStorage if no user
+					const storedInvoices = localStorage.getItem("invoices");
+					const invoicesData = storedInvoices
+						? JSON.parse(storedInvoices)
+						: [];
+					setInvoices(invoicesData);
+					return;
+				}
+
+				// Fetch from API
+				const response = await transactionApi.getTransactions(
+					user.id as string
+				);
+				if (response.success && response.transactions) {
+					// Map transaction data to invoice format for cards
+					const mappedInvoices = response.transactions.map(
+						(t: any) => ({
+							id: t.id,
+							status: t.status || "pending",
+							amount_due: t.total_amount,
+							confidence_score: t.confidence_score,
+							created_at: t.created_at,
+						})
+					);
+					setInvoices(mappedInvoices);
+				}
+			} catch (error) {
+				console.error("Error fetching invoices:", error);
+				// Fallback to localStorage on error
 				const storedInvoices = localStorage.getItem("invoices");
 				const invoicesData = storedInvoices
 					? JSON.parse(storedInvoices)
 					: [];
 				setInvoices(invoicesData);
-			} catch (error) {
-				console.error("Error fetching invoices:", error);
-				setInvoices([]);
 			} finally {
 				setLoading(false);
 			}

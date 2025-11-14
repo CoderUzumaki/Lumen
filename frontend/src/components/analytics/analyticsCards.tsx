@@ -9,6 +9,8 @@ import {
 	TrendingDown,
 	Activity,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { analyticsApi, tokenManager } from "@/lib/api/client";
 
 interface SelectedPeriod {
 	year: number;
@@ -21,43 +23,16 @@ interface AnalyticsCardsProps {
 	selectedPeriod: SelectedPeriod;
 }
 
-// Mock data - this will be replaced by API calls
-const getMockData = (timeRange: string, selectedPeriod: SelectedPeriod) => {
-	const data = {
-		weekly: {
-			avgSpending: 450.75,
-			maxSpending: 1250.0,
-			minSpending: 15.5,
-			totalSpending: 3155.25,
-			previousTotal: 2815.5,
-			avgChange: 12.5,
-			maxChange: -8.3,
-			minChange: 22.1,
-		},
-		monthly: {
-			avgSpending: 1850.25,
-			maxSpending: 4500.0,
-			minSpending: 15.5,
-			totalSpending: 55507.5,
-			previousTotal: 58621.0,
-			avgChange: -5.2,
-			maxChange: 15.8,
-			minChange: -10.5,
-		},
-		yearly: {
-			avgSpending: 22500.0,
-			maxSpending: 45000.0,
-			minSpending: 150.0,
-			totalSpending: 270000.0,
-			previousTotal: 248400.0,
-			avgChange: 8.7,
-			maxChange: 12.4,
-			minChange: -15.2,
-		},
-	};
-
-	return data[timeRange as keyof typeof data];
-};
+interface AnalyticsData {
+	avgSpending: number;
+	maxSpending: number;
+	minSpending: number;
+	totalSpending: number;
+	previousTotal: number;
+	avgChange: number;
+	maxChange: number;
+	minChange: number;
+}
 
 const getPreviousPeriodLabel = (
 	timeRange: string,
@@ -103,11 +78,102 @@ export default function AnalyticsCards({
 	timeRange,
 	selectedPeriod,
 }: AnalyticsCardsProps) {
-	const data = getMockData(timeRange, selectedPeriod);
+	const [data, setData] = useState<AnalyticsData>({
+		avgSpending: 0,
+		maxSpending: 0,
+		minSpending: 0,
+		totalSpending: 0,
+		previousTotal: 0,
+		avgChange: 0,
+		maxChange: 0,
+		minChange: 0,
+	});
+	const [loading, setLoading] = useState(true);
+
+	useEffect(() => {
+		const fetchAnalytics = async () => {
+			try {
+				setLoading(true);
+				const user = tokenManager.getUser();
+				if (!user?.id) return;
+
+				const response = await analyticsApi.getTimeRangeAnalytics(
+					user.id as string,
+					timeRange,
+					selectedPeriod.year,
+					selectedPeriod.month,
+					selectedPeriod.week
+				);
+
+				if (response.success) {
+					const current = response.current_period;
+					const previous = response.previous_period;
+
+					setData({
+						avgSpending: current.avg_spending || 0,
+						maxSpending: current.max_spending || 0,
+						minSpending: current.min_spending || 0,
+						totalSpending: current.total_spending || 0,
+						previousTotal: previous.total_spending || 0,
+						avgChange:
+							previous.avg_spending && previous.avg_spending !== 0
+								? ((current.avg_spending -
+										previous.avg_spending) /
+										previous.avg_spending) *
+								  100
+								: 0,
+						maxChange:
+							previous.max_spending && previous.max_spending !== 0
+								? ((current.max_spending -
+										previous.max_spending) /
+										previous.max_spending) *
+								  100
+								: 0,
+						minChange:
+							previous.min_spending && previous.min_spending !== 0
+								? ((current.min_spending -
+										previous.min_spending) /
+										previous.min_spending) *
+								  100
+								: 0,
+					});
+				}
+			} catch (error) {
+				console.error("Error fetching analytics:", error);
+			} finally {
+				setLoading(false);
+			}
+		};
+
+		fetchAnalytics();
+	}, [timeRange, selectedPeriod]);
+
 	const trendChange =
-		((data.totalSpending - data.previousTotal) / data.previousTotal) * 100;
+		data.previousTotal !== 0
+			? ((data.totalSpending - data.previousTotal) / data.previousTotal) *
+			  100
+			: 0;
 	const trendDifference = data.totalSpending - data.previousTotal;
 	const previousLabel = getPreviousPeriodLabel(timeRange, selectedPeriod);
+
+	if (loading) {
+		return (
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+				{[...Array(4)].map((_, i) => (
+					<Card key={i} className="animate-pulse">
+						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+							<div className="h-4 w-24 bg-muted rounded"></div>
+							<div className="h-4 w-4 bg-muted rounded"></div>
+						</CardHeader>
+						<CardContent>
+							<div className="h-8 w-32 bg-muted rounded mb-2"></div>
+							<div className="h-4 w-full bg-muted rounded"></div>
+						</CardContent>
+					</Card>
+				))}
+			</div>
+		);
+	}
 
 	const cards = [
 		{
