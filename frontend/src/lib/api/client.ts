@@ -49,7 +49,7 @@ const createApiClient = (): AxiosInstance => {
 		headers: {
 			"Content-Type": "application/json",
 		},
-		withCredentials: true, // Enable CORS credentials (cookies, authorization headers)
+		withCredentials: false, // Disabled for simplified OCR-only backend
 	});
 
 	// Request interceptor to add auth token
@@ -136,15 +136,11 @@ export const invoiceApi = {
 		const formData = new FormData();
 		formData.append("file", file);
 
-		const response = await apiClient.post(
-			"/api/v1/invoices/upload",
-			formData,
-			{
-				headers: {
-					"Content-Type": "multipart/form-data",
-				},
-			}
-		);
+		const response = await apiClient.post("/extract", formData, {
+			headers: {
+				"Content-Type": "multipart/form-data",
+			},
+		});
 		return response.data;
 	},
 

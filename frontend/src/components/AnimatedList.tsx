@@ -188,7 +188,53 @@ const AnimatedList: React.FC<AnimatedListProps> = ({
 								selectedIndex === index ? "bg-[#222]" : ""
 							} ${itemClassName}`}
 						>
-							<p className="text-white m-0">{item}</p>
+							{typeof item === "object" ? (
+								<div className="flex items-center justify-between gap-4">
+									<div className="flex-1 grid grid-cols-4 gap-2 text-sm">
+										<div>
+											<span className="text-gray-400">
+												Invoice:
+											</span>
+											<p className="text-white font-medium">
+												{item.invoiceNumber}
+											</p>
+										</div>
+										<div>
+											<span className="text-gray-400">
+												Vendor:
+											</span>
+											<p className="text-white font-medium">
+												{item.vendorName}
+											</p>
+										</div>
+										<div>
+											<span className="text-gray-400">
+												Amount:
+											</span>
+											<p className="text-white font-medium">
+												{item.currency}{" "}
+												{item.amountPayable}
+											</p>
+										</div>
+										<div>
+											<span className="text-gray-400">
+												Due:
+											</span>
+											<p className="text-white font-medium">
+												{item.dueDate}
+											</p>
+										</div>
+									</div>
+									<div className="flex items-center gap-2">
+										<span className="text-xs text-gray-400">
+											Score: {item.ConfidenceScore}
+										</span>
+										{item.actions}
+									</div>
+								</div>
+							) : (
+								<p className="text-white m-0">{item}</p>
+							)}
 						</div>
 					</AnimatedItem>
 				))}
