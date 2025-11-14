@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { X, Upload, CheckCircle, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
-import { invoiceApi } from "@/lib/api/client";
+import { ocrApi } from "@/lib/api/client";
 
 interface FileWithStatus {
 	file: File;
 	status: "pending" | "uploading" | "success" | "error";
 	error?: string;
+	extractedData?: any;
 }
 
 export function DialogDemo() {
@@ -61,12 +62,45 @@ export function DialogDemo() {
 			});
 
 			try {
-				await invoiceApi.uploadInvoice(fileItem.file);
+				// Use OCR API to extract data
+				const result = await ocrApi.extractInvoice(fileItem.file);
+
+				if (result.success && result.data) {
+					// Store in localStorage
+					const existingInvoices = JSON.parse(
+						localStorage.getItem("invoices") || "[]"
+					);
+					const newInvoice = {
+						id: Date.now(),
+						file_name: fileItem.file.name,
+						invoice_id: result.data.invoice_number || "N/A",
+						vendor_name: result.data.vendor_name || "N/A",
+						amount_due: result.data.total_amount || 0,
+						due_date: result.data.due_date || "N/A",
+						invoice_date: result.data.invoice_date || "N/A",
+						currency_code: result.data.currency || "USD",
+						confidence_score: result.data.confidence_score || 0,
+						status: "completed",
+						created_at: new Date().toISOString(),
+						updated_at: new Date().toISOString(),
+						owner_id: 1,
+						extracted_data: result.data,
+					};
+					existingInvoices.unshift(newInvoice);
+					localStorage.setItem(
+						"invoices",
+						JSON.stringify(existingInvoices)
+					);
+				}
 
 				// Update status to success
 				setFiles((prev) => {
 					const updated = [...prev];
-					updated[i] = { ...updated[i], status: "success" };
+					updated[i] = {
+						...updated[i],
+						status: "success",
+						extractedData: result.data,
+					};
 					return updated;
 				});
 			} catch (error) {

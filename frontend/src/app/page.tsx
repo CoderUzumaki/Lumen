@@ -14,10 +14,10 @@ export default function Home() {
 	const fetchData = async () => {
 		try {
 			const response = await fetch(
-				`${process.env.NEXT_PUBLIC_API_URL}/api/hello`
+				`${process.env.NEXT_PUBLIC_API_URL}/`
 			);
 			const data = await response.json();
-			setMessage(data.message);
+			setMessage(data.name);
 		} catch (error) {
 			console.error("Error fetching data:", error);
 			setMessage("Error connecting to backend");
