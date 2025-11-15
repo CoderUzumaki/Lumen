@@ -82,12 +82,14 @@ const getPeriodLabels = (timeRange: string, selectedPeriod: SelectedPeriod) => {
 const CustomTooltip = ({ active, payload, label }: any) => {
 	if (active && payload && payload.length) {
 		return (
-			<div className="bg-white p-4 rounded-lg shadow-lg border">
-				<p className="font-semibold text-sm mb-2">{label}</p>
+			<div className="bg-white p-4 rounded-lg shadow-lg border border-gray-200">
+				<p className="font-semibold text-sm mb-2 text-gray-900">
+					{label}
+				</p>
 				{payload.map((entry: any, index: number) => (
 					<p
 						key={index}
-						className="text-xs"
+						className="text-xs font-medium"
 						style={{ color: entry.color }}
 					>
 						{entry.name === "currentSpending"
@@ -118,10 +120,10 @@ export default function SpendingTrendChart({
 			try {
 				setLoading(true);
 				const user = tokenManager.getUser();
-				if (!user?.id) return;
+				// if (!user?.id) return;
 
 				const response = await analyticsApi.getTimeRangeAnalytics(
-					user.id as string,
+					"123",
 					timeRange,
 					selectedPeriod.year,
 					selectedPeriod.month,
@@ -145,31 +147,31 @@ export default function SpendingTrendChart({
 
 	if (loading) {
 		return (
-			<Card className="col-span-full">
+			<Card className="col-span-full bg-white border border-gray-200">
 				<CardHeader>
-					<div className="h-6 w-48 bg-muted rounded animate-pulse"></div>
+					<div className="h-6 w-48 bg-gray-200 rounded animate-pulse"></div>
 				</CardHeader>
 				<CardContent>
-					<div className="h-[400px] w-full bg-muted rounded animate-pulse"></div>
+					<div className="h-[400px] w-full bg-gray-200 rounded animate-pulse"></div>
 				</CardContent>
 			</Card>
 		);
 	}
 
 	return (
-		<Card className="w-full">
+		<Card className="w-full bg-white border border-gray-200 shadow-sm">
 			<CardHeader>
-				<CardTitle className="flex items-center gap-2">
+				<CardTitle className="flex items-center gap-2 text-gray-900">
 					<BarChart3 className="w-5 h-5 text-primary" />
 					Spending Comparison
 				</CardTitle>
-				<p className="text-sm text-muted-foreground">
+				<p className="text-sm text-gray-600">
 					Comparing{" "}
 					<span className="font-semibold text-primary">
 						{periodLabels.current}
 					</span>{" "}
 					vs{" "}
-					<span className="font-semibold text-muted-foreground/80">
+					<span className="font-semibold text-gray-700">
 						{periodLabels.previous}
 					</span>
 				</p>

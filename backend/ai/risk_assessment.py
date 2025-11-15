@@ -35,21 +35,21 @@ class RiskAssessmentEngine:
         
         # Get last 30 days spending
         cursor.execute("""
-            SELECT SUM(amount) as total
+            SELECT SUM(total_amount) as total
             FROM transactions
             WHERE user_id = ?
-            AND transaction_date >= date('now', '-30 days')
+            AND date >= date('now', '-30 days')
         """, (user_id,))
         
         last_30 = cursor.fetchone()['total'] or 0
         
         # Get 30-60 days ago (baseline)
         cursor.execute("""
-            SELECT SUM(amount) as total
+            SELECT SUM(total_amount) as total
             FROM transactions
             WHERE user_id = ?
-            AND transaction_date >= date('now', '-60 days')
-            AND transaction_date < date('now', '-30 days')
+            AND date >= date('now', '-60 days')
+            AND date < date('now', '-30 days')
         """, (user_id,))
         
         prev_30 = cursor.fetchone()['total'] or 0
@@ -102,10 +102,10 @@ class RiskAssessmentEngine:
         
         # Get current month spending
         cursor.execute("""
-            SELECT SUM(amount) as total
+            SELECT SUM(total_amount) as total
             FROM transactions
             WHERE user_id = ?
-            AND strftime('%Y-%m', transaction_date) = strftime('%Y-%m', 'now')
+            AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now')
         """, (user_id,))
         
         current_month = cursor.fetchone()['total'] or 0
@@ -120,11 +120,11 @@ class RiskAssessmentEngine:
             cursor.execute("""
                 SELECT AVG(monthly_total) as avg_budget
                 FROM (
-                    SELECT strftime('%Y-%m', transaction_date) as month,
-                           SUM(amount) as monthly_total
+                    SELECT strftime('%Y-%m', date) as month,
+                           SUM(total_amount) as monthly_total
                     FROM transactions
                     WHERE user_id = ?
-                    AND transaction_date >= date('now', '-90 days')
+                    AND date >= date('now', '-90 days')
                     GROUP BY month
                 )
             """, (user_id,))
@@ -194,14 +194,18 @@ class RiskAssessmentEngine:
         # Get anomaly counts by risk level (last 30 days)
         cursor.execute("""
             SELECT 
-                risk_level,
+                CASE 
+                    WHEN risk_score >= 80 THEN 'HIGH'
+                    WHEN risk_score >= 50 THEN 'MEDIUM'
+                    ELSE 'LOW'
+                END as risk_level,
                 COUNT(*) as count
-            FROM anomalies
-            WHERE user_id = ?
-            AND created_at >= datetime('now', '-30 days')
-            AND is_false_positive IS NOT 1
+            FROM anomalies a
+            JOIN transactions t ON a.transaction_id = t.id
+            WHERE t.user_id = ?
+            AND a.created_at >= datetime('now', '-30 days')
             GROUP BY risk_level
-        """, (user_id,))
+        """, (str(user_id),))
         
         anomalies = {row['risk_level']: row['count'] for row in cursor.fetchall()}
         conn.close()
@@ -245,10 +249,10 @@ class RiskAssessmentEngine:
         
         # Get current month spending
         cursor.execute("""
-            SELECT SUM(amount) as total
+            SELECT SUM(total_amount) as total
             FROM transactions
             WHERE user_id = ?
-            AND strftime('%Y-%m', transaction_date) = strftime('%Y-%m', 'now')
+            AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now')
         """, (user_id,))
         
         current_spending = cursor.fetchone()['total'] or 0
@@ -307,8 +311,8 @@ class RiskAssessmentEngine:
             SELECT COUNT(*) as count
             FROM transactions
             WHERE user_id = ?
-            AND amount < 500
-            AND transaction_date >= date('now', '-30 days')
+            AND total_amount < 500
+            AND date >= date('now', '-30 days')
         """, (user_id,))
         
         small_txn_count = cursor.fetchone()['count']
@@ -321,7 +325,7 @@ class RiskAssessmentEngine:
             SELECT COUNT(*) as count
             FROM transactions
             WHERE user_id = ?
-            AND transaction_date >= date('now', '-30 days')
+            AND date >= date('now', '-30 days')
         """, (user_id,))
         
         total_txn = cursor.fetchone()['count']

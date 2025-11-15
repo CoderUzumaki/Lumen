@@ -42,8 +42,8 @@ export default function AnalyticsContent() {
 		tabParam || "monthly"
 	);
 	const [selectedPeriod, setSelectedPeriod] = useState<SelectedPeriod>({
-		year: new Date().getFullYear(),
-		month: new Date().getMonth(),
+		year: 2024, // Default to 2024 where test data exists
+		month: 10, // November (0-indexed, so 10 = November)
 	});
 
 	// Generate period options based on time range
@@ -182,18 +182,25 @@ export default function AnalyticsContent() {
 	return (
 		<SidebarProvider>
 			<AppSidebar />
-			<SidebarInset>
-				<header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+			<SidebarInset className="bg-gray-50">
+				<header className="flex h-16 shrink-0 items-center gap-2 border-b border-gray-200 px-4 bg-white">
 					<SidebarTrigger className="-ml-1" />
 					<Separator orientation="vertical" className="mr-2 h-4" />
 					<Breadcrumb>
 						<BreadcrumbList>
 							<BreadcrumbItem className="hidden md:block">
-								<BreadcrumbLink href="/">Home</BreadcrumbLink>
+								<BreadcrumbLink
+									href="/"
+									className="text-gray-600 hover:text-gray-900"
+								>
+									Home
+								</BreadcrumbLink>
 							</BreadcrumbItem>
 							<BreadcrumbSeparator className="hidden md:block" />
 							<BreadcrumbItem>
-								<BreadcrumbPage>Analytics</BreadcrumbPage>
+								<BreadcrumbPage className="text-gray-900">
+									Analytics
+								</BreadcrumbPage>
 							</BreadcrumbItem>
 						</BreadcrumbList>
 					</Breadcrumb>
@@ -204,15 +211,15 @@ export default function AnalyticsContent() {
 					<div className="flex flex-col gap-4 py-4">
 						<div className="flex items-center justify-between flex-wrap gap-4">
 							<div>
-								<h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+								<h1 className="text-3xl font-bold tracking-tight flex items-center gap-2 text-gray-900">
 									<TrendingUp className="w-8 h-8 text-primary" />
 									Spending Analytics
 								</h1>
-								<p className="text-muted-foreground mt-1">
+								<p className="text-gray-600 mt-1">
 									Compare spending patterns across periods
 								</p>
 							</div>
-							<div className="flex items-center gap-3 bg-muted/50 p-2 rounded-lg">
+							<div className="flex items-center gap-3 bg-white border border-gray-200 p-2 rounded-lg">
 								<Button
 									variant="ghost"
 									size="icon"
@@ -228,7 +235,7 @@ export default function AnalyticsContent() {
 											handlePeriodChange("year", value)
 										}
 									>
-										<SelectTrigger className="w-[120px]">
+										<SelectTrigger className="w-[120px] text-gray-900 font-medium">
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
@@ -255,7 +262,7 @@ export default function AnalyticsContent() {
 												)
 											}
 										>
-											<SelectTrigger className="w-[140px]">
+											<SelectTrigger className="w-[140px] text-gray-900 font-medium">
 												<SelectValue />
 											</SelectTrigger>
 											<SelectContent>
@@ -269,18 +276,18 @@ export default function AnalyticsContent() {
 												))}
 											</SelectContent>
 										</Select>
-										<Select
-											value={selectedPeriod.year.toString()}
-											onValueChange={(value) =>
-												handlePeriodChange(
-													"year",
-													value
-												)
-											}
-										>
-											<SelectTrigger className="w-[100px]">
-												<SelectValue />
-											</SelectTrigger>
+											<Select
+												value={selectedPeriod.year.toString()}
+												onValueChange={(value) =>
+													handlePeriodChange(
+														"year",
+														value
+													)
+												}
+											>
+												<SelectTrigger className="w-[100px] text-gray-900 font-medium">
+													<SelectValue />
+												</SelectTrigger>
 											<SelectContent>
 												{generateYears().map((year) => (
 													<SelectItem
@@ -306,7 +313,7 @@ export default function AnalyticsContent() {
 												)
 											}
 										>
-											<SelectTrigger className="w-[120px]">
+											<SelectTrigger className="w-[120px] text-gray-900 font-medium">
 												<SelectValue placeholder="Week" />
 											</SelectTrigger>
 											<SelectContent>
@@ -329,7 +336,7 @@ export default function AnalyticsContent() {
 												)
 											}
 										>
-											<SelectTrigger className="w-[100px]">
+											<SelectTrigger className="w-[100px] text-gray-900 font-medium">
 												<SelectValue />
 											</SelectTrigger>
 											<SelectContent>

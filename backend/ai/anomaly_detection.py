@@ -54,7 +54,7 @@ class FraudDetectionAgent:
             return []  # Need minimum data
         
         anomalies = []
-        amounts = [t['amount'] for t in transactions]
+        amounts = [t.get('total_amount', t.get('amount', 0)) for t in transactions]
         
         # Calculate statistics
         mean_amount = statistics.mean(amounts)
@@ -72,20 +72,21 @@ class FraudDetectionAgent:
         for txn in transactions:
             flags = []
             risk_score = 0.0
+            txn_amount = txn.get('total_amount', txn.get('amount', 0))
             
             # Z-score check
             if stdev_amount > 0:
-                z_score = abs((txn['amount'] - mean_amount) / stdev_amount)
+                z_score = abs((txn_amount - mean_amount) / stdev_amount)
                 if z_score > 3:
                     flags.append(f"amount_{z_score:.1f}_stdev")
                     risk_score += min(z_score / 10, 0.3)  # Cap at 0.3
             
 
-            if txn['amount'] < lower_bound or txn['amount'] > upper_bound:
+            if txn_amount < lower_bound or txn_amount > upper_bound:
                 flags.append("amount_outside_iqr")
                 risk_score += 0.2
 
-            if txn['amount'] in [1000, 2000, 5000, 10000, 20000, 50000, 100000]:
+            if txn_amount in [1000, 2000, 5000, 10000, 20000, 50000, 100000]:
                 flags.append("suspicious_round_number")
                 risk_score += 0.1
             
@@ -97,7 +98,7 @@ class FraudDetectionAgent:
                     'detection_method': 'statistical',
                     'flags': flags,
                     'risk_score': min(risk_score, 1.0),
-                    'explanation': f"Amount ₹{txn['amount']} is unusual (mean: ₹{mean_amount:.0f})"
+                    'explanation': f"Amount €{txn_amount} is unusual (mean: €{mean_amount:.0f})"
                 })
         
         return anomalies
@@ -423,19 +424,21 @@ Respond in JSON format:
         """))
         
         # Insert anomalies
+        import uuid
         for anomaly in anomalies:
             db.session.execute(db.text("""
                 INSERT INTO anomalies 
-                (transaction_id, user_id, anomaly_type, detection_method,
+                (id, transaction_id, user_id, anomaly_type, detection_method,
                  risk_score, risk_level, explanation, flags, llm_explanation, recommendation)
-                VALUES (:transaction_id, :user_id, :anomaly_type, :detection_method,
+                VALUES (:id, :transaction_id, :user_id, :anomaly_type, :detection_method,
                         :risk_score, :risk_level, :explanation, :flags, :llm_explanation, :recommendation)
             """), {
+                'id': str(uuid.uuid4()),
                 'transaction_id': anomaly['transaction_id'],
                 'user_id': str(user_id),
                 'anomaly_type': anomaly['anomaly_type'],
                 'detection_method': anomaly['detection_method'],
-                'risk_score': anomaly['risk_score'],
+                'risk_score': int(anomaly['risk_score'] * 100),  # Convert to 0-100 scale
                 'risk_level': anomaly.get('risk_level', 'LOW'),
                 'explanation': anomaly['explanation'],
                 'flags': json.dumps(anomaly['flags']),

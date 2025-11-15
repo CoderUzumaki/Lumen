@@ -3,7 +3,7 @@ from utils.analytics_service import AnalyticsService
 
 analytics_bp = Blueprint("analytics_bp", __name__)
 
-@analytics_bp.route("/analytics/summary", methods=["GET"])
+@analytics_bp.route("/analytics/summary", methods=["GET", "OPTIONS"])
 def analytics_summary():
     """
     Get analytics summary with time-range based filtering
@@ -21,6 +21,10 @@ def analytics_summary():
     - GET /analytics/summary?user_id=123&time_range=monthly&year=2025&month=10
     - GET /analytics/summary?user_id=123&time_range=weekly&year=2025&week=45
     """
+    # Handle CORS preflight
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+    
     user_id = request.args.get("user_id")
     if not user_id:
         return jsonify({"error": "user_id required"}), 400

@@ -255,7 +255,7 @@ export const emailConfigApi = {
 	 */
 	getStatus: async () => {
 		const response = await apiClient.get("/api/v1/email-config/status", {
-			params: { user_id: "123" }
+			params: { user_id: "123" },
 		});
 		return response.data;
 	},
@@ -286,7 +286,7 @@ export const emailConfigApi = {
 	}) => {
 		const response = await apiClient.post("/api/v1/email-config", {
 			...data,
-			user_id: "123"
+			user_id: "123",
 		});
 		return response.data;
 	},
@@ -303,7 +303,7 @@ export const emailConfigApi = {
 	}) => {
 		const response = await apiClient.put("/api/v1/email-config", {
 			...data,
-			user_id: "123"
+			user_id: "123",
 		});
 		return response.data;
 	},
@@ -320,7 +320,7 @@ export const emailConfigApi = {
 	 */
 	testConnection: async () => {
 		const response = await apiClient.post("/api/v1/email-config/test", {
-			user_id: "123"
+			user_id: "123",
 		});
 		return response.data;
 	},
@@ -330,7 +330,7 @@ export const emailConfigApi = {
 	 */
 	pollNow: async () => {
 		const response = await apiClient.post("/api/v1/email-config/poll-now", {
-			user_id: "123"
+			user_id: "123",
 		});
 		return response.data;
 	},
@@ -340,7 +340,7 @@ export const emailConfigApi = {
 	 */
 	pausePolling: async () => {
 		const response = await apiClient.post("/api/v1/email-config/pause", {
-			user_id: "123"
+			user_id: "123",
 		});
 		return response.data;
 	},
@@ -350,7 +350,7 @@ export const emailConfigApi = {
 	 */
 	resumePolling: async () => {
 		const response = await apiClient.post("/api/v1/email-config/resume", {
-			user_id: "123"
+			user_id: "123",
 		});
 		return response.data;
 	},
@@ -590,6 +590,145 @@ export const transactionApi = {
 		}>;
 	}) => {
 		const response = await apiClient.post("/transactions", data);
+		return response.data;
+	},
+};
+
+/**
+ * AI Analytics API endpoints
+ */
+export const aiAnalyticsApi = {
+	/**
+	 * Get quick dashboard summary
+	 */
+	getDashboard: async (userId: string = "123") => {
+		const response = await apiClient.get("/api/analytics/dashboard", {
+			params: { user_id: userId },
+		});
+		return response.data;
+	},
+
+	/**
+	 * Run comprehensive analysis
+	 */
+	runAnalysis: async (
+		options: {
+			userId?: string;
+			includeFraud?: boolean;
+			includeForecast?: boolean;
+			includeRisk?: boolean;
+			useLlm?: boolean;
+		} = {}
+	) => {
+		const response = await apiClient.post("/api/analytics/analyze", {
+			user_id: options.userId || "123",
+			include_fraud: options.includeFraud ?? true,
+			include_forecast: options.includeForecast ?? true,
+			include_risk: options.includeRisk ?? true,
+			use_llm: options.useLlm ?? false,
+		});
+		return response.data;
+	},
+
+	/**
+	 * Get smart reminders
+	 */
+	getReminders: async (userId: string = "123", daysAhead: number = 7) => {
+		const response = await apiClient.get("/api/analytics/reminders", {
+			params: {
+				user_id: userId,
+				days_ahead: daysAhead,
+			},
+		});
+		return response.data;
+	},
+
+	/**
+	 * Get detected anomalies
+	 */
+	getAnomalies: async (userId: string = "123", riskLevel?: string) => {
+		const response = await apiClient.get("/api/analytics/anomalies", {
+			params: {
+				user_id: userId,
+				...(riskLevel && { risk_level: riskLevel }),
+			},
+		});
+		return response.data;
+	},
+
+	/**
+	 * Get spending forecast
+	 */
+	getForecast: async (userId: string = "123", daysAhead: number = 30) => {
+		const response = await apiClient.get("/api/analytics/forecast", {
+			params: {
+				user_id: userId,
+				days_ahead: daysAhead,
+			},
+		});
+		return response.data;
+	},
+
+	/**
+	 * Get financial health risk score
+	 */
+	getRiskScore: async (userId: string = "123") => {
+		const response = await apiClient.get("/api/analytics/risk-score", {
+			params: { user_id: userId },
+		});
+		return response.data;
+	},
+
+	/**
+	 * Get all insights
+	 */
+	getInsights: async (
+		options: {
+			userId?: string;
+			type?: string;
+			severity?: string;
+			limit?: number;
+		} = {}
+	) => {
+		const response = await apiClient.get("/api/analytics/insights", {
+			params: {
+				user_id: options.userId || "123",
+				...(options.type && { type: options.type }),
+				...(options.severity && { severity: options.severity }),
+				limit: options.limit || 20,
+			},
+		});
+		return response.data;
+	},
+
+	/**
+	 * Mark an insight as read
+	 */
+	markInsightRead: async (insightId: number) => {
+		const response = await apiClient.post(
+			`/api/analytics/insights/${insightId}/read`
+		);
+		return response.data;
+	},
+
+	/**
+	 * Get detected spending patterns
+	 */
+	getPatterns: async (userId: string = "123", patternType?: string) => {
+		const response = await apiClient.get("/api/analytics/patterns", {
+			params: {
+				user_id: userId,
+				...(patternType && { pattern_type: patternType }),
+			},
+		});
+		return response.data;
+	},
+
+	/**
+	 * Health check for analytics service
+	 */
+	healthCheck: async () => {
+		const response = await apiClient.get("/api/analytics/health");
 		return response.data;
 	},
 };

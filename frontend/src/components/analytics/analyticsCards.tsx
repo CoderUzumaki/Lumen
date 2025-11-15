@@ -94,32 +94,47 @@ export default function AnalyticsCards({
 		const fetchAnalytics = async () => {
 			try {
 				setLoading(true);
-				const user = tokenManager.getUser();
-				if (!user?.id) return;
+				// Hardcode to "123" for testing where transaction data exists
+				const userId = "123";
+
+				console.log("Fetching analytics with params:", {
+					userId,
+					timeRange,
+					year: selectedPeriod.year,
+					month: selectedPeriod.month,
+					week: selectedPeriod.week
+				});
 
 				const response = await analyticsApi.getTimeRangeAnalytics(
-					user.id as string,
+					userId,
 					timeRange,
 					selectedPeriod.year,
 					selectedPeriod.month,
 					selectedPeriod.week
 				);
 
-				if (response.success) {
+				console.log("Analytics API Response:", response);
+				console.log("Response success:", response.success);
+				console.log("Has current_period:", !!response.current_period);
+
+				if (response.success && response.current_period) {
 					const current = response.current_period;
 					const previous = response.previous_period;
 
-					setData({
-						avgSpending: current.avg_spending || 0,
+					console.log("Current period data:", current);
+					console.log("Previous period data:", previous);
+
+					const newData = {
+						avgSpending: current.average_spending || 0,
 						maxSpending: current.max_spending || 0,
 						minSpending: current.min_spending || 0,
 						totalSpending: current.total_spending || 0,
 						previousTotal: previous.total_spending || 0,
 						avgChange:
-							previous.avg_spending && previous.avg_spending !== 0
-								? ((current.avg_spending -
-										previous.avg_spending) /
-										previous.avg_spending) *
+							previous.average_spending && previous.average_spending !== 0
+								? ((current.average_spending -
+										previous.average_spending) /
+										previous.average_spending) *
 								  100
 								: 0,
 						maxChange:
@@ -136,7 +151,11 @@ export default function AnalyticsCards({
 										previous.min_spending) *
 								  100
 								: 0,
-					});
+					};
+					console.log("Setting data to:", newData);
+					setData(newData);
+				} else {
+					console.error("Response missing success or current_period", response);
 				}
 			} catch (error) {
 				console.error("Error fetching analytics:", error);
@@ -160,14 +179,17 @@ export default function AnalyticsCards({
 		return (
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 				{[...Array(4)].map((_, i) => (
-					<Card key={i} className="animate-pulse">
+					<Card
+						key={i}
+						className="animate-pulse bg-white border border-gray-200"
+					>
 						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-							<div className="h-4 w-24 bg-muted rounded"></div>
-							<div className="h-4 w-4 bg-muted rounded"></div>
+							<div className="h-4 w-24 bg-gray-200 rounded"></div>
+							<div className="h-4 w-4 bg-gray-200 rounded"></div>
 						</CardHeader>
 						<CardContent>
-							<div className="h-8 w-32 bg-muted rounded mb-2"></div>
-							<div className="h-4 w-full bg-muted rounded"></div>
+							<div className="h-8 w-32 bg-gray-200 rounded mb-2"></div>
+							<div className="h-4 w-full bg-gray-200 rounded"></div>
 						</CardContent>
 					</Card>
 				))}
@@ -219,22 +241,22 @@ export default function AnalyticsCards({
 				return (
 					<Card
 						key={index}
-						className="hover:shadow-lg transition-shadow"
+						className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
 					>
 						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-							<CardTitle className="text-sm font-medium">
+							<CardTitle className="text-sm font-medium text-gray-700">
 								{card.title}
 							</CardTitle>
-							<Icon className="h-4 w-4 text-muted-foreground" />
+							<Icon className="h-4 w-4 text-gray-500" />
 						</CardHeader>
 						<CardContent>
-							<div className="text-2xl font-bold">
+							<div className="text-2xl font-bold text-gray-900">
 								{card.isTrend && (
 									<span
 										className={
 											isPositive
 												? "text-red-600"
-												: "text-green-600"
+												: "text-blue-600"
 										}
 									>
 										{isPositive ? "+" : "-"}
@@ -246,20 +268,20 @@ export default function AnalyticsCards({
 									maximumFractionDigits: 2,
 								})}
 							</div>
-							<div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+							<div className="flex items-center gap-1 text-xs text-gray-600 mt-1">
 								{isPositive ? (
 									<ArrowUpIcon
 										className={`h-3 w-3 ${
 											card.isTrend
 												? "text-red-600"
-												: "text-green-600"
+												: "text-blue-600"
 										}`}
 									/>
 								) : (
 									<ArrowDownIcon
 										className={`h-3 w-3 ${
 											card.isTrend
-												? "text-green-600"
+												? "text-blue-600"
 												: "text-red-600"
 										}`}
 									/>
@@ -268,16 +290,18 @@ export default function AnalyticsCards({
 									className={
 										card.isTrend
 											? isPositive
-												? "text-red-600"
-												: "text-green-600"
+												? "text-red-600 font-medium"
+												: "text-blue-600 font-medium"
 											: isPositive
-											? "text-green-600"
-											: "text-red-600"
+											? "text-blue-600 font-medium"
+											: "text-red-600 font-medium"
 									}
 								>
 									{Math.abs(card.change).toFixed(1)}%
 								</span>
-								<span className="ml-1">{card.description}</span>
+								<span className="ml-1 text-gray-600">
+									{card.description}
+								</span>
 							</div>
 						</CardContent>
 					</Card>

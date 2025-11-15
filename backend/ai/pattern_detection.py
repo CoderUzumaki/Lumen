@@ -44,10 +44,10 @@ class PatternDetectionAgent:
         
         # Get all transactions for user
         cursor.execute("""
-            SELECT id, vendor_name, category, amount, transaction_date
+            SELECT id, vendor_name, category, total_amount as amount, date as date
             FROM transactions
             WHERE user_id = ?
-            ORDER BY transaction_date
+            ORDER BY date
         """, (user_id,))
         
         transactions = [dict(row) for row in cursor.fetchall()]
@@ -70,18 +70,18 @@ class PatternDetectionAgent:
                 continue
             
             # Sort by date
-            txns.sort(key=lambda x: x['transaction_date'])
+            txns.sort(key=lambda x: x['date'])
             
             # Calculate intervals between transactions
             intervals = []
             amounts = []
             
             for i in range(1, len(txns)):
-                date1 = datetime.fromisoformat(txns[i-1]['transaction_date'])
-                date2 = datetime.fromisoformat(txns[i]['transaction_date'])
+                date1 = datetime.fromisoformat(txns[i-1]['date'])
+                date2 = datetime.fromisoformat(txns[i]['date'])
                 interval = (date2 - date1).days
                 intervals.append(interval)
-                amounts.append(txns[i]['amount'])
+                amounts.append(txns[i].get('total_amount', txns[i].get('amount', 0)))
             
             if not intervals:
                 continue
@@ -101,11 +101,11 @@ class PatternDetectionAgent:
                 confidence = max(0.0, min(1.0, confidence))
                 
                 # Predict next occurrence
-                last_date = datetime.fromisoformat(txns[-1]['transaction_date'])
+                last_date = datetime.fromisoformat(txns[-1]['date'])
                 next_predicted = last_date + timedelta(days=int(avg_interval))
                 
                 # Average amount
-                avg_amount = statistics.mean(amounts) if amounts else txns[0]['amount']
+                avg_amount = statistics.mean(amounts) if amounts else txns[0].get('total_amount', txns[0].get('amount', 0))
                 amount_variance = statistics.stdev(amounts) if len(amounts) > 1 else 0
                 
                 pattern = {
@@ -118,7 +118,7 @@ class PatternDetectionAgent:
                     'amount_variance': round(amount_variance, 2),
                     'occurrence_count': len(txns),
                     'confidence_score': round(confidence, 3),
-                    'last_occurrence': txns[-1]['transaction_date'],
+                    'last_occurrence': txns[-1]['date'],
                     'next_predicted_date': next_predicted.date().isoformat(),
                     'intervals': intervals,
                     'transaction_ids': [t['id'] for t in txns]
@@ -142,10 +142,10 @@ class PatternDetectionAgent:
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT vendor_name, category, transaction_date, amount
+            SELECT vendor_name, category, date, total_amount as amount
             FROM transactions
             WHERE user_id = ?
-            ORDER BY transaction_date
+            ORDER BY date
         """, (user_id,))
         
         transactions = [dict(row) for row in cursor.fetchall()]
@@ -154,7 +154,7 @@ class PatternDetectionAgent:
         # Group by category
         category_groups = defaultdict(list)
         for txn in transactions:
-            date = datetime.fromisoformat(txn['transaction_date'])
+            date = datetime.fromisoformat(txn['date'])
             day_of_month = date.day
             txn['day_of_month'] = day_of_month
             category_groups[txn['category']].append(txn)

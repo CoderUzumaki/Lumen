@@ -3,6 +3,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PieChart as PieChartIcon } from "lucide-react";
 import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { transactionApi, tokenManager } from "@/lib/api/client";
 import {
 	PieChart,
 	Pie,
@@ -11,16 +13,6 @@ import {
 	Tooltip,
 	Legend,
 } from "recharts";
-
-// Mock data - Replace with API call
-const mockCategoryData = [
-	{ name: "Software", value: 45000, percentage: 35 },
-	{ name: "Office Supplies", value: 25000, percentage: 19 },
-	{ name: "Cloud Services", value: 22000, percentage: 17 },
-	{ name: "Utilities", value: 18000, percentage: 14 },
-	{ name: "Equipment", value: 12000, percentage: 9 },
-	{ name: "Others", value: 8000, percentage: 6 },
-];
 
 const COLORS = [
 	"#4f46e5",
@@ -38,7 +30,7 @@ const cardVariants = {
 		y: 0,
 		transition: {
 			duration: 0.5,
-			ease: "easeOut",
+			ease: [0.4, 0, 0.2, 1] as any,
 			delay: 0.6,
 		},
 	},
@@ -47,12 +39,12 @@ const cardVariants = {
 const CustomTooltip = ({ active, payload }: any) => {
 	if (active && payload && payload.length) {
 		return (
-			<div className="bg-slate-800 p-3 border border-slate-600 rounded-lg shadow-lg">
-				<p className="font-semibold text-white">{payload[0].name}</p>
-				<p className="text-sm text-slate-300">
+			<div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+				<p className="font-semibold text-gray-900">{payload[0].name}</p>
+				<p className="text-sm text-gray-700">
 					€{payload[0].value.toLocaleString()}
 				</p>
-				<p className="text-sm text-slate-300">
+				<p className="text-sm text-gray-700">
 					{payload[0].payload.percentage}%
 				</p>
 			</div>
@@ -66,6 +58,98 @@ const renderCustomLabel = (entry: any) => {
 };
 
 export default function CategoryPieChart() {
+	const [categoryData, setCategoryData] = useState<any[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		const fetchCategoryData = async () => {
+			try {
+				setLoading(true);
+				const user = tokenManager.getUser();
+				if (!user?.id) {
+					setError("User not found");
+					return;
+				}
+
+				const response = await transactionApi.getTransactions(
+					"123",
+					{
+						page: 1,
+						page_size: 1000,
+					}
+				);
+
+				const transactions = response.data || [];
+
+				// Aggregate by category
+				const categoryMap: { [key: string]: number } = {};
+				transactions.forEach((transaction: any) => {
+					const category = transaction.category || "Uncategorized";
+					const amount = parseFloat(transaction.total_amount || 0);
+					categoryMap[category] =
+						(categoryMap[category] || 0) + amount;
+				});
+
+				// Calculate total and percentages
+				const total = Object.values(categoryMap).reduce(
+					(sum, val) => sum + val,
+					0
+				);
+				const aggregatedData = Object.entries(categoryMap).map(
+					([name, value]) => ({
+						name,
+						value,
+						percentage:
+							total > 0
+								? ((value / total) * 100).toFixed(1)
+								: "0",
+					})
+				);
+
+				setCategoryData(aggregatedData);
+				setError(null);
+			} catch (err: any) {
+				console.error("Failed to fetch category data:", err);
+				setError(err.message || "Failed to load data");
+			} finally {
+				setLoading(false);
+			}
+		};
+
+		fetchCategoryData();
+	}, []);
+
+	if (loading) {
+		return (
+			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+				<CardContent className="flex items-center justify-center h-[400px]">
+					<p className="text-gray-500">Loading category data...</p>
+				</CardContent>
+			</Card>
+		);
+	}
+
+	if (error) {
+		return (
+			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+				<CardContent className="flex items-center justify-center h-[400px]">
+					<p className="text-red-500">{error}</p>
+				</CardContent>
+			</Card>
+		);
+	}
+
+	if (categoryData.length === 0) {
+		return (
+			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+				<CardContent className="flex items-center justify-center h-[400px]">
+					<p className="text-gray-500">No category data available</p>
+				</CardContent>
+			</Card>
+		);
+	}
+
 	return (
 		<motion.div
 			variants={cardVariants}
@@ -73,10 +157,10 @@ export default function CategoryPieChart() {
 			animate="visible"
 			className="h-full"
 		>
-			<Card className="border-slate-800 shadow-lg hover:shadow-xl transition-all duration-300 bg-slate-900/50 backdrop-blur-sm h-full">
+			<Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 h-full">
 				<CardHeader className="pb-3">
-					<CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-						<PieChartIcon className="w-5 h-5 text-purple-400" />
+					<CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+						<PieChartIcon className="w-5 h-5 text-purple-600" />
 						Category Breakdown
 					</CardTitle>
 				</CardHeader>
@@ -85,7 +169,7 @@ export default function CategoryPieChart() {
 						<ResponsiveContainer width="100%" height="100%">
 							<PieChart>
 								<Pie
-									data={mockCategoryData}
+									data={categoryData}
 									cx="50%"
 									cy="50%"
 									labelLine={false}
@@ -94,7 +178,7 @@ export default function CategoryPieChart() {
 									fill="#8884d8"
 									dataKey="value"
 								>
-									{mockCategoryData.map((entry, index) => (
+									{categoryData.map((entry, index) => (
 										<Cell
 											key={`cell-${index}`}
 											fill={COLORS[index % COLORS.length]}
@@ -108,7 +192,7 @@ export default function CategoryPieChart() {
 
 					{/* Legend */}
 					<div className="mt-4 space-y-2">
-						{mockCategoryData.map((category, index) => (
+						{categoryData.map((category, index) => (
 							<motion.div
 								key={category.name}
 								initial={{ opacity: 0, x: -10 }}
@@ -117,7 +201,7 @@ export default function CategoryPieChart() {
 									duration: 0.3,
 									delay: 0.7 + index * 0.1,
 								}}
-								className="flex items-center justify-between p-2 rounded hover:bg-slate-700/50 transition-colors"
+								className="flex items-center justify-between p-2 rounded hover:bg-gray-100 transition-colors"
 							>
 								<div className="flex items-center gap-2">
 									<div
@@ -126,15 +210,15 @@ export default function CategoryPieChart() {
 											backgroundColor: COLORS[index],
 										}}
 									></div>
-									<span className="text-sm text-slate-200">
+									<span className="text-sm text-gray-700">
 										{category.name}
 									</span>
 								</div>
 								<div className="text-right">
-									<p className="text-sm font-semibold text-white">
+									<p className="text-sm font-semibold text-gray-900">
 										€{category.value.toLocaleString()}
 									</p>
-									<p className="text-xs text-slate-400">
+									<p className="text-xs text-gray-600">
 										{category.percentage}%
 									</p>
 								</div>
@@ -143,14 +227,14 @@ export default function CategoryPieChart() {
 					</div>
 
 					{/* Total */}
-					<div className="mt-4 pt-4 border-t border-slate-700">
+					<div className="mt-4 pt-4 border-t border-gray-200">
 						<div className="flex items-center justify-between">
-							<span className="text-sm font-semibold text-slate-200">
+							<span className="text-sm font-semibold text-gray-700">
 								Total Spending
 							</span>
-							<span className="text-lg font-bold text-white">
+							<span className="text-lg font-bold text-gray-900">
 								€
-								{mockCategoryData
+								{categoryData
 									.reduce((sum, cat) => sum + cat.value, 0)
 									.toLocaleString()}
 							</span>

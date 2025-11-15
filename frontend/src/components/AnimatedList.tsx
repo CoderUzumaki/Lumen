@@ -161,13 +161,13 @@ const AnimatedList: React.FC<AnimatedListProps> = ({
 				ref={listRef}
 				className={`max-h-[400px] overflow-y-auto p-4 ${
 					displayScrollbar
-						? "[&::-webkit-scrollbar]:w-[8px] [&::-webkit-scrollbar-track]:bg-[#060010] [&::-webkit-scrollbar-thumb]:bg-[#222] [&::-webkit-scrollbar-thumb]:rounded-[4px]"
+						? "[&::-webkit-scrollbar]:w-[8px] [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-thumb]:bg-gray-400 [&::-webkit-scrollbar-thumb]:rounded-[4px]"
 						: "scrollbar-hide"
 				}`}
 				onScroll={handleScroll}
 				style={{
 					scrollbarWidth: displayScrollbar ? "thin" : "none",
-					scrollbarColor: "#222 #060010",
+					scrollbarColor: "#9ca3af #f3f4f6",
 				}}
 			>
 				{items.map((item, index) => (
@@ -184,56 +184,58 @@ const AnimatedList: React.FC<AnimatedListProps> = ({
 						}}
 					>
 						<div
-							className={`p-4 bg-[#111] rounded-lg ${
-								selectedIndex === index ? "bg-[#222]" : ""
+							className={`p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow ${
+								selectedIndex === index
+									? "bg-blue-50 border-blue-300"
+									: ""
 							} ${itemClassName}`}
 						>
 							{typeof item === "object" ? (
 								<div className="flex items-center justify-between gap-4">
 									<div className="flex-1 grid grid-cols-4 gap-2 text-sm">
 										<div>
-											<span className="text-gray-400">
+											<span className="text-gray-500">
 												Invoice:
 											</span>
-											<p className="text-white font-medium">
+											<p className="text-gray-900 font-medium">
 												{item.invoiceNumber}
 											</p>
 										</div>
 										<div>
-											<span className="text-gray-400">
+											<span className="text-gray-500">
 												Vendor:
 											</span>
-											<p className="text-white font-medium">
+											<p className="text-gray-900 font-medium">
 												{item.vendorName}
 											</p>
 										</div>
 										<div>
-											<span className="text-gray-400">
+											<span className="text-gray-500">
 												Amount:
 											</span>
-											<p className="text-white font-medium">
+											<p className="text-gray-900 font-medium">
 												{item.currency}{" "}
 												{item.amountPayable}
 											</p>
 										</div>
 										<div>
-											<span className="text-gray-400">
+											<span className="text-gray-500">
 												Due:
 											</span>
-											<p className="text-white font-medium">
+											<p className="text-gray-900 font-medium">
 												{item.dueDate}
 											</p>
 										</div>
 									</div>
 									<div className="flex items-center gap-2">
-										<span className="text-xs text-gray-400">
+										<span className="text-xs text-gray-600">
 											Score: {item.ConfidenceScore}
 										</span>
 										{item.actions}
 									</div>
 								</div>
 							) : (
-								<p className="text-white m-0">{item}</p>
+								<p className="text-gray-900 m-0">{item}</p>
 							)}
 						</div>
 					</AnimatedItem>
@@ -242,11 +244,11 @@ const AnimatedList: React.FC<AnimatedListProps> = ({
 			{showGradients && (
 				<>
 					<div
-						className="absolute top-0 left-0 right-0 h-[50px] bg-gradient-to-b from-[#060010] to-transparent pointer-events-none transition-opacity duration-300 ease"
+						className="absolute top-0 left-0 right-0 h-[50px] bg-gradient-to-b from-white to-transparent pointer-events-none transition-opacity duration-300 ease"
 						style={{ opacity: topGradientOpacity }}
 					></div>
 					<div
-						className="absolute bottom-0 left-0 right-0 h-[100px] bg-gradient-to-t from-[#060010] to-transparent pointer-events-none transition-opacity duration-300 ease"
+						className="absolute bottom-0 left-0 right-0 h-[100px] bg-gradient-to-t from-white to-transparent pointer-events-none transition-opacity duration-300 ease"
 						style={{ opacity: bottomGradientOpacity }}
 					></div>
 				</>

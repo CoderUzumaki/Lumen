@@ -4,46 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, Shield, Eye } from "lucide-react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
-
-// Mock data - Replace with API call
-const mockAnomalies = [
-	{
-		id: 1,
-		severity: "high",
-		vendor: "Tech Solutions Ltd",
-		amount: 8500.0,
-		date: "Nov 12, 2025",
-		description: "Invoice amount 350% higher than usual monthly average",
-		reason: "Unusual spike in transaction value",
-	},
-	{
-		id: 2,
-		severity: "medium",
-		vendor: "Office Depot",
-		amount: 450.0,
-		date: "Nov 10, 2025",
-		description: "Duplicate transaction detected within 24 hours",
-		reason: "Potential duplicate charge",
-	},
-	{
-		id: 3,
-		severity: "low",
-		vendor: "Cloud Storage Pro",
-		amount: 99.99,
-		date: "Nov 08, 2025",
-		description: "Payment made to new vendor for the first time",
-		reason: "New vendor alert",
-	},
-	{
-		id: 4,
-		severity: "high",
-		vendor: "Unknown Supplier",
-		amount: 1200.0,
-		date: "Nov 14, 2025",
-		description: "Transaction from unregistered vendor",
-		reason: "Vendor not in approved list",
-	},
-];
+import { useEffect, useState } from "react";
+import { aiAnalyticsApi } from "@/lib/api/client";
 
 const cardVariants = {
 	hidden: { opacity: 0, y: 20 },
@@ -52,7 +14,7 @@ const cardVariants = {
 		y: 0,
 		transition: {
 			duration: 0.5,
-			ease: "easeOut",
+			ease: "easeOut" as const,
 			delay: 0.3,
 		},
 	},
@@ -61,13 +23,13 @@ const cardVariants = {
 const getSeverityColor = (severity: string) => {
 	switch (severity) {
 		case "high":
-			return "bg-red-900/50 text-red-300 border-red-700";
+			return "bg-red-100 text-red-700 border-red-300";
 		case "medium":
-			return "bg-yellow-900/50 text-yellow-300 border-yellow-700";
+			return "bg-yellow-100 text-yellow-700 border-yellow-300";
 		case "low":
-			return "bg-blue-900/50 text-blue-300 border-blue-700";
+			return "bg-blue-100 text-blue-700 border-blue-300";
 		default:
-			return "bg-slate-700 text-slate-300 border-slate-600";
+			return "bg-gray-100 text-gray-700 border-gray-300";
 	}
 };
 
@@ -85,6 +47,30 @@ const getSeverityIcon = (severity: string) => {
 };
 
 export default function AnomalyDetectionCard() {
+	const [anomalies, setAnomalies] = useState<any[]>([]);
+	const [isLoading, setIsLoading] = useState(true);
+
+	useEffect(() => {
+		const fetchAnomalies = async () => {
+			try {
+				const response = await aiAnalyticsApi.getAnomalies("123");
+				if (response.success) {
+					setAnomalies(response.anomalies || []);
+				}
+			} catch (error) {
+				console.error("Failed to fetch anomalies:", error);
+			} finally {
+				setIsLoading(false);
+			}
+		};
+
+		fetchAnomalies();
+	}, []);
+
+	const highRiskCount = anomalies.filter(
+		(a) => a.risk_level === "HIGH"
+	).length;
+
 	return (
 		<motion.div
 			variants={cardVariants}
@@ -103,76 +89,87 @@ export default function AnomalyDetectionCard() {
 							variant="outline"
 							className="bg-red-900/30 text-red-300 border-red-700"
 						>
-							{
-								mockAnomalies.filter(
-									(a) => a.severity === "high"
-								).length
-							}{" "}
-							High
+							{highRiskCount} High
 						</Badge>
 					</CardTitle>
 				</CardHeader>
 				<CardContent className="flex-1 overflow-hidden">
-					<div className="space-y-3 h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-						{mockAnomalies.map((anomaly) => (
-							<motion.div
-								key={anomaly.id}
-								initial={{ opacity: 0, x: -20 }}
-								animate={{ opacity: 1, x: 0 }}
-								transition={{
-									duration: 0.3,
-									delay: anomaly.id * 0.1,
-								}}
-								className="p-4 rounded-lg border-l-4 bg-slate-700/50 border-slate-300 hover:bg-slate-700/70 transition-all duration-200 hover:shadow-md cursor-pointer"
-								style={{
-									borderLeftColor:
-										anomaly.severity === "high"
-											? "#ef4444"
-											: anomaly.severity === "medium"
-											? "#f59e0b"
-											: "#3b82f6",
-								}}
-							>
-								<div className="flex items-start justify-between mb-2">
-									<div className="flex-1">
-										<div className="flex items-center gap-2 mb-1">
-											<h4 className="font-semibold text-white text-sm">
-												{anomaly.vendor}
-											</h4>
-											<Badge
-												variant="outline"
-												className={`text-xs ${getSeverityColor(
-													anomaly.severity
-												)}`}
-											>
-												{getSeverityIcon(
-													anomaly.severity
-												)}
-												{anomaly.severity.toUpperCase()}
-											</Badge>
+					{isLoading ? (
+						<div className="animate-pulse space-y-3">
+							<div className="h-20 bg-slate-700 rounded"></div>
+							<div className="h-20 bg-slate-700 rounded"></div>
+						</div>
+					) : anomalies.length === 0 ? (
+						<div className="text-center py-8 text-slate-400">
+							No anomalies detected
+						</div>
+					) : (
+						<div className="space-y-3 h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+							{anomalies.map((anomaly, index) => (
+								<motion.div
+									key={anomaly.id}
+									initial={{ opacity: 0, x: -20 }}
+									animate={{ opacity: 1, x: 0 }}
+									transition={{
+										duration: 0.3,
+										delay: anomaly.id * 0.1,
+									}}
+									className="p-4 rounded-lg border-l-4 bg-gray-50 border-gray-300 hover:bg-gray-100 transition-all duration-200 hover:shadow-md cursor-pointer"
+									style={{
+										borderLeftColor:
+											anomaly.risk_level === "HIGH"
+												? "#ef4444"
+												: anomaly.risk_level ===
+												  "MEDIUM"
+												? "#f59e0b"
+												: "#3b82f6",
+									}}
+								>
+									<div className="flex items-start justify-between mb-2">
+										<div className="flex-1">
+											<div className="flex items-center gap-2 mb-1">
+												<h4 className="font-semibold text-gray-900 text-sm">
+													{anomaly.vendor_name}
+												</h4>
+												<Badge
+													variant="outline"
+													className={`text-xs ${getSeverityColor(
+														anomaly.risk_level?.toLowerCase() ||
+															"low"
+													)}`}
+												>
+													{getSeverityIcon(
+														anomaly.risk_level?.toLowerCase() ||
+															"low"
+													)}
+													{anomaly.risk_level ||
+														"LOW"}
+												</Badge>
+											</div>
+											<p className="text-xs text-gray-600">
+												{anomaly.date}
+											</p>
 										</div>
-										<p className="text-xs text-slate-300">
-											{anomaly.date}
-										</p>
+										<div className="text-right">
+											<p className="font-bold text-gray-900">
+												€{anomaly.amount.toFixed(2)}
+											</p>
+										</div>
 									</div>
-									<div className="text-right">
-										<p className="font-bold text-white">
-											€{anomaly.amount.toFixed(2)}
-										</p>
-									</div>
-								</div>
-								<p className="text-sm text-slate-200 mb-2">
-									{anomaly.description}
-								</p>
-								<div className="flex items-center gap-1 mt-2 p-2 bg-slate-800/50 rounded border border-slate-600">
-									<Shield className="w-3 h-3 text-slate-400" />
-									<p className="text-xs text-slate-300 italic">
-										{anomaly.reason}
+									<p className="text-sm text-gray-700 mb-2">
+										{anomaly.description}
 									</p>
-								</div>
-							</motion.div>
-						))}
-					</div>
+									<div className="flex items-center gap-1 mt-2 p-2 bg-gray-100 rounded border border-gray-200">
+										<Shield className="w-3 h-3 text-gray-600" />
+										<p className="text-xs text-gray-600 italic">
+											{anomaly.explanation ||
+												"Anomaly detected"}
+										</p>
+									</div>
+								</motion.div>
+							))}
+						</div>
+					)}
 				</CardContent>
 			</Card>
 		</motion.div>

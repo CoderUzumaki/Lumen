@@ -116,8 +116,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 	}, []);
 
 	return (
-		<Sidebar collapsible="icon" {...props}>
-			<SidebarHeader>
+		<Sidebar
+			collapsible="icon"
+			{...props}
+			className="bg-white border-r border-gray-200"
+		>
+			<SidebarHeader className="bg-white border-b border-gray-200">
 				<div className="flex items-center gap-2 px-2 py-2">
 					<img
 						src="/lumen.svg"
@@ -129,11 +133,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 					</span>
 				</div>
 			</SidebarHeader>
-			<SidebarContent>
+			<SidebarContent className="bg-white">
 				<NavProjects projects={data.projects} />
 				<NavMain items={data.navMain} />
 			</SidebarContent>
-			<SidebarFooter>
+			<SidebarFooter className="bg-white border-t border-gray-200">
 				<NavUser user={user} />
 			</SidebarFooter>
 			<SidebarRail />

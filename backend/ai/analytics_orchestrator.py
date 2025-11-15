@@ -2,11 +2,11 @@
 Analytics Orchestrator - Coordinates all AI agents and analysis tasks
 """
 
-from pattern_detection import PatternDetectionAgent
-from anomaly_detection import FraudDetectionAgent
-from forecasting_agent import ForecastingAgent
-from risk_assessment import RiskAssessmentEngine
-from typing import Dict, Any,List
+from ai.pattern_detection import PatternDetectionAgent
+from ai.anomaly_detection import FraudDetectionAgent
+from ai.forecasting_agent import ForecastingAgent
+from ai.risk_assessment import RiskAssessmentEngine
+from typing import Dict, Any, List
 import json
 from datetime import datetime
 from models.database import db
@@ -14,14 +14,17 @@ from models.database import db
 class AnalyticsOrchestrator:
     """Coordinates all analytics agents and provides unified interface"""
     
-    def __init__(self):
+    def __init__(self, db_path: str = "instance/lumen.db"):
         """
         Initialize analytics orchestrator
+        
+        Args:
+            db_path: Path to SQLite database (default: instance/lumen.db)
         """
         print("🚀 Initializing Analytics Orchestrator...")
         
         # Initialize all agents
-        self.pattern_agent = PatternDetectionAgent()
+        self.pattern_agent = PatternDetectionAgent(db_path)
         print("   ✅ Pattern Detection Agent ready")
         
         self.fraud_agent = FraudDetectionAgent()
@@ -30,7 +33,7 @@ class AnalyticsOrchestrator:
         self.forecast_agent = ForecastingAgent()
         print("   ✅ Forecasting Agent ready")
         
-        self.risk_engine = RiskAssessmentEngine()
+        self.risk_engine = RiskAssessmentEngine(db_path)
         print("   ✅ Risk Assessment Engine ready")
         
         print("✅ Analytics Orchestrator initialized!\n")
@@ -144,11 +147,12 @@ class AnalyticsOrchestrator:
         # Check for recent anomalies
         result = db.session.execute(db.text("""
             SELECT COUNT(*) as count
-            FROM anomalies
-            WHERE user_id = :user_id
-            AND created_at >= datetime('now', '-7 days')
-            AND risk_level = 'HIGH'
-        """), {'user_id': user_id})
+            FROM anomalies a
+            JOIN transactions t ON a.transaction_id = t.id
+            WHERE t.user_id = :user_id
+            AND a.created_at >= datetime('now', '-7 days')
+            AND a.risk_score >= 80
+        """), {'user_id': str(user_id)})
         
         high_risk_anomalies = result.scalar() or 0
         
@@ -176,12 +180,20 @@ class AnalyticsOrchestrator:
             user_id: User ID
             risk_level: Filter by risk level ('HIGH', 'MEDIUM', 'LOW')
         """
+        risk_score_filter = ""
+        if risk_level == 'HIGH':
+            risk_score_filter = " AND a.risk_score >= 80"
+        elif risk_level == 'MEDIUM':
+            risk_score_filter = " AND a.risk_score >= 50 AND a.risk_score < 80"
+        elif risk_level == 'LOW':
+            risk_score_filter = " AND a.risk_score < 50"
+        
         query = db.text("""
-            SELECT a.*, t.vendor_name, t.total_amount as amount, t.date as transaction_date
+            SELECT a.*, t.vendor_name, t.total_amount as amount, t.date as date
             FROM anomalies a
             JOIN transactions t ON a.transaction_id = t.id
-            WHERE a.user_id = :user_id
-            """ + (" AND a.risk_level = :risk_level" if risk_level else "") + """
+            WHERE t.user_id = :user_id
+            """ + risk_score_filter + """
             ORDER BY a.created_at DESC LIMIT 20
         """)
         
@@ -278,10 +290,11 @@ class AnalyticsOrchestrator:
                 for anomaly in fraud_data['anomalies'][:3]:
                     if anomaly.get('risk_level') == 'HIGH':
                         txn = anomaly['transaction']
+                        amount = txn.get('total_amount', txn.get('amount', 0))
                         insights.append({
                             'type': 'anomaly',
                             'title': f"⚠️ Suspicious Transaction Detected",
-                            'description': f"₹{txn['amount']} at {txn.get('vendor_name', 'Unknown')} - {anomaly.get('llm_explanation', anomaly['explanation'])}",
+                            'description': f"₹{amount} at {txn.get('vendor_name', 'Unknown')} - {anomaly.get('llm_explanation', anomaly['explanation'])}",
                             'severity': 'high',
                             'confidence': anomaly['risk_score'],
                             'is_actionable': True,

@@ -107,6 +107,113 @@ class AnalyticsService:
         return week_start.date(), week_end.date()
 
     @staticmethod
+    def _generate_chart_data(user_id, time_range, current_start, current_end, previous_start, previous_end):
+        """Generate chart data points for the time range comparison"""
+        chart_data = []
+        
+        if time_range == "yearly":
+            # Monthly data points for the year
+            for month_idx in range(12):
+                month_num = month_idx + 1
+                month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                
+                # Current year's month
+                current_month_start = datetime(current_start.year, month_num, 1).date()
+                if month_num == 12:
+                    current_month_end = datetime(current_start.year, 12, 31).date()
+                else:
+                    current_month_end = (datetime(current_start.year, month_num + 1, 1) - timedelta(days=1)).date()
+                
+                current_spending = AnalyticsService._get_period_total(user_id, current_month_start, current_month_end)
+                
+                # Previous year's month
+                previous_month_start = datetime(previous_start.year, month_num, 1).date()
+                if month_num == 12:
+                    previous_month_end = datetime(previous_start.year, 12, 31).date()
+                else:
+                    previous_month_end = (datetime(previous_start.year, month_num + 1, 1) - timedelta(days=1)).date()
+                
+                previous_spending = AnalyticsService._get_period_total(user_id, previous_month_start, previous_month_end)
+                
+                chart_data.append({
+                    "date": month_names[month_idx],
+                    "currentSpending": current_spending,
+                    "previousSpending": previous_spending,
+                    "transactions": AnalyticsService._get_period_transaction_count(user_id, current_month_start, current_month_end)
+                })
+        
+        elif time_range == "monthly":
+            # Daily data points for the month
+            current_date = current_start
+            previous_date = previous_start
+            
+            while current_date <= current_end:
+                current_spending = AnalyticsService._get_period_total(user_id, current_date, current_date)
+                previous_spending = AnalyticsService._get_period_total(user_id, previous_date, previous_date)
+                
+                chart_data.append({
+                    "date": current_date.strftime("%d"),
+                    "currentSpending": current_spending,
+                    "previousSpending": previous_spending,
+                    "transactions": AnalyticsService._get_period_transaction_count(user_id, current_date, current_date)
+                })
+                
+                current_date += timedelta(days=1)
+                previous_date += timedelta(days=1)
+        
+        elif time_range == "weekly":
+            # Daily data points for the week
+            current_date = current_start
+            previous_date = previous_start
+            day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+            
+            for i in range(7):
+                current_spending = AnalyticsService._get_period_total(user_id, current_date, current_date)
+                previous_spending = AnalyticsService._get_period_total(user_id, previous_date, previous_date)
+                
+                chart_data.append({
+                    "date": day_names[i],
+                    "currentSpending": current_spending,
+                    "previousSpending": previous_spending,
+                    "transactions": AnalyticsService._get_period_transaction_count(user_id, current_date, current_date)
+                })
+                
+                current_date += timedelta(days=1)
+                previous_date += timedelta(days=1)
+        
+        return chart_data
+
+    @staticmethod
+    def _get_period_total(user_id, start_date, end_date):
+        """Get total spending for a specific period"""
+        result = db.session.query(
+            func.sum(Transaction.total_amount)
+        ).filter(
+            and_(
+                Transaction.user_id == user_id,
+                Transaction.date >= start_date,
+                Transaction.date <= end_date
+            )
+        ).scalar()
+        
+        return float(result or 0)
+
+    @staticmethod
+    def _get_period_transaction_count(user_id, start_date, end_date):
+        """Get transaction count for a specific period"""
+        result = db.session.query(
+            func.count(Transaction.id)
+        ).filter(
+            and_(
+                Transaction.user_id == user_id,
+                Transaction.date >= start_date,
+                Transaction.date <= end_date
+            )
+        ).scalar()
+        
+        return int(result or 0)
+
+    @staticmethod
     def get_time_range_analytics(user_id, time_range, year, month=None, week=None):
         """
         Get analytics for a specific time range with comparison to previous period
@@ -220,6 +327,13 @@ class AnalyticsService:
             )
         }
 
+        # Generate chart data for visualization
+        chart_data = AnalyticsService._generate_chart_data(
+            user_id, time_range, 
+            current_start, current_end, 
+            previous_start, previous_end
+        )
+
         return {
             "success": True,
             "current_period": {
@@ -234,5 +348,6 @@ class AnalyticsService:
                 "end_date": previous_end.isoformat(),
                 **previous_stats
             },
-            "comparison": comparison
+            "comparison": comparison,
+            "chart_data": chart_data
         }
