@@ -6,6 +6,7 @@ import { X, Upload, CheckCircle, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { ocrApi } from "@/lib/api/client";
+import { eventBus, EVENTS } from "@/lib/events";
 
 interface FileWithStatus {
 	file: File;
@@ -62,37 +63,30 @@ export function DialogDemo() {
 			});
 
 			try {
-				// Use OCR API to extract data
+				console.log("📤 Uploading file:", fileItem.file.name);
+				// Use OCR API to extract data - this saves to database automatically
 				const result = await ocrApi.extractInvoice(
 					fileItem.file,
 					"123"
 				);
 
+				console.log("📥 OCR API Response:", result);
+
 				if (result.success && result.data) {
-					// Store in localStorage
-					const existingInvoices = JSON.parse(
-						localStorage.getItem("invoices") || "[]"
+					console.log(
+						"✅ Invoice extracted and saved to database:",
+						result.data
 					);
-					const newInvoice = {
-						id: Date.now(),
-						file_name: fileItem.file.name,
-						invoice_id: result.data.invoice_number || "N/A",
-						vendor_name: result.data.vendor_name || "N/A",
-						amount_due: result.data.total_amount || 0,
-						due_date: result.data.due_date || "N/A",
-						invoice_date: result.data.invoice_date || "N/A",
-						currency_code: result.data.currency || "USD",
-						confidence_score: result.data.confidence_score || 0,
-						status: "completed",
-						created_at: new Date().toISOString(),
-						updated_at: new Date().toISOString(),
-						owner_id: 1,
-						extracted_data: result.data,
-					};
-					existingInvoices.unshift(newInvoice);
-					localStorage.setItem(
-						"invoices",
-						JSON.stringify(existingInvoices)
+					console.log("📢 Emitting INVOICE_UPDATED event...");
+
+					// Emit event to trigger refresh in other components
+					eventBus.emit(EVENTS.INVOICE_UPDATED);
+
+					console.log("✅ Event emitted successfully");
+				} else {
+					console.warn(
+						"⚠️ Upload succeeded but no data or success=false",
+						result
 					);
 				}
 
@@ -130,13 +124,22 @@ export function DialogDemo() {
 		// Check if all files were successful
 		const allSuccess = files.every((f) => f.status === "success");
 		if (allSuccess) {
-			// Close dialog after a short delay
+			console.log("✅ All uploads successful! Closing dialog in 1.5s...");
+			// Close dialog after a short delay and emit final event
 			setTimeout(() => {
+				console.log(
+					"📢 Emitting final INVOICE_UPDATED event before closing dialog"
+				);
 				setOpen(false);
 				setFiles([]);
-				// Reload the page to refresh invoice list
-				window.location.reload();
+				// Emit one final event to ensure all components refresh
+				eventBus.emit(EVENTS.INVOICE_UPDATED);
 			}, 1500);
+		} else {
+			console.warn(
+				"⚠️ Some uploads failed",
+				files.filter((f) => f.status !== "success")
+			);
 		}
 	};
 

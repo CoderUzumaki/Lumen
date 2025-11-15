@@ -95,8 +95,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 						{entry.name === "currentSpending"
 							? "Current Period"
 							: "Previous Period"}
-						: $
-						{entry.value.toLocaleString("en-US", {
+						: ₹
+						{entry.value.toLocaleString("en-IN", {
 							minimumFractionDigits: 2,
 							maximumFractionDigits: 2,
 						})}
@@ -229,7 +229,7 @@ export default function SpendingTrendChart({
 						<YAxis
 							tick={{ fontSize: 12 }}
 							tickLine={false}
-							tickFormatter={(value) => `$${value}`}
+							tickFormatter={(value) => `₹${value}`}
 						/>
 						<Tooltip content={<CustomTooltip />} />
 						<Legend

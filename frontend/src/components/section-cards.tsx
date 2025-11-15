@@ -29,24 +29,21 @@ export function SectionCards() {
 
 	useEffect(() => {
 		const fetchInvoices = async () => {
+			setLoading(true);
 			try {
-				const user = tokenManager.getUser();
-				if (!user?.id) {
-					// Fallback to localStorage if no user
-					const storedInvoices = localStorage.getItem("invoices");
-					const invoicesData = storedInvoices
-						? JSON.parse(storedInvoices)
-						: [];
-					setInvoices(invoicesData);
-					return;
-				}
+				console.log("📊 SectionCards: Fetching invoices from API...");
 
-				// Fetch from API
-				const response = await transactionApi.getTransactions(
-					"123",
-					{ page: 1, page_size: 1000 }
-				);
+				// Always fetch from API with hardcoded user ID
+				const response = await transactionApi.getTransactions("123", {
+					page: 1,
+					page_size: 1000,
+					sort_by: "created_at",
+					sort_order: "desc",
+				});
 				if (response.success && response.data) {
+					console.log(
+						`📊 SectionCards: Fetched ${response.data.length} transactions`
+					);
 					// Map transaction data to invoice format for cards
 					const mappedInvoices = response.data.map((t: any) => ({
 						id: t.id,
@@ -56,9 +53,15 @@ export function SectionCards() {
 						created_at: t.created_at,
 					}));
 					setInvoices(mappedInvoices);
+				} else {
+					console.warn("📊 SectionCards: No data received from API");
+					setInvoices([]);
 				}
 			} catch (error) {
-				console.error("Error fetching invoices:", error);
+				console.error(
+					"📊 SectionCards: Error fetching invoices:",
+					error
+				);
 				// Fallback to localStorage on error
 				const storedInvoices = localStorage.getItem("invoices");
 				const invoicesData = storedInvoices

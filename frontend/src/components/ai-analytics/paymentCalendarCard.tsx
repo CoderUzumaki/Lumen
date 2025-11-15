@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import { transactionApi, tokenManager } from "@/lib/api/client";
+import { analyticsApi } from "@/lib/api/client";
 
 const cardVariants = {
 	hidden: { opacity: 0, y: 20 },
@@ -28,58 +28,28 @@ export default function PaymentCalendarCard() {
 	const [paymentDates, setPaymentDates] = useState<{
 		upcoming: number[];
 		forecast: number[];
-	}>({ upcoming: [], forecast: [] });
+	}>({
+		upcoming: [],
+		forecast: [],
+	});
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
 		const fetchPaymentDates = async () => {
 			try {
-				setLoading(true);
-				const user = tokenManager.getUser();
-				if (!user?.id) return;
-
-				const response = await transactionApi.getTransactions(
-					String(user.id),
-					{
-						page: 1,
-						page_size: 1000,
-					}
-				);
-
-				const transactions = response.data || [];
-
-				// Get days with transactions in current month
-				const upcomingDays = new Set<number>();
-				transactions.forEach((transaction: any) => {
-					const date = new Date(transaction.date);
-					if (
-						date.getMonth() === currentDate.getMonth() &&
-						date.getFullYear() === currentDate.getFullYear()
-					) {
-						upcomingDays.add(date.getDate());
-					}
-				});
-
-				// Simple forecast: predict recurring patterns (e.g., similar days of month)
-				const forecastDays = new Set<number>();
-				upcomingDays.forEach((day) => {
-					// Predict next occurrence
-					if (day + 7 <= getDaysInMonth(currentDate).daysInMonth) {
-						forecastDays.add(day + 7);
-					}
-				});
-
-				setPaymentDates({
-					upcoming: Array.from(upcomingDays),
-					forecast: Array.from(forecastDays),
-				});
-			} catch (error) {
-				console.error("Failed to fetch payment dates:", error);
+				const response = await analyticsApi.getAllTimeSummary("123");
+				if (response.success && response.payment_calendar) {
+					setPaymentDates(response.payment_calendar);
+				} else {
+					setPaymentDates({ upcoming: [], forecast: [] });
+				}
+			} catch (err) {
+				console.error("Failed to load payment calendar", err);
+				setPaymentDates({ upcoming: [], forecast: [] });
 			} finally {
 				setLoading(false);
 			}
 		};
-
 		fetchPaymentDates();
 	}, [currentDate]);
 

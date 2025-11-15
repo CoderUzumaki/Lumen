@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Bell, TrendingUp, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
-import { useEffect, useState } from "react";
-import { aiAnalyticsApi } from "@/lib/api/client";
+import { useState, useEffect } from "react";
+import { analyticsApi } from "@/lib/api/client";
 
 const cardVariants = {
 	hidden: { opacity: 0, y: 20 },
@@ -22,24 +22,36 @@ const cardVariants = {
 
 export default function ReminderDetailsCard() {
 	const [reminders, setReminders] = useState<any[]>([]);
-	const [isLoading, setIsLoading] = useState(true);
+	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
 		const fetchReminders = async () => {
 			try {
-				const response = await aiAnalyticsApi.getReminders("123", 7);
-				if (response.success) {
-					setReminders(response.reminders || []);
+				const response = await analyticsApi.getAllTimeSummary("123");
+				if (response.success && response.upcoming_payments) {
+					setReminders(response.upcoming_payments);
+				} else {
+					setReminders([]);
 				}
-			} catch (error) {
-				console.error("Failed to fetch reminders:", error);
+			} catch (err) {
+				console.error("Failed to load reminders", err);
+				setReminders([]);
 			} finally {
-				setIsLoading(false);
+				setLoading(false);
 			}
 		};
-
 		fetchReminders();
 	}, []);
+
+	if (loading) {
+		return (
+			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+				<CardContent className="flex items-center justify-center h-[300px]">
+					<p className="text-gray-500">Loading reminders...</p>
+				</CardContent>
+			</Card>
+		);
+	}
 
 	return (
 		<motion.div
@@ -56,13 +68,7 @@ export default function ReminderDetailsCard() {
 					</CardTitle>
 				</CardHeader>
 				<CardContent className="flex-1 overflow-hidden">
-					{isLoading ? (
-						<div className="animate-pulse space-y-3">
-							<div className="h-20 bg-gray-200 rounded"></div>
-							<div className="h-20 bg-gray-200 rounded"></div>
-							<div className="h-20 bg-gray-200 rounded"></div>
-						</div>
-					) : reminders.length === 0 ? (
+					{reminders.length === 0 ? (
 						<div className="text-center py-8 text-gray-500">
 							No reminders or forecasts available
 						</div>
@@ -116,7 +122,14 @@ export default function ReminderDetailsCard() {
 										</div>
 										<div className="text-right">
 											<p className="font-bold text-gray-900">
-												€{reminder.amount.toFixed(2)}
+												₹
+												{reminder.amount?.toLocaleString(
+													"en-IN",
+													{
+														minimumFractionDigits: 2,
+														maximumFractionDigits: 2,
+													}
+												) || "0.00"}
 											</p>
 											<p className="text-xs text-gray-600">
 												{reminder.date}

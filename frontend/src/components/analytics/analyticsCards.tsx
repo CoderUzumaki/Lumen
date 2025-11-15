@@ -102,7 +102,7 @@ export default function AnalyticsCards({
 					timeRange,
 					year: selectedPeriod.year,
 					month: selectedPeriod.month,
-					week: selectedPeriod.week
+					week: selectedPeriod.week,
 				});
 
 				const response = await analyticsApi.getTimeRangeAnalytics(
@@ -131,7 +131,8 @@ export default function AnalyticsCards({
 						totalSpending: current.total_spending || 0,
 						previousTotal: previous.total_spending || 0,
 						avgChange:
-							previous.average_spending && previous.average_spending !== 0
+							previous.average_spending &&
+							previous.average_spending !== 0
 								? ((current.average_spending -
 										previous.average_spending) /
 										previous.average_spending) *
@@ -155,7 +156,10 @@ export default function AnalyticsCards({
 					console.log("Setting data to:", newData);
 					setData(newData);
 				} else {
-					console.error("Response missing success or current_period", response);
+					console.error(
+						"Response missing success or current_period",
+						response
+					);
 				}
 			} catch (error) {
 				console.error("Error fetching analytics:", error);
@@ -262,8 +266,8 @@ export default function AnalyticsCards({
 										{isPositive ? "+" : "-"}
 									</span>
 								)}
-								$
-								{card.value.toLocaleString("en-US", {
+								₹
+								{card.value.toLocaleString("en-IN", {
 									minimumFractionDigits: 2,
 									maximumFractionDigits: 2,
 								})}

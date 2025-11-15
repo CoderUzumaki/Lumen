@@ -18,13 +18,13 @@ import { aiAnalyticsApi } from "@/lib/api/client";
 
 const iconMap: { [key: string]: any } = {
 	"cost-saving": DollarSign,
-	"duplicate": Repeat,
-	"optimization": TrendingDown,
-	"opportunity": CheckCircle,
-	"warning": AlertTriangle,
-	"recommendation": Target,
-	"insight": Lightbulb,
-	"action": Zap,
+	duplicate: Repeat,
+	optimization: TrendingDown,
+	opportunity: CheckCircle,
+	warning: AlertTriangle,
+	recommendation: Target,
+	insight: Lightbulb,
+	action: Zap,
 };
 
 const cardVariants = {
@@ -40,13 +40,15 @@ const cardVariants = {
 	},
 };
 
-const getImpactColor = (impact: string) => {
-	switch (impact) {
+const getImpactColor = (severity: string) => {
+	switch (severity?.toLowerCase()) {
+		case "critical":
 		case "high":
-			return "bg-blue-100 text-blue-700 border-blue-300";
+			return "bg-red-100 text-red-700 border-red-300";
 		case "medium":
 			return "bg-yellow-100 text-yellow-700 border-yellow-300";
 		case "low":
+		case "info":
 			return "bg-blue-100 text-blue-700 border-blue-300";
 		default:
 			return "bg-gray-100 text-gray-700 border-gray-300";
@@ -60,27 +62,22 @@ export default function AISuggestionsCard() {
 	useEffect(() => {
 		const fetchSuggestions = async () => {
 			try {
-				// Fetch dashboard data which includes top recommendations
-				const response = await aiAnalyticsApi.getDashboard("123");
-				if (response.success) {
-					const recommendations = response.data.top_recommendations || [];
-					// Transform recommendations into suggestions format
-					const formattedSuggestions = recommendations.map((rec: string, idx: number) => ({
-						id: idx + 1,
-						type: "recommendation",
-						title: rec.includes("✅") ? rec.replace("✅", "").trim() : `Recommendation ${idx + 1}`,
-						description: rec,
-						impact: "medium",
-					}));
-					setSuggestions(formattedSuggestions);
+				const response = await aiAnalyticsApi.getInsights({
+					userId: "123",
+					limit: 10,
+				});
+				if (response.success && response.insights) {
+					setSuggestions(response.insights);
+				} else {
+					setSuggestions([]);
 				}
-			} catch (error) {
-				console.error("Failed to fetch suggestions:", error);
+			} catch (err) {
+				console.error("Failed to load AI suggestions", err);
+				setSuggestions([]);
 			} finally {
 				setLoading(false);
 			}
 		};
-
 		fetchSuggestions();
 	}, []);
 
@@ -100,8 +97,13 @@ export default function AISuggestionsCard() {
 				<CardContent className="flex items-center justify-center h-[300px]">
 					<div className="text-center">
 						<Lightbulb className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-						<p className="text-gray-500">No suggestions available yet</p>
-						<p className="text-sm text-gray-400 mt-1">AI analysis will generate insights based on your transaction data</p>
+						<p className="text-gray-500">
+							No suggestions available yet
+						</p>
+						<p className="text-sm text-gray-400 mt-1">
+							AI analysis will generate insights based on your
+							transaction data
+						</p>
 					</div>
 				</CardContent>
 			</Card>
@@ -132,8 +134,9 @@ export default function AISuggestionsCard() {
 				</CardHeader>
 				<CardContent className="flex-1 overflow-hidden">
 					<div className="space-y-3 h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-						{suggestions.map((suggestion) => {
-							const Icon = iconMap[suggestion.type] || Lightbulb;
+						{suggestions.map((suggestion, index) => {
+							const Icon =
+								iconMap[suggestion.insight_type] || Lightbulb;
 							return (
 								<motion.div
 									key={suggestion.id}
@@ -141,7 +144,7 @@ export default function AISuggestionsCard() {
 									animate={{ opacity: 1, x: 0 }}
 									transition={{
 										duration: 0.3,
-										delay: suggestion.id * 0.1,
+										delay: index * 0.1,
 									}}
 									className="p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer group"
 								>
@@ -154,31 +157,44 @@ export default function AISuggestionsCard() {
 												<h4 className="font-semibold text-gray-900 text-sm">
 													{suggestion.title}
 												</h4>
-												<Badge
-													variant="outline"
-													className={`text-xs ml-2 ${getImpactColor(
-														suggestion.impact
-													)}`}
-												>
-													{suggestion.impact}
-												</Badge>
+												{suggestion.severity && (
+													<Badge
+														variant="outline"
+														className={`text-xs ml-2 ${getImpactColor(
+															suggestion.severity
+														)}`}
+													>
+														{suggestion.severity}
+													</Badge>
+												)}
 											</div>
 											<p className="text-xs text-gray-600 leading-relaxed">
 												{suggestion.description}
 											</p>
+											{suggestion.confidence_score && (
+												<div className="mt-2 flex items-center gap-1">
+													<div className="h-1 flex-1 bg-gray-200 rounded-full overflow-hidden">
+														<div
+															className="h-full bg-blue-500 rounded-full"
+															style={{
+																width: `${
+																	suggestion.confidence_score *
+																	100
+																}%`,
+															}}
+														/>
+													</div>
+													<span className="text-xs text-gray-500">
+														{(
+															suggestion.confidence_score *
+															100
+														).toFixed(0)}
+														%
+													</span>
+												</div>
+											)}
 										</div>
 									</div>
-									{suggestion.potentialSaving && (
-										<div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
-											<p className="text-xs text-gray-600">
-												Potential Annual Savings
-											</p>
-											<p className="font-bold text-blue-600">
-												€
-												{suggestion.potentialSaving.toLocaleString()}
-											</p>
-										</div>
-									)}
 								</motion.div>
 							);
 						})}

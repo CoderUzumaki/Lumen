@@ -276,18 +276,18 @@ export default function AnalyticsContent() {
 												))}
 											</SelectContent>
 										</Select>
-											<Select
-												value={selectedPeriod.year.toString()}
-												onValueChange={(value) =>
-													handlePeriodChange(
-														"year",
-														value
-													)
-												}
-											>
-												<SelectTrigger className="w-[100px] text-gray-900 font-medium">
-													<SelectValue />
-												</SelectTrigger>
+										<Select
+											value={selectedPeriod.year.toString()}
+											onValueChange={(value) =>
+												handlePeriodChange(
+													"year",
+													value
+												)
+											}
+										>
+											<SelectTrigger className="w-[100px] text-gray-900 font-medium">
+												<SelectValue />
+											</SelectTrigger>
 											<SelectContent>
 												{generateYears().map((year) => (
 													<SelectItem

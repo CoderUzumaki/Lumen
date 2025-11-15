@@ -152,7 +152,7 @@ export default function AnomalyDetectionCard() {
 										</div>
 										<div className="text-right">
 											<p className="font-bold text-gray-900">
-												€{anomaly.amount.toFixed(2)}
+												₹{anomaly.amount.toFixed(2)}
 											</p>
 										</div>
 									</div>

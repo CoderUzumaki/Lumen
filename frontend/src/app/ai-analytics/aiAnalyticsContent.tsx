@@ -18,22 +18,25 @@ export default function AIAnalyticsContent() {
 		// Trigger AI analysis when page loads
 		const triggerAnalysis = async () => {
 			if (analysisTriggered) return;
-			
+
 			try {
 				console.log("🚀 Triggering AI analysis...");
-				const response = await fetch("http://localhost:5000/api/analytics/analyze", {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify({
-						user_id: 123,
-						include_fraud: true,
-						include_forecast: true,
-						include_risk: true,
-						use_llm: false, // Set to true if you want LLM-based insights
-					}),
-				});
+				const response = await fetch(
+					"http://localhost:5000/api/analytics/analyze",
+					{
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+						},
+						body: JSON.stringify({
+							user_id: 123,
+							include_fraud: true,
+							include_forecast: true,
+							include_risk: true,
+							use_llm: false, // Set to true if you want LLM-based insights
+						}),
+					}
+				);
 
 				if (response.ok) {
 					const data = await response.json();

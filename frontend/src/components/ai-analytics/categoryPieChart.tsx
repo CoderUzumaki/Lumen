@@ -42,7 +42,7 @@ const CustomTooltip = ({ active, payload }: any) => {
 			<div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
 				<p className="font-semibold text-gray-900">{payload[0].name}</p>
 				<p className="text-sm text-gray-700">
-					€{payload[0].value.toLocaleString()}
+					₹{payload[0].value.toLocaleString("en-IN")}
 				</p>
 				<p className="text-sm text-gray-700">
 					{payload[0].payload.percentage}%
@@ -72,13 +72,10 @@ export default function CategoryPieChart() {
 					return;
 				}
 
-				const response = await transactionApi.getTransactions(
-					"123",
-					{
-						page: 1,
-						page_size: 1000,
-					}
-				);
+				const response = await transactionApi.getTransactions("123", {
+					page: 1,
+					page_size: 1000,
+				});
 
 				const transactions = response.data || [];
 
@@ -216,7 +213,8 @@ export default function CategoryPieChart() {
 								</div>
 								<div className="text-right">
 									<p className="text-sm font-semibold text-gray-900">
-										€{category.value.toLocaleString()}
+										₹
+										{category.value.toLocaleString("en-IN")}
 									</p>
 									<p className="text-xs text-gray-600">
 										{category.percentage}%
@@ -233,7 +231,7 @@ export default function CategoryPieChart() {
 								Total Spending
 							</span>
 							<span className="text-lg font-bold text-gray-900">
-								€
+								₹
 								{categoryData
 									.reduce((sum, cat) => sum + cat.value, 0)
 									.toLocaleString()}
