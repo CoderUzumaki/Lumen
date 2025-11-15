@@ -1,13 +1,21 @@
 def clean_amount(value):
     if value is None:
         return None
-    return float(
-        str(value)
-        .replace("$", "")
-        .replace("₹", "")
-        .replace(",", "")
-        .strip()
-    )
+    # Remove all common currency symbols and thousand separators
+    cleaned = str(value).strip()
+    
+    # Remove 3-letter currency codes (USD, EUR, GBP, INR, etc.)
+    import re
+    cleaned = re.sub(r'^[A-Z]{3}\s*', '', cleaned)  # Remove leading currency codes
+    cleaned = re.sub(r'\s*[A-Z]{3}$', '', cleaned)  # Remove trailing currency codes
+    
+    # Remove currency symbols
+    for symbol in ["$", "₹", "€", "£", "¥", "₩", "₪", "₱", "₦", "₴", "₡", "₵", "₲", "₸", "₹", "₺", "₼", "₽", "₾", "₿"]:
+        cleaned = cleaned.replace(symbol, "")
+    
+    # Remove thousand separators (commas, spaces, apostrophes)
+    cleaned = cleaned.replace(",", "").replace(" ", "").replace("'", "").strip()
+    return float(cleaned)
 
 
 def normalize_transaction(data):

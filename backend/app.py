@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from routes import register_routes
 from utils.openrouter import get_api_config
 from models.database import init_db
+from utils.scheduler import scheduler
 
 # Load environment variables
 load_dotenv()
@@ -18,6 +19,9 @@ init_db(app)
 
 # Register all routes
 register_routes(app)
+
+# Configure scheduler with app
+scheduler.app = app
 
 
 
@@ -42,5 +46,13 @@ if __name__ == '__main__':
     print("   GET /chat/suggestions - Get sample query suggestions")
     print("   GET /analytics/summary?user_id=X - Get spending analytics")
     print("   GET /health - Health check")
+    print("   📧 Email Polling: /api/v1/email-config/* - Configure automatic invoice polling")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Start email polling scheduler
+    scheduler.start()
+    
+    try:
+        app.run(debug=True, host='0.0.0.0', port=5000)
+    finally:
+        # Cleanup on shutdown
+        scheduler.stop()

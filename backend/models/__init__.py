@@ -108,3 +108,44 @@ class EmbeddingMeta(db.Model):
     meta = db.Column("metadata", db.Text)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class EmailConfig(db.Model):
+    """Email configuration for automated invoice polling"""
+    __tablename__ = "email_configs"
+
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(String(36), db.ForeignKey("users.id"), nullable=False, unique=True)
+    
+    # Email settings
+    email_address = db.Column(db.String, nullable=False)
+    provider = db.Column(db.String, default="gmail")  # gmail, outlook, yahoo, custom
+    
+    # IMAP settings
+    imap_server = db.Column(db.String, nullable=False)
+    imap_port = db.Column(Integer, default=993)
+    imap_username = db.Column(db.String, nullable=True)
+    imap_password = db.Column(db.String, nullable=True)  # Encrypted in production
+    use_ssl = db.Column(db.Boolean, default=True)
+    
+    # OAuth settings (for Gmail OAuth)
+    oauth_token = db.Column(Text, nullable=True)  # JSON stored as text
+    oauth_refresh_token = db.Column(db.String, nullable=True)
+    oauth_token_expiry = db.Column(db.DateTime, nullable=True)
+    
+    # Polling settings
+    polling_enabled = db.Column(db.Boolean, default=True)
+    polling_interval_minutes = db.Column(Integer, default=5)
+    folder_to_watch = db.Column(db.String, default="INBOX")
+    mark_as_read = db.Column(db.Boolean, default=True)
+    
+    # Status tracking
+    last_poll_time = db.Column(db.DateTime, nullable=True)
+    last_successful_poll = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(Text, nullable=True)
+    emails_processed = db.Column(Integer, default=0)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = db.relationship("User")

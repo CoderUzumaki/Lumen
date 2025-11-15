@@ -251,10 +251,12 @@ export const invoiceApi = {
  */
 export const emailConfigApi = {
 	/**
-	 * Get email configuration status
+	 * Get email polling status
 	 */
 	getStatus: async () => {
-		const response = await apiClient.get("/api/v1/email-config/status");
+		const response = await apiClient.get("/api/v1/email-config/status", {
+			params: { user_id: "123" }
+		});
 		return response.data;
 	},
 
@@ -282,7 +284,10 @@ export const emailConfigApi = {
 		folder_to_watch?: string;
 		mark_as_read?: boolean;
 	}) => {
-		const response = await apiClient.post("/api/v1/email-config", data);
+		const response = await apiClient.post("/api/v1/email-config", {
+			...data,
+			user_id: "123"
+		});
 		return response.data;
 	},
 
@@ -296,7 +301,10 @@ export const emailConfigApi = {
 		mark_as_read?: boolean;
 		imap_password?: string;
 	}) => {
-		const response = await apiClient.put("/api/v1/email-config", data);
+		const response = await apiClient.put("/api/v1/email-config", {
+			...data,
+			user_id: "123"
+		});
 		return response.data;
 	},
 
@@ -311,7 +319,9 @@ export const emailConfigApi = {
 	 * Test IMAP connection
 	 */
 	testConnection: async () => {
-		const response = await apiClient.post("/api/v1/email-config/test");
+		const response = await apiClient.post("/api/v1/email-config/test", {
+			user_id: "123"
+		});
 		return response.data;
 	},
 
@@ -319,7 +329,9 @@ export const emailConfigApi = {
 	 * Manually trigger email polling
 	 */
 	pollNow: async () => {
-		const response = await apiClient.post("/api/v1/email-config/poll-now");
+		const response = await apiClient.post("/api/v1/email-config/poll-now", {
+			user_id: "123"
+		});
 		return response.data;
 	},
 
@@ -327,7 +339,9 @@ export const emailConfigApi = {
 	 * Pause automatic email polling
 	 */
 	pausePolling: async () => {
-		const response = await apiClient.post("/api/v1/email-config/pause");
+		const response = await apiClient.post("/api/v1/email-config/pause", {
+			user_id: "123"
+		});
 		return response.data;
 	},
 
@@ -335,7 +349,9 @@ export const emailConfigApi = {
 	 * Resume automatic email polling
 	 */
 	resumePolling: async () => {
-		const response = await apiClient.post("/api/v1/email-config/resume");
+		const response = await apiClient.post("/api/v1/email-config/resume", {
+			user_id: "123"
+		});
 		return response.data;
 	},
 
