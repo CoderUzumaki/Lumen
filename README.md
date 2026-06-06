@@ -248,12 +248,9 @@ Built with dedication by our amazing team for Hack-a-Sol @ IIIT Naya Raipur:
 
 | Member              | Role                | Responsibilities                           | GitHub                                           |
 | ------------------- | ------------------- | ------------------------------------------ | ------------------------------------------------ |
-| **[Your Name]**     | Full Stack Lead     | Frontend architecture, UI/UX, Landing page | [@CoderUzumaki](https://github.com/CoderUzumaki) |
-| **[Team Member 2]** | AI/ML Engineer      | AI agents, ML models, Analytics            | [@username2](https://github.com/username2)       |
-| **[Team Member 3]** | Backend Developer   | API development, Database, OCR integration | [@username3](https://github.com/username3)       |
-| **[Team Member 4]** | Designer & Frontend | Component design, Animations, Testing      | [@username4](https://github.com/username4)       |
+| Abhinav Mishra      | Full Stack Lead     | Frontend architecture, UI/UX, Landing page | [@CoderUzumaki](https://github.com/CoderUzumaki) |
+| Nishant Borkar      | AI/ML Engineer      | AI agents, ML models, Analytics            | [@coderconnoisseur](https://github.com/coderconnoisseur)       |
 
-> **Note**: Replace team member names and GitHub usernames with your actual team information.
 
 ---
 
