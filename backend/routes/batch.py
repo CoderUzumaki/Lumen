@@ -3,6 +3,7 @@ import logging
 
 from flask import Blueprint, request, jsonify
 
+from utils.auth import require_auth
 from utils.image_processing import (
     convert_pdf_to_images,
     pil_image_to_bytes,
@@ -17,6 +18,7 @@ batch_bp = Blueprint('batch', __name__)
 
 
 @batch_bp.route('/extract-batch', methods=['POST'])
+@require_auth
 def extract_batch():
     """Process multiple pages from a PDF"""
     if 'file' not in request.files:

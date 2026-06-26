@@ -58,23 +58,16 @@ Foundation for everything else. After this, no value that varies by environment 
 
 The single biggest correctness gap. Until this is done, every API endpoint leaks data.
 
-### AUTH-01 — Pick an auth strategy and document it
-- [ ] **Files**: new `docs/AUTH.md`
-- **Action**: Decide between (a) Supabase Auth (already a dep), (b) NextAuth + custom JWT, or (c) Clerk. Document the choice, token format, refresh flow, and how `user_id` is derived server-side.
-- **Acceptance**: One-page doc exists. Choice is justified in 3–5 bullets.
-- **Depends on**: none.
+### AUTH-01 — Pick an auth strategy and document it ✅
+- [x] **Decision: Supabase Auth**, verified server-side via JWKS (not the Python `supabase` SDK — `pyjwt[crypto]` is the right shape). Documented in [docs/AUTH.md](docs/AUTH.md): rationale vs NextAuth/Clerk, what Supabase owns vs Lumen owns, JWT claim contract, JWKS verification flow + library choice, frontend session lifecycle, required env vars (frontend: `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`; backend: `SUPABASE_URL` + `SUPABASE_JWT_AUD`), demo-data migration plan (seeded `user_id='123'` → fixed dev UUID), and what's deliberately *not* covered (RBAC, service-to-service auth). One correction from earlier audit: Supabase was **not actually installed** — env vars existed but no library. AUTH-02 will add the deps.
 
-### AUTH-02 — Backend JWT verification middleware
-- [ ] **Files**: new `backend/utils/auth.py`, [backend/app.py](backend/app.py)
-- **Action**: Implement a `@require_auth` decorator that verifies the Bearer token from `Authorization`, attaches `g.user_id` and `g.user_email` to the Flask request context, and returns 401 on failure.
-- **Acceptance**: Hitting any decorated route without a token returns 401. With a valid token, `g.user_id` is set to the verified subject — **never** read from request body or query.
-- **Depends on**: AUTH-01.
+### AUTH-02 — Backend JWT verification middleware ✅
+- [x] Added `PyJWT[crypto]==2.8.0` to `backend/requirements.txt`. Added `SUPABASE_JWT_AUD` (default `"authenticated"`) to `Config`; documented `SUPABASE_URL` becoming required at AUTH-03. New `backend/utils/auth.py` exposes `require_auth`, `verify_token`, and the typed `TokenError` / `AuthConfigError` exceptions. JWKS lookup uses `PyJWKClient` behind a thread-safe lazy initializer (no JWKS fetch at import time; cached for an hour; auto-refresh on kid miss). Verification enforces `algorithms=["RS256","ES256"]`, expected audience + issuer, required `exp`/`sub`/`aud`/`iss` claims, and explicitly rejects `role=anon`. All errors map to distinct response codes (`missing_token`, `invalid_token`, `expired_token`, `invalid_audience`, `invalid_issuer`, `missing_claim`, `wrong_role`, `unknown_key`, `jwks_unreachable`) but the public JSON body says only `{"error":"unauthorized","code":...}`. OPTIONS preflight passes through untouched so Flask-CORS can respond. Verified end-to-end with a synthetic JWKS in a 9-case smoke harness (no header, non-Bearer, valid token, expired, wrong aud, wrong iss, anon role, tampered signature, OPTIONS preflight) — all pass. Decorator is **not** applied to any route yet; that's AUTH-03.
 
-### AUTH-03 — Apply `@require_auth` to every data route
-- [ ] **Files**: [backend/routes/chat.py](backend/routes/chat.py), [backend/routes/database_query.py](backend/routes/database_query.py), [backend/routes/ocr.py](backend/routes/ocr.py), [backend/routes/analytics.py](backend/routes/analytics.py), [backend/routes/ai_analytics.py](backend/routes/ai_analytics.py), [backend/routes/email_config.py](backend/routes/email_config.py), [backend/routes/transactions.py](backend/routes/transactions.py) (and any others under `routes/`)
-- **Action**: Decorate every route. Stop accepting `user_id` from the client — read it only from `g.user_id`. The only exception is health/login endpoints.
-- **Acceptance**: `grep -rn "data.get('user_id'\|request.args.get('user_id'" backend/routes` returns 0 matches. Calling `/transactions/anything-else` while authenticated as user A returns A's data, not the requested ID's data.
-- **Depends on**: AUTH-02.
+### AUTH-03 — Apply `@require_auth` to every data route ✅
+- [x] Decorated **31 non-health routes** across `routes/ocr.py`, `routes/batch.py`, `routes/chat.py`, `routes/analytics.py`, `routes/ai_analytics.py`, `routes/database_query.py`, `routes/email_config.py`. Removed every `data.get('user_id')` / `request.args.get('user_id')` / `request.form.get('user_id')` / `request.json.get('user_id')` and replaced with `g.user_id`. Acceptance grep returns 0 matches. The legacy `GET /transactions/<user_id>` route still accepts the path segment so unfixed frontend code doesn't 404 between AUTH-03 and AUTH-05, **but the value is ignored** — `g.user_id` is the only authoritative identity (hitting `/transactions/anyone-else` while authenticated as A returns A's data). Closed two latent security bugs in passing: (a) `PUT /transactions/<transaction_id>` previously updated any transaction by id with no user check — now scoped by `user_id=g.user_id` and 404s on cross-user access; (b) `POST /api/analytics/insights/<id>/read` previously marked any insight read — now no-ops + 404 if it doesn't belong to the caller. Exempt from `@require_auth`: `routes/health.py` and `ai_analytics.py:health_check` (intentional, per spec). The 3 unimplemented Gmail OAuth stubs are also decorated so they don't become public when the body is filled in.
+
+**Known broken until AUTH-04/05 land**: the frontend still calls these endpoints without an `Authorization` header and will get 401 on every request. That's the intended sequencing per the TODO.
 
 ### AUTH-04 — Frontend auth context + protected routes
 - [ ] **Files**: new `frontend/src/lib/auth/context.tsx`, new `frontend/src/app/(auth)/login/page.tsx`, [frontend/src/lib/api/client.ts](frontend/src/lib/api/client.ts), `frontend/src/app/dashboard/`, `frontend/src/app/chatbot/`, `frontend/src/app/analytics/`, `frontend/src/app/ai-analytics/`

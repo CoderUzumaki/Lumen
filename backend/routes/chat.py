@@ -1,10 +1,11 @@
 # routes/chat.py
 import logging
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, request, jsonify
 
 from ai.hybrid_query_engine import HybridQueryEngine
 from config import Config
+from utils.auth import require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -13,43 +14,43 @@ chat_bp = Blueprint('chat', __name__)
 # Initialize engine with the configured SQLite database path.
 engine = HybridQueryEngine(db_path=str(Config.DATABASE_PATH))
 
+
 @chat_bp.route('/chat', methods=['POST'])
+@require_auth
 def chat():
     """
-    Main chat endpoint
-    
+    Main chat endpoint. Identity comes from the JWT (g.user_id); the request
+    body must NOT include a user_id (any value is ignored).
+
     Request:
-    {
-        "query": "Where did I spend most last month?",
-        "user_id": 1
-    }
+    { "query": "Where did I spend most last month?" }
     """
-    data = request.json
-    
+    data = request.json or {}
+
     if not data.get('query'):
         return jsonify({'error': 'Query is required'}), 400
-    
-    user_id = data.get('user_id', '1')  # Get from auth in production, default to '1' as string
-    
+
+    user_id = g.user_id
+
     try:
-        logger.info(f"Processing query: {data['query']} for user: {user_id}")
-        result = engine.query(data['query'], str(user_id))  # Ensure user_id is string
-        
+        logger.info("Processing chat query for user=%s", user_id)
+        result = engine.query(data['query'], str(user_id))
+
         return jsonify({
             'success': True,
             'data': result
         }), 200
-    
+
     except Exception as e:
-        logger.info(f"Error in chat endpoint: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error in chat endpoint: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
 
+
 @chat_bp.route('/chat/suggestions', methods=['GET'])
+@require_auth
 def get_suggestions():
     """Get sample questions"""
     suggestions = [

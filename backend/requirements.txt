@@ -24,6 +24,9 @@ Pillow==10.1.0
 requests==2.31.0
 typing_extensions==4.9.0
 
+# Auth (Supabase JWT verification)
+PyJWT[crypto]==2.8.0
+
 # Email (optional)
 email-validator==2.1.0
 imapclient==3.0.1

@@ -115,8 +115,19 @@ class Config:
     # === Localization ===
     DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "INR")
 
-    # === Supabase (legacy / optional) ===
+    # === Supabase Auth ===
+    # SUPABASE_URL is the project URL (e.g. https://abcdef.supabase.co). Required
+    # once @require_auth is applied to routes (AUTH-03). Until then the decorator
+    # raises a clear error if any protected route is hit without it.
     SUPABASE_URL = os.getenv("SUPABASE_URL")
+    # The expected `aud` claim in incoming JWTs. Supabase uses "authenticated"
+    # for end-user sessions by default; surface as config so test fixtures and
+    # alternative tenants can override.
+    SUPABASE_JWT_AUD = os.getenv("SUPABASE_JWT_AUD", "authenticated")
+    # Legacy: the anon/publishable key. Currently unused by the backend (the
+    # frontend uses it, via NEXT_PUBLIC_SUPABASE_ANON_KEY). Kept here so a future
+    # backend feature that needs to call Supabase REST as the anonymous role
+    # doesn't need a config change.
     SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
     @classmethod

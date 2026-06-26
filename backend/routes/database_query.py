@@ -1,33 +1,33 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, request, jsonify
 from models import Transaction, TransactionItem
 from models.database import db
 from sqlalchemy import and_, or_
 from datetime import datetime
 import uuid
 
+from utils.auth import require_auth
+
 database_query_bp = Blueprint('database_query', __name__)
 
 
+# The legacy URL shape included a `<user_id>` path segment. We keep accepting it
+# so older frontends don't 404 between AUTH-03 and AUTH-05, but the value is
+# IGNORED — the authenticated user always comes from g.user_id. AUTH-05 deletes
+# the path segment from the frontend; once that ships, this route can drop the
+# parameter.
+@database_query_bp.route('/transactions', methods=['GET'])
 @database_query_bp.route('/transactions/<user_id>', methods=['GET'])
-def get_transactions(user_id):
-    """
-    Get transactions with filters and pagination
-    
-    Query parameters:
-    - date_from: Filter transactions from this date (YYYY-MM-DD)
-    - date_to: Filter transactions up to this date (YYYY-MM-DD)
-    - category: Filter by category
-    - vendor: Filter by vendor name (partial match)
-    - min_amount: Minimum transaction amount
-    - max_amount: Maximum transaction amount
-    - page: Page number (default: 1)
-    - per_page: Items per page (default: 10, max: 100)
-    - sort_by: Field to sort by (date, total_amount, vendor_name)
-    - sort_order: asc or desc (default: desc)
-    
-    Example: GET /transactions/123?date_from=2024-01-01&category=Restaurant&page=1&per_page=20
+@require_auth
+def get_transactions(user_id=None):
+    """List the authenticated user's transactions with filters and pagination.
+
+    Any `user_id` path segment is ignored; identity comes from the JWT.
+
+    Query parameters: see code for filter list (date_from, date_to, category,
+    vendor, min_amount, max_amount, page, page_size, sort_by, sort_order).
     """
     try:
+        user_id = g.user_id
         # Get pagination parameters
         page = int(request.args.get('page', 1))
         per_page = min(int(request.args.get('page_size', 10)), 100)  # Max 100 per page
@@ -130,46 +130,23 @@ def get_transactions(user_id):
 
 
 @database_query_bp.route('/transactions', methods=['POST'])
+@require_auth
 def create_transaction():
-    """
-    Create a new transaction from JSON data
-    
-    Request body:
-    {
-        "user_id": "123",
-        "vendor_name": "East Repair Inc.",
-        "invoice_number": "US-001",
-        "date": "2019-11-02",
-        "total_amount": 154.06,
-        "tax_amount": 9.06,
-        "payment_method": "check",
-        "address": "2 Court Square, New York, NY 12210",
-        "category": "Other",
-        "items": [
-            {
-                "item_name": "Front and rear brake cables",
-                "quantity": 1,
-                "unit_price": 100.0,
-                "total_price": 100.0
-            }
-        ]
-    }
+    """Create a new transaction owned by the authenticated user.
+
+    The request body must NOT include user_id; any value is ignored.
     """
     try:
-        data = request.json
-        
-        # Validate required fields
-        if not data.get('user_id'):
-            return jsonify({'success': False, 'error': 'user_id is required'}), 400
-        
+        data = request.json or {}
+
         if not data.get('vendor_name'):
             return jsonify({'success': False, 'error': 'vendor_name is required'}), 400
-        
+
         # Create transaction
         transaction_id = str(uuid.uuid4())
         transaction = Transaction(
             id=transaction_id,
-            user_id=str(data['user_id']),
+            user_id=str(g.user_id),
             vendor_name=data.get('vendor_name'),
             invoice_number=data.get('invoice_number'),
             date=data.get('date'),
@@ -222,38 +199,20 @@ def create_transaction():
 
 
 @database_query_bp.route('/transactions/<transaction_id>', methods=['PUT'])
+@require_auth
 def update_transaction(transaction_id):
-    """
-    Update an existing transaction
-    
-    Request body (all fields optional):
-    {
-        "vendor_name": "Updated Vendor",
-        "invoice_number": "US-002",
-        "date": "2024-11-14",
-        "total_amount": 200.00,
-        "tax_amount": 15.00,
-        "payment_method": "credit_card",
-        "address": "New Address",
-        "category": "Restaurant",
-        "items": [
-            {
-                "item_name": "Updated item",
-                "quantity": 2,
-                "unit_price": 75.0,
-                "total_price": 150.0
-            }
-        ]
-    }
-    
-    Example: curl -X PUT http://localhost:5000/transactions/8aa77edc-b44e-4699-972d-6400ffb34b89 -H "Content-Type: application/json" -d '{"category":"Restaurant"}'
+    """Update an existing transaction. Only succeeds if it belongs to the
+    authenticated user; otherwise 404 (we hide existence to avoid leaking ids).
     """
     try:
-        data = request.json
-        
-        # Find existing transaction
-        transaction = Transaction.query.filter_by(id=transaction_id).first()
-        
+        data = request.json or {}
+
+        # Scope the lookup by the authenticated user. A transaction the caller
+        # does not own is treated as if it does not exist.
+        transaction = Transaction.query.filter_by(
+            id=transaction_id, user_id=str(g.user_id)
+        ).first()
+
         if not transaction:
             return jsonify({
                 'success': False,

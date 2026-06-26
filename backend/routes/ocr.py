@@ -1,8 +1,9 @@
 """OCR and invoice extraction routes"""
 import logging
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, request, jsonify
 
+from utils.auth import require_auth
 from utils.image_processing import (
     image_to_base64,
     convert_pdf_to_images,
@@ -18,18 +19,14 @@ ocr_bp = Blueprint('ocr', __name__)
 
 
 @ocr_bp.route('/extract', methods=['POST'])
+@require_auth
 def extract_invoice_data():
     """
-    Combined endpoint: OCR image/PDF and store transaction directly to database
-    Expects: 
-    - file: image or PDF file (form-data)
-    - user_id: user identifier (form-data or query param)
+    Combined endpoint: OCR image/PDF and store transaction directly to database.
+    The transaction is saved under the authenticated user (g.user_id from JWT).
     """
-    # Validate user_id
-    user_id = request.form.get('user_id') or request.args.get('user_id')
-    if not user_id:
-        return jsonify({'error': 'user_id is required (provide in form-data or query param)'}), 400
-    
+    user_id = g.user_id
+
     # Validate file
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
