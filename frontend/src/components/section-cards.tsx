@@ -15,6 +15,7 @@ import { EmailStatusCard } from "./emailStatusCard";
 import { eventBus, EVENTS } from "@/lib/events";
 import { transactionApi, tokenManager } from "@/lib/api/client";
 
+import { logger } from "@/lib/logger";
 interface Invoice {
 	id: number;
 	status: string;
@@ -31,7 +32,7 @@ export function SectionCards() {
 		const fetchInvoices = async () => {
 			setLoading(true);
 			try {
-				console.log("📊 SectionCards: Fetching invoices from API...");
+				logger.debug("📊 SectionCards: Fetching invoices from API...");
 
 				// Always fetch from API with hardcoded user ID
 				const response = await transactionApi.getTransactions("123", {
@@ -41,7 +42,7 @@ export function SectionCards() {
 					sort_order: "desc",
 				});
 				if (response.success && response.data) {
-					console.log(
+					logger.debug(
 						`📊 SectionCards: Fetched ${response.data.length} transactions`
 					);
 					// Map transaction data to invoice format for cards
@@ -77,7 +78,7 @@ export function SectionCards() {
 
 		// Listen for invoice updates and refresh
 		const unsubscribe = eventBus.on(EVENTS.INVOICE_UPDATED, () => {
-			console.log("📊 SectionCards: Refreshing due to invoice update");
+			logger.debug("📊 SectionCards: Refreshing due to invoice update");
 			fetchInvoices();
 		});
 

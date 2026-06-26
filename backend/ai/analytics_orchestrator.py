@@ -10,33 +10,39 @@ from typing import Dict, Any, List
 import json
 from datetime import datetime
 from models.database import db
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class AnalyticsOrchestrator:
     """Coordinates all analytics agents and provides unified interface"""
-    
-    def __init__(self, db_path: str = "instance/lumen.db"):
+
+    def __init__(self, db_path: str | None = None):
         """
         Initialize analytics orchestrator
-        
+
         Args:
-            db_path: Path to SQLite database (default: instance/lumen.db)
+            db_path: Path to SQLite database. Defaults to Config.DATABASE_PATH.
         """
-        print("🚀 Initializing Analytics Orchestrator...")
-        
+        from config import Config
+        resolved = db_path or str(Config.DATABASE_PATH)
+        logger.info("🚀 Initializing Analytics Orchestrator (db=%s)", resolved)
+
         # Initialize all agents
-        self.pattern_agent = PatternDetectionAgent(db_path)
-        print("   ✅ Pattern Detection Agent ready")
+        self.pattern_agent = PatternDetectionAgent(resolved)
+        logger.info("   ✅ Pattern Detection Agent ready")
         
         self.fraud_agent = FraudDetectionAgent()
-        print("   ✅ Fraud Detection Agent ready")
+        logger.info("   ✅ Fraud Detection Agent ready")
         
         self.forecast_agent = ForecastingAgent()
-        print("   ✅ Forecasting Agent ready")
+        logger.info("   ✅ Forecasting Agent ready")
         
         self.risk_engine = RiskAssessmentEngine(db_path)
-        print("   ✅ Risk Assessment Engine ready")
+        logger.info("   ✅ Risk Assessment Engine ready")
         
-        print("✅ Analytics Orchestrator initialized!\n")
+        logger.info("✅ Analytics Orchestrator initialized!\n")
     
     def run_complete_analysis(self, 
                              user_id: int,
@@ -57,9 +63,9 @@ class AnalyticsOrchestrator:
         Returns:
             Complete analysis results
         """
-        print("="*60)
-        print(f"🔍 Running Complete Analysis for User {user_id}")
-        print("="*60)
+        logger.info("="*60)
+        logger.info(f"🔍 Running Complete Analysis for User {user_id}")
+        logger.info("="*60)
         
         results = {
             'user_id': user_id,
@@ -68,63 +74,63 @@ class AnalyticsOrchestrator:
         }
         
         # 1. Pattern Detection (always run - needed for reminders)
-        print("\n[1/4] Pattern Detection...")
+        logger.info("\n[1/4] Pattern Detection...")
         try:
             pattern_results = self.pattern_agent.analyze_user(user_id)
             results['patterns'] = pattern_results
-            print(f"      ✅ Detected {pattern_results['patterns_detected']} patterns")
-            print(f"      ✅ Generated {pattern_results['active_reminders']} reminders")
+            logger.info(f"      ✅ Detected {pattern_results['patterns_detected']} patterns")
+            logger.info(f"      ✅ Generated {pattern_results['active_reminders']} reminders")
         except Exception as e:
-            print(f"      ❌ Error: {str(e)}")
+            logger.info(f"      ❌ Error: {str(e)}")
             results['patterns'] = {'error': str(e)}
         
         # 2. Fraud Detection (optional, slower)
         if include_fraud_detection:
-            print("\n[2/4] Fraud Detection...")
+            logger.info("\n[2/4] Fraud Detection...")
             try:
                 fraud_results = self.fraud_agent.detect_anomalies(
                     user_id, 
                     use_llm=use_llm_reasoning
                 )
                 results['fraud_detection'] = fraud_results
-                print(f"      ✅ Analyzed {fraud_results['transactions_analyzed']} transactions")
-                print(f"      ✅ Detected {fraud_results['anomalies_detected']} anomalies")
+                logger.info(f"      ✅ Analyzed {fraud_results['transactions_analyzed']} transactions")
+                logger.info(f"      ✅ Detected {fraud_results['anomalies_detected']} anomalies")
                 if fraud_results['high_risk_count'] > 0:
-                    print(f"      ⚠️  {fraud_results['high_risk_count']} HIGH RISK anomalies found!")
+                    logger.info(f"      ⚠️  {fraud_results['high_risk_count']} HIGH RISK anomalies found!")
             except Exception as e:
-                print(f"      ❌ Error: {str(e)}")
+                logger.info(f"      ❌ Error: {str(e)}")
                 results['fraud_detection'] = {'error': str(e)}
         
         # 3. Forecasting (optional)
         if include_forecasting:
-            print("\n[3/4] Spending Forecast...")
+            logger.info("\n[3/4] Spending Forecast...")
             try:
                 forecast_results = self.forecast_agent.forecast_spending(user_id, days_ahead=30)
                 results['forecast'] = forecast_results
                 if forecast_results.get('success'):
                     total = forecast_results['forecast']['total_predicted']
-                    print(f"      ✅ 30-day forecast: ₹{total:.0f}")
-                    print(f"      ✅ Trend: {forecast_results['trend'].upper()}")
+                    logger.info(f"      ✅ 30-day forecast: ₹{total:.0f}")
+                    logger.info(f"      ✅ Trend: {forecast_results['trend'].upper()}")
             except Exception as e:
-                print(f"      ❌ Error: {str(e)}")
+                logger.info(f"      ❌ Error: {str(e)}")
                 results['forecast'] = {'error': str(e)}
         
         # 4. Risk Assessment (always run - critical metric)
         if include_risk_assessment:
-            print("\n[4/4] Risk Assessment...")
+            logger.info("\n[4/4] Risk Assessment...")
             try:
                 risk_results = self.risk_engine.calculate_overall_risk(user_id)
                 results['risk_assessment'] = risk_results
-                print(f"      ✅ Financial Health Score: {risk_results['overall_score']}/100")
-                print(f"      ✅ Status: {risk_results['health_status']}")
-                print(f"      ✅ Risk Level: {risk_results['risk_level']}")
+                logger.info(f"      ✅ Financial Health Score: {risk_results['overall_score']}/100")
+                logger.info(f"      ✅ Status: {risk_results['health_status']}")
+                logger.info(f"      ✅ Risk Level: {risk_results['risk_level']}")
             except Exception as e:
-                print(f"      ❌ Error: {str(e)}")
+                logger.info(f"      ❌ Error: {str(e)}")
                 results['risk_assessment'] = {'error': str(e)}
         
-        print("\n" + "="*60)
-        print("✅ Complete Analysis Finished!")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("✅ Complete Analysis Finished!")
+        logger.info("="*60)
         
         return results
     
@@ -333,21 +339,21 @@ class AnalyticsOrchestrator:
 
 # Test/Example Usage
 if __name__ == "__main__":
-    print("="*60)
-    print("Analytics Orchestrator Module")
-    print("="*60)
-    print("\n⚠️  This module should be imported and used within the Flask app context.")
-    print("\n📘 Example usage:")
-    print("""
+    logger.info("="*60)
+    logger.info("Analytics Orchestrator Module")
+    logger.info("="*60)
+    logger.info("\n⚠️  This module should be imported and used within the Flask app context.")
+    logger.info("\n📘 Example usage:")
+    logger.info("""
     from flask import Flask
     from models.database import init_db
     from ai.analytics_orchestrator import AnalyticsOrchestrator
-    
+
     # Use the existing Flask app from app.py
     with app.app_context():
         orchestrator = AnalyticsOrchestrator()
         results = orchestrator.run_complete_analysis(user_id=123)
-        print(results)
+        >>> results
     """)
-    print("\n✅ See app.py for proper Flask application initialization.")
-    print("="*60)
+    logger.info("\n✅ See app.py for proper Flask application initialization.")
+    logger.info("="*60)

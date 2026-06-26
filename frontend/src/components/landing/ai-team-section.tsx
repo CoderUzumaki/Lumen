@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { MessageCircle, Clock, Zap } from "lucide-react";
 
+import { logger } from "@/lib/logger";
 const conversations = [
 	{
 		title: "Invoice Data Extraction Query",
@@ -134,7 +135,7 @@ export function AITeamSection() {
 		const observer = new IntersectionObserver(
 			([entry]) => {
 				if (entry.isIntersecting) {
-					console.log("[v0] AI Team Section is now visible");
+					logger.debug("[v0] AI Team Section is now visible");
 					setIsVisible(true);
 				}
 			},

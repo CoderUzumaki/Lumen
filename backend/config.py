@@ -1,49 +1,159 @@
+"""Application configuration.
+
+All runtime values that change between environments live here. Production
+code MUST NOT hardcode database paths, model names, base URLs, ports, or
+currency strings — read them from `Config` instead.
+
+`Config.validate()` runs at app startup (see app.py) and raises on missing
+required values so the process fails fast rather than producing cryptic
+runtime errors.
 """
-Application configuration settings
-"""
+import logging
 import os
+import secrets
+import warnings
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
+
+# Project layout: BACKEND_DIR is the directory this file lives in.
+BACKEND_DIR = Path(__file__).resolve().parent
+INSTANCE_DIR = BACKEND_DIR / "instance"
+INSTANCE_DIR.mkdir(exist_ok=True)
+
+
+def _env_path(name: str, default: Path) -> Path:
+    """Read a path from env. Relative env values are anchored at BACKEND_DIR."""
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    p = Path(raw)
+    return p if p.is_absolute() else (BACKEND_DIR / p).resolve()
+
+
+_FLASK_ENV = os.getenv("FLASK_ENV", "development")
+
+
+def _resolve_secret_key(flask_env: str) -> str | None:
+    """Resolve SECRET_KEY at import time.
+
+    - If the env var is set, use it.
+    - In development, generate an ephemeral per-process key and log a warning
+      so dev work isn't blocked. Sessions will not survive a process restart.
+    - In any other environment, return None so `Config.validate()` can raise
+      with a clear error message instead of silently using a guessable default.
+    """
+    raw = os.getenv("SECRET_KEY")
+    if raw:
+        return raw
+    if flask_env == "development":
+        ephemeral = secrets.token_urlsafe(32)
+        # configure_logging() may not have run yet at this point, so emit
+        # both a stdlib warning (always visible on stderr) and a logger
+        # message (captured once logging is configured).
+        msg = (
+            "SECRET_KEY is not set; generated an ephemeral key for this dev "
+            "process. Sessions will not survive a restart. Set SECRET_KEY in "
+            ".env to silence this warning."
+        )
+        warnings.warn(msg, stacklevel=2)
+        logging.getLogger(__name__).warning(msg)
+        return ephemeral
+    return None
+
+
 class Config:
-    """Base configuration class"""
-    
-    # Flask settings
-    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
-    DEBUG = os.getenv('FLASK_ENV', 'development') == 'development'
-    
-    # Server settings
-    HOST = os.getenv('HOST', '0.0.0.0')
-    PORT = int(os.getenv('PORT', 5000))
-    
-    # CORS settings
-    FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-    
-    # Supabase settings
-    SUPABASE_URL = os.getenv('SUPABASE_URL')
-    SUPABASE_KEY = os.getenv('SUPABASE_KEY')
-    
-    @staticmethod
-    def validate():
-        """Validate required configuration variables"""
-        required_vars = ['SUPABASE_URL', 'SUPABASE_KEY']
-        missing = [var for var in required_vars if not os.getenv(var)]
-        
+    """Base configuration class. All values are class attributes; read them as
+    `Config.OPENROUTER_API_KEY`, never `os.getenv(...)` directly outside this file."""
+
+    # === Flask ===
+    FLASK_ENV = _FLASK_ENV
+    DEBUG = _FLASK_ENV == "development"
+    SECRET_KEY = _resolve_secret_key(_FLASK_ENV)
+
+    HOST = os.getenv("HOST", "0.0.0.0")
+    PORT = int(os.getenv("PORT", 5000))
+
+    # === CORS ===
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    # Comma-separated list of allowed origins for CORS. CFG-04 will tighten this.
+    ALLOWED_ORIGINS = [
+        o.strip() for o in os.getenv("ALLOWED_ORIGINS", FRONTEND_URL).split(",") if o.strip()
+    ]
+
+    # === Storage paths (all absolute) ===
+    DATABASE_PATH = _env_path("DATABASE_PATH", INSTANCE_DIR / "lumen.db")
+    # SQLAlchemy URI form. On Windows, `sqlite:///C:\path\to.db` is the canonical
+    # absolute form (three slashes + drive letter). On POSIX the same `sqlite:///`
+    # prefix plus a leading slash works because the path itself starts with `/`.
+    DATABASE_URI = f"sqlite:///{DATABASE_PATH}"
+
+    CHROMA_DB_PATH = _env_path("CHROMA_DB_PATH", BACKEND_DIR / "chroma_db")
+
+    # === OpenRouter / LLM ===
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+    OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+    OPENROUTER_CHAT_URL = f"{OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
+
+    # Vision-capable model used for OCR / invoice extraction (`utils/openrouter.py`).
+    LLM_VISION_MODEL = os.getenv(
+        "LLM_VISION_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free"
+    )
+    # Text model used for chat synthesis, SQL generation, classification,
+    # anomaly explanation, forecasting reasoning.
+    LLM_TEXT_MODEL = os.getenv("LLM_TEXT_MODEL", "anthropic/claude-3.5-sonnet")
+    # Embedding model used by the RAG store.
+    LLM_EMBEDDING_MODEL = os.getenv("LLM_EMBEDDING_MODEL", "openai/text-embedding-3-small")
+
+    # Legacy alias: some older modules still read `OPENROUTER_MODEL` from the
+    # environment. Keep the alias so they get the text model by default.
+    OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", LLM_TEXT_MODEL)
+
+    # === Localization ===
+    DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "INR")
+
+    # === Supabase (legacy / optional) ===
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+    @classmethod
+    def validate(cls) -> None:
+        """Raise ValueError on missing required configuration.
+
+        Called once at app startup. Add to the `required` list when a feature
+        becomes load-bearing. Optional dependencies (Supabase, email polling)
+        should validate themselves where they're used, not here.
+
+        SECRET_KEY is enforced here too: in dev mode `_resolve_secret_key`
+        supplies an ephemeral value so it's never missing; in any other
+        environment a missing `SECRET_KEY` env var leaves it `None` and we
+        refuse to start.
+        """
+        required = {
+            "OPENROUTER_API_KEY": cls.OPENROUTER_API_KEY,
+            "SECRET_KEY": cls.SECRET_KEY,
+        }
+        missing = [name for name, value in required.items() if not value]
         if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+            raise ValueError(
+                f"Missing required environment variable(s): {', '.join(missing)}. "
+                "Set them in your .env file or shell environment before starting the app."
+            )
+
 
 class DevelopmentConfig(Config):
-    """Development configuration"""
     DEBUG = True
 
+
 class ProductionConfig(Config):
-    """Production configuration"""
     DEBUG = False
 
-# Configuration dictionary
+
 config = {
-    'development': DevelopmentConfig,
-    'production': ProductionConfig,
-    'default': DevelopmentConfig
+    "development": DevelopmentConfig,
+    "production": ProductionConfig,
+    "default": DevelopmentConfig,
 }

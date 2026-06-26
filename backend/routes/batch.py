@@ -1,11 +1,16 @@
 """Batch processing routes for multi-page PDFs"""
+import logging
+
 from flask import Blueprint, request, jsonify
+
 from utils.image_processing import (
     convert_pdf_to_images,
     pil_image_to_bytes,
     image_to_base64
 )
 from utils.openrouter import extract_and_structure_with_openrouter
+
+logger = logging.getLogger(__name__)
 
 # Create blueprint
 batch_bp = Blueprint('batch', __name__)
@@ -30,7 +35,7 @@ def extract_batch():
         file_content = file.read()
         
         # Convert all pages
-        print("Converting all PDF pages to images...")
+        logger.info("Converting all PDF pages to images...")
         images = convert_pdf_to_images(file_content)
         
         if not images:
@@ -40,7 +45,7 @@ def extract_batch():
         
         # Process each page
         for idx, page_image in enumerate(images):
-            print(f"Processing page {idx + 1}/{len(images)}...")
+            logger.info(f"Processing page {idx + 1}/{len(images)}...")
             
             # Convert PIL Image to bytes
             img_bytes = pil_image_to_bytes(page_image, format='PNG')
@@ -68,7 +73,7 @@ def extract_batch():
         }), 200
     
     except Exception as e:
-        print(f"Error: {str(e)}")
+        logger.info(f"Error: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

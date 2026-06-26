@@ -10,12 +10,18 @@ import json
 import requests
 import os
 from models.database import db
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class ForecastingAgent:
     """Time-series forecasting for spending predictions"""
-    
-    OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
-    OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'anthropic/claude-3.5-sonnet')
+
+    from config import Config as _Config  # local import to avoid module-level cycles
+    OPENROUTER_API_KEY = _Config.OPENROUTER_API_KEY
+    OPENROUTER_MODEL = _Config.LLM_TEXT_MODEL
+    OPENROUTER_CHAT_URL = _Config.OPENROUTER_CHAT_URL
     
     def __init__(self):
         """
@@ -102,7 +108,7 @@ class ForecastingAgent:
         Returns:
             Forecast results with predictions
         """
-        print(f"📊 Forecasting spending for user {user_id}...")
+        logger.info(f"📊 Forecasting spending for user {user_id}...")
         
         # Get historical data
         df = self.get_historical_data(user_id, days_back=90)
@@ -123,7 +129,7 @@ class ForecastingAgent:
                                    freq='D')
         daily_spending = daily_spending.reindex(date_range, fill_value=0)
         
-        print(f"   Analyzing {len(daily_spending)} days of data")
+        logger.info(f"   Analyzing {len(daily_spending)} days of data")
         
         # Calculate statistics
         mean_daily = daily_spending.mean()
@@ -292,7 +298,7 @@ Return as JSON array of strings:
         
         try:
             response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                self.OPENROUTER_CHAT_URL,
                 headers={
                     "Authorization": f"Bearer {self.OPENROUTER_API_KEY}",
                     "Content-Type": "application/json"
@@ -316,7 +322,7 @@ Return as JSON array of strings:
             return insights
         
         except Exception as e:
-            print(f"LLM insight generation failed: {str(e)}")
+            logger.info(f"LLM insight generation failed: {str(e)}")
             return [
                 f"Based on your spending pattern, expect around ₹{total_forecast:.0f} in the next {days_ahead} days.",
                 f"Your spending trend is {trend}.",
@@ -326,22 +332,21 @@ Return as JSON array of strings:
 
 # Test/Example Usage
 if __name__ == "__main__":
-    print("="*60)
-    print("Forecasting Agent Module")
-    print("="*60)
-    print("\n⚠️  This module should be imported and used within the Flask app context.")
-    print("\n📘 Example usage:")
-    print("""
+    logger.info("="*60)
+    logger.info("Forecasting Agent Module")
+    logger.info("="*60)
+    logger.info("\n⚠️  This module should be imported and used within the Flask app context.")
+    logger.info("\n📘 Example usage:")
+    logger.info("""
     from flask import Flask
     from models.database import init_db
     from ai.forecasting_agent import ForecastingAgent
-    
+
     # Use the existing Flask app from app.py
     with app.app_context():
         agent = ForecastingAgent()
         results = agent.forecast_spending(user_id=123, days_ahead=30)
-        if results['success']:
-            print(f"30-day forecast: ₹{results['forecast']['total_predicted']:.0f}")
+        >>> results['forecast']['total_predicted']
     """)
-    print("\n✅ See app.py for proper Flask application initialization.")
-    print("="*60)
+    logger.info("\n✅ See app.py for proper Flask application initialization.")
+    logger.info("="*60)

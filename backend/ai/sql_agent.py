@@ -1,16 +1,22 @@
 # sql_agent.py
+import json
+import logging
+import sqlite3
+from typing import Dict, Any
 
 import requests
-import sqlite3
-import json
-from typing import Dict, Any
-import os
+
+from config import Config
+
+logger = logging.getLogger(__name__)
+
+
 class SQLAgent:
     """Converts natural language to SQL and executes queries"""
-    
-    def __init__(self, db_path: str = "instance/lumen.db"):
-        """Initialize SQLAgent with SQLite database"""
-        self.db_path = db_path
+
+    def __init__(self, db_path: str | None = None):
+        """Initialize SQLAgent with SQLite database. Defaults to Config.DATABASE_PATH."""
+        self.db_path = db_path or str(Config.DATABASE_PATH)
         
     SQL_GENERATION_PROMPT = """
     You are an expert SQL query generator for a financial transactions database using SQLite.
@@ -61,13 +67,13 @@ class SQLAgent:
         
         try:
             response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                Config.OPENROUTER_CHAT_URL,
                 headers={
-                    "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+                    "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "anthropic/claude-3.5-sonnet",
+                    "model": Config.LLM_TEXT_MODEL,
                     "messages": [
                         {
                             "role": "user",
@@ -87,7 +93,7 @@ class SQLAgent:
             
             # Check for API errors
             if 'error' in result:
-                print(f"OpenRouter API error in SQL generation: {result['error']}")
+                logger.info(f"OpenRouter API error in SQL generation: {result['error']}")
                 # Return a basic SELECT query as fallback
                 return f"SELECT * FROM transactions WHERE user_id = '{user_id}' LIMIT 10"
             
@@ -99,7 +105,7 @@ class SQLAgent:
             return sql
             
         except Exception as e:
-            print(f"Error generating SQL: {e}")
+            logger.info(f"Error generating SQL: {e}")
             # Return a safe default query
             return f"SELECT * FROM transactions WHERE user_id = '{user_id}' LIMIT 10"
     

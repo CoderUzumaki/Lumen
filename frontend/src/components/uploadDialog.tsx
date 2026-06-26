@@ -8,6 +8,7 @@ import { DialogTitle } from "@radix-ui/react-dialog";
 import { ocrApi } from "@/lib/api/client";
 import { eventBus, EVENTS } from "@/lib/events";
 
+import { logger } from "@/lib/logger";
 interface FileWithStatus {
 	file: File;
 	status: "pending" | "uploading" | "success" | "error";
@@ -63,26 +64,26 @@ export function DialogDemo() {
 			});
 
 			try {
-				console.log("📤 Uploading file:", fileItem.file.name);
+				logger.debug("📤 Uploading file:", fileItem.file.name);
 				// Use OCR API to extract data - this saves to database automatically
 				const result = await ocrApi.extractInvoice(
 					fileItem.file,
 					"123"
 				);
 
-				console.log("📥 OCR API Response:", result);
+				logger.debug("📥 OCR API Response:", result);
 
 				if (result.success && result.data) {
-					console.log(
+					logger.debug(
 						"✅ Invoice extracted and saved to database:",
 						result.data
 					);
-					console.log("📢 Emitting INVOICE_UPDATED event...");
+					logger.debug("📢 Emitting INVOICE_UPDATED event...");
 
 					// Emit event to trigger refresh in other components
 					eventBus.emit(EVENTS.INVOICE_UPDATED);
 
-					console.log("✅ Event emitted successfully");
+					logger.debug("✅ Event emitted successfully");
 				} else {
 					console.warn(
 						"⚠️ Upload succeeded but no data or success=false",
@@ -124,10 +125,10 @@ export function DialogDemo() {
 		// Check if all files were successful
 		const allSuccess = files.every((f) => f.status === "success");
 		if (allSuccess) {
-			console.log("✅ All uploads successful! Closing dialog in 1.5s...");
+			logger.debug("✅ All uploads successful! Closing dialog in 1.5s...");
 			// Close dialog after a short delay and emit final event
 			setTimeout(() => {
-				console.log(
+				logger.debug(
 					"📢 Emitting final INVOICE_UPDATED event before closing dialog"
 				);
 				setOpen(false);

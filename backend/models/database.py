@@ -1,15 +1,18 @@
-import os
+import logging
+
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from dotenv import load_dotenv
 
-load_dotenv()
+from config import Config
+
+logger = logging.getLogger(__name__)
 
 db = SQLAlchemy()
 
+
 def init_db(app: Flask):
 
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///lumen.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = Config.DATABASE_URI
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     db.init_app(app)
@@ -18,7 +21,7 @@ def init_db(app: Flask):
     try:
         with app.app_context():
             db.create_all()
-            print("✅ Database connected and tables initialized")
+            logger.info("✅ Database connected and tables initialized")
     except Exception as e:
-        print(f"⚠️  Warning: Could not connect to database: {e}")
-        print("   Database features will be unavailable")
+        logger.warning(f"⚠️  Warning: Could not connect to database: {e}")
+        logger.info("   Database features will be unavailable")

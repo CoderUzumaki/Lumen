@@ -1,23 +1,29 @@
 # rag_system.py
+import json
+import logging
+from typing import List, Dict, Any
 
 import chromadb
-from chromadb.utils import embedding_functions
 import requests
-import os
-from typing import List, Dict, Any
-import json
+from chromadb.utils import embedding_functions
+
+from config import Config
+
+logger = logging.getLogger(__name__)
+
+
 class RAGSystem:
     """Semantic search over transaction descriptions"""
-    
+
     def __init__(self, collection_name: str = "transactions"):
-        # Initialize ChromaDB
-        self.client = chromadb.PersistentClient(path="./chroma_db")
-        
-        # Use OpenAI-compatible embeddings via OpenRouter
+        # Initialize ChromaDB at the configured location.
+        self.client = chromadb.PersistentClient(path=str(Config.CHROMA_DB_PATH))
+
+        # Use OpenAI-compatible embeddings via OpenRouter.
         self.embedding_function = embedding_functions.OpenAIEmbeddingFunction(
-            api_key=os.getenv('OPENROUTER_API_KEY'),
-            api_base="https://openrouter.ai/api/v1",
-            model_name="openai/text-embedding-3-small"
+            api_key=Config.OPENROUTER_API_KEY,
+            api_base=Config.OPENROUTER_BASE_URL,
+            model_name=Config.LLM_EMBEDDING_MODEL,
         )
         
         # Get or create collection
@@ -44,7 +50,7 @@ class RAGSystem:
             }],
             ids=[f"txn_{transaction['id']}"]
         )
-        print(f"✅ Added transaction {transaction['id']} to ChromaDB")
+        logger.info(f"✅ Added transaction {transaction['id']} to ChromaDB")
     
     def _create_searchable_text(self, transaction: Dict[str, Any]) -> str:
         """Create rich text representation for embedding"""

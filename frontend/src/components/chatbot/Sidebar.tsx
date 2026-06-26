@@ -24,6 +24,7 @@ import SettingsPopover from "./SettingsPopover";
 import { cls } from "./utils";
 import { useState, RefObject, Dispatch, SetStateAction } from "react";
 
+import { logger } from "@/lib/logger";
 interface MessageType {
 	id: string;
 	role: "user" | "assistant";
@@ -137,7 +138,7 @@ export default function Sidebar({
 		const updatedConversations = conversations.map((conv) =>
 			conv.folder === folderName ? { ...conv, folder: null } : conv
 		);
-		console.log(
+		logger.debug(
 			"Delete folder:",
 			folderName,
 			"Updated conversations:",
@@ -149,7 +150,7 @@ export default function Sidebar({
 		const updatedConversations = conversations.map((conv) =>
 			conv.folder === oldName ? { ...conv, folder: newName } : conv
 		);
-		console.log(
+		logger.debug(
 			"Rename folder:",
 			oldName,
 			"to",

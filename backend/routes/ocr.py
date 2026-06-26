@@ -1,14 +1,18 @@
 """OCR and invoice extraction routes"""
+import logging
+
 from flask import Blueprint, request, jsonify
+
 from utils.image_processing import (
-    image_to_base64, 
-    convert_pdf_to_images, 
-    pil_image_to_bytes
+    image_to_base64,
+    convert_pdf_to_images,
+    pil_image_to_bytes,
 )
 from utils.openrouter import extract_and_structure_with_openrouter
-from flask import Blueprint, request, jsonify
 from utils.normalize import normalize_transaction
 from utils.save_transaction import save_transaction
+
+logger = logging.getLogger(__name__)
 # Create blueprint
 ocr_bp = Blueprint('ocr', __name__)
 
@@ -51,7 +55,7 @@ def extract_invoice_data():
         # Step 1: Perform OCR
         if file_ext == 'pdf':
             # Convert PDF to images and process first page
-            print("Converting PDF to images...")
+            logger.info("Converting PDF to images...")
             images = convert_pdf_to_images(file_content)
             
             if not images:
@@ -62,7 +66,7 @@ def extract_invoice_data():
             image_base64 = image_to_base64(img_bytes)
             media_type = 'image/png'
             
-            print("Processing PDF page with OpenRouter...")
+            logger.info("Processing PDF page with OpenRouter...")
             structured_data = extract_and_structure_with_openrouter(image_base64, media_type)
             
             # Add metadata
@@ -71,7 +75,7 @@ def extract_invoice_data():
         
         elif file_ext in media_type_map:
             # Process image directly
-            print(f"Processing {file_ext} image with OpenRouter...")
+            logger.info(f"Processing {file_ext} image with OpenRouter...")
             image_base64 = image_to_base64(file_content)
             media_type = media_type_map[file_ext]
             
@@ -85,7 +89,7 @@ def extract_invoice_data():
         structured_data['file_type'] = file_ext
         
         # Step 2: Normalize the OCR data
-        print("Normalizing transaction data...")
+        logger.info("Normalizing transaction data...")
         try:
             normalized = normalize_transaction(structured_data)
         except Exception as e:
@@ -98,14 +102,14 @@ def extract_invoice_data():
         # Step 3: Save to database (optional - graceful degradation)
         transaction_id = None
         db_warning = None
-        print(f"Saving transaction to database for user {user_id}...")
+        logger.info(f"Saving transaction to database for user {user_id}...")
         try:
             transaction_id = save_transaction(user_id, normalized)
-            print(f"✅ Transaction {transaction_id} saved to database")
+            logger.info(f"✅ Transaction {transaction_id} saved to database")
         except Exception as e:
             db_warning = f"Database save failed: {str(e)}"
-            print(f"⚠️  {db_warning}")
-            print("   Continuing without database storage (OCR successful)")
+            logger.warning(f"⚠️  {db_warning}")
+            logger.info("   Continuing without database storage (OCR successful)")
         
         # Step 4: Return success response
         response_data = {
@@ -125,7 +129,7 @@ def extract_invoice_data():
         return jsonify(response_data), 200
     
     except Exception as e:
-        print(f"Error: {str(e)}")
+        logger.info(f"Error: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

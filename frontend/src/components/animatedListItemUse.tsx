@@ -7,6 +7,7 @@ import { RefreshCw } from "lucide-react";
 import { transactionApi } from "@/lib/api/client";
 import { eventBus, EVENTS } from "@/lib/events";
 
+import { logger } from "@/lib/logger";
 interface Invoice {
 	id: string; // UUID from database
 	vendor_name: string | null;
@@ -40,7 +41,7 @@ export default function AnimatedListItemUse() {
 			setLoading(true);
 			setError(null);
 
-			console.log(
+			logger.debug(
 				"🔄 AnimatedList: Fetching invoices from database API..."
 			);
 
@@ -53,13 +54,13 @@ export default function AnimatedListItemUse() {
 				sort_order: "desc",
 			});
 
-			console.log("📥 AnimatedList: API Response:", {
+			logger.debug("📥 AnimatedList: API Response:", {
 				success: response.success,
 				count: response.data?.length,
 			});
 
 			if (response.success && response.data) {
-				console.log(
+				logger.debug(
 					`✅ AnimatedList: Fetched ${response.data.length} transactions from database`
 				);
 				setItems(response.data);
@@ -78,7 +79,7 @@ export default function AnimatedListItemUse() {
 				const invoices = storedInvoices
 					? JSON.parse(storedInvoices)
 					: [];
-				console.log("Using localStorage fallback:", invoices);
+				logger.debug("Using localStorage fallback:", invoices);
 				setItems(invoices);
 			} catch (localError) {
 				setItems([]);
@@ -100,14 +101,14 @@ export default function AnimatedListItemUse() {
 
 	// Load invoices on component mount and listen for updates
 	useEffect(() => {
-		console.log(
+		logger.debug(
 			"🔄 AnimatedListItemUse: Component mounted, fetching invoices..."
 		);
 		fetchInvoices();
 
 		// Listen for invoice updates
 		const handleInvoiceUpdate = () => {
-			console.log(
+			logger.debug(
 				"🔔 AnimatedListItemUse: Invoice update event received, refreshing..."
 			);
 			fetchInvoices();
@@ -117,10 +118,10 @@ export default function AnimatedListItemUse() {
 			EVENTS.INVOICE_UPDATED,
 			handleInvoiceUpdate
 		);
-		console.log("👂 AnimatedListItemUse: Listening for invoice updates");
+		logger.debug("👂 AnimatedListItemUse: Listening for invoice updates");
 
 		return () => {
-			console.log("🔇 AnimatedListItemUse: Cleaning up event listener");
+			logger.debug("🔇 AnimatedListItemUse: Cleaning up event listener");
 			unsubscribe();
 		};
 	}, []);
@@ -245,7 +246,7 @@ export default function AnimatedListItemUse() {
 			<AnimatedList
 				items={transformedItems}
 				onItemSelect={(item, index) =>
-					console.log("Selected:", item, index)
+					logger.debug("Selected:", item, index)
 				}
 				showGradients={false}
 				enableArrowNavigation={true}

@@ -1,5 +1,6 @@
 "use client";
 import { useState, ReactNode, ComponentType } from "react";
+import { logger } from "@/lib/logger";
 import {
 	Paperclip,
 	Bot,
@@ -37,28 +38,28 @@ export default function ComposerActionsPopover({
 		{
 			icon: Paperclip,
 			label: "Add photos & files",
-			action: () => console.log("Add photos & files"),
+			action: () => logger.debug("Add photos & files"),
 		},
 		{
 			icon: Bot,
 			label: "Agent mode",
 			badge: "NEW",
-			action: () => console.log("Agent mode"),
+			action: () => logger.debug("Agent mode"),
 		},
 		{
 			icon: Search,
 			label: "Deep research",
-			action: () => console.log("Deep research"),
+			action: () => logger.debug("Deep research"),
 		},
 		{
 			icon: Palette,
 			label: "Create image",
-			action: () => console.log("Create image"),
+			action: () => logger.debug("Create image"),
 		},
 		{
 			icon: BookOpen,
 			label: "Study and learn",
-			action: () => console.log("Study and learn"),
+			action: () => logger.debug("Study and learn"),
 		},
 	];
 
@@ -66,12 +67,12 @@ export default function ComposerActionsPopover({
 		{
 			icon: Globe,
 			label: "Web search",
-			action: () => console.log("Web search"),
+			action: () => logger.debug("Web search"),
 		},
 		{
 			icon: Palette,
 			label: "Canvas",
-			action: () => console.log("Canvas"),
+			action: () => logger.debug("Canvas"),
 		},
 		{
 			icon: () => (
@@ -80,7 +81,7 @@ export default function ComposerActionsPopover({
 				</div>
 			),
 			label: "Connect Google Drive",
-			action: () => console.log("Connect Google Drive"),
+			action: () => logger.debug("Connect Google Drive"),
 		},
 		{
 			icon: () => (
@@ -89,7 +90,7 @@ export default function ComposerActionsPopover({
 				</div>
 			),
 			label: "Connect OneDrive",
-			action: () => console.log("Connect OneDrive"),
+			action: () => logger.debug("Connect OneDrive"),
 		},
 		{
 			icon: () => (
@@ -98,7 +99,7 @@ export default function ComposerActionsPopover({
 				</div>
 			),
 			label: "Connect Sharepoint",
-			action: () => console.log("Connect Sharepoint"),
+			action: () => logger.debug("Connect Sharepoint"),
 		},
 	];
 

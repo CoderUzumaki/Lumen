@@ -1,8 +1,15 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
 
-// Backend API base URL
-const API_BASE_URL =
-	process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+// Backend API base URL. next.config.js enforces this at build time, so by the
+// time this module loads the value should be defined. The explicit check
+// catches misconfigurations that bypassed the build-time guard (e.g. a stale
+// .next cache served with a different env).
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+if (!API_BASE_URL) {
+	throw new Error(
+		"NEXT_PUBLIC_BACKEND_URL is not set. See frontend/.env.example."
+	);
+}
 
 // Token storage keys
 const TOKEN_KEY = "invox_access_token";

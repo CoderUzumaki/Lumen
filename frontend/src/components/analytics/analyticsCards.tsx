@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from "react";
 import { analyticsApi, tokenManager } from "@/lib/api/client";
 
+import { logger } from "@/lib/logger";
 interface SelectedPeriod {
 	year: number;
 	month?: number;
@@ -97,7 +98,7 @@ export default function AnalyticsCards({
 				// Hardcode to "123" for testing where transaction data exists
 				const userId = "123";
 
-				console.log("Fetching analytics with params:", {
+				logger.debug("Fetching analytics with params:", {
 					userId,
 					timeRange,
 					year: selectedPeriod.year,
@@ -113,16 +114,16 @@ export default function AnalyticsCards({
 					selectedPeriod.week
 				);
 
-				console.log("Analytics API Response:", response);
-				console.log("Response success:", response.success);
-				console.log("Has current_period:", !!response.current_period);
+				logger.debug("Analytics API Response:", response);
+				logger.debug("Response success:", response.success);
+				logger.debug("Has current_period:", !!response.current_period);
 
 				if (response.success && response.current_period) {
 					const current = response.current_period;
 					const previous = response.previous_period;
 
-					console.log("Current period data:", current);
-					console.log("Previous period data:", previous);
+					logger.debug("Current period data:", current);
+					logger.debug("Previous period data:", previous);
 
 					const newData = {
 						avgSpending: current.average_spending || 0,
@@ -153,7 +154,7 @@ export default function AnalyticsCards({
 								  100
 								: 0,
 					};
-					console.log("Setting data to:", newData);
+					logger.debug("Setting data to:", newData);
 					setData(newData);
 				} else {
 					console.error(

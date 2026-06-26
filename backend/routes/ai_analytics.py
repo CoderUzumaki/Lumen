@@ -7,7 +7,7 @@ from ai.analytics_orchestrator import AnalyticsOrchestrator
 from models.database import db
 
 # Create blueprint
-analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
+ai_analytics_bp = Blueprint('ai_analytics', __name__, url_prefix='/api/analytics')
 
 # Initialize orchestrator (will be initialized within app context)
 orchestrator = None
@@ -18,7 +18,7 @@ def init_analytics():
     if orchestrator is None:
         orchestrator = AnalyticsOrchestrator()
 
-@analytics_bp.route('/analyze', methods=['POST'])
+@ai_analytics_bp.route('/analyze', methods=['POST'])
 def run_analysis():
     """
     Trigger comprehensive analysis for user
@@ -79,7 +79,7 @@ def run_analysis():
         }), 500
 
 
-@analytics_bp.route('/dashboard', methods=['GET'])
+@ai_analytics_bp.route('/dashboard', methods=['GET'])
 def get_dashboard():
     """
     Get quick dashboard summary
@@ -118,7 +118,7 @@ def get_dashboard():
         }), 500
 
 
-@analytics_bp.route('/reminders', methods=['GET'])
+@ai_analytics_bp.route('/reminders', methods=['GET'])
 def get_reminders():
     """
     Get smart reminders
@@ -162,7 +162,7 @@ def get_reminders():
         }), 500
 
 
-@analytics_bp.route('/anomalies', methods=['GET'])
+@ai_analytics_bp.route('/anomalies', methods=['GET'])
 def get_anomalies():
     """
     Get detected anomalies
@@ -206,7 +206,7 @@ def get_anomalies():
         }), 500
 
 
-@analytics_bp.route('/forecast', methods=['GET'])
+@ai_analytics_bp.route('/forecast', methods=['GET'])
 def get_forecast():
     """
     Get spending forecast
@@ -247,7 +247,7 @@ def get_forecast():
         }), 500
 
 
-@analytics_bp.route('/risk-score', methods=['GET'])
+@ai_analytics_bp.route('/risk-score', methods=['GET'])
 def get_risk_score():
     """
     Get financial health risk score
@@ -286,7 +286,7 @@ def get_risk_score():
         }), 500
 
 
-@analytics_bp.route('/insights', methods=['GET'])
+@ai_analytics_bp.route('/insights', methods=['GET'])
 def get_insights():
     """
     Get all insights for user
@@ -339,7 +339,7 @@ def get_insights():
         }), 500
 
 
-@analytics_bp.route('/insights/<int:insight_id>/read', methods=['POST'])
+@ai_analytics_bp.route('/insights/<int:insight_id>/read', methods=['POST'])
 def mark_insight_read(insight_id):
     """Mark an insight as read"""
     try:
@@ -363,7 +363,7 @@ def mark_insight_read(insight_id):
         }), 500
 
 
-@analytics_bp.route('/patterns', methods=['GET'])
+@ai_analytics_bp.route('/patterns', methods=['GET'])
 def get_patterns():
     """
     Get detected spending patterns
@@ -407,7 +407,7 @@ def get_patterns():
         }), 500
 
 
-@analytics_bp.route('/health', methods=['GET'])
+@ai_analytics_bp.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
     return jsonify({

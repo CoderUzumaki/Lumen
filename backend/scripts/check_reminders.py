@@ -4,7 +4,7 @@ Check why reminders aren't being generated
 import sys
 import os
 from datetime import datetime, timedelta
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app
 from ai.pattern_detection import PatternDetectionAgent

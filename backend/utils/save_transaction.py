@@ -51,8 +51,8 @@ def save_transaction(user_id, normalized):
                 'address': tx.address
             })
         except Exception as e:
-            print(f"⚠️  Warning: Failed to add transaction to ChromaDB: {e}")
-            print("   Transaction saved to SQLite but not available for semantic search")
+            logger.warning(f"⚠️  Warning: Failed to add transaction to ChromaDB: {e}")
+            logger.info("   Transaction saved to SQLite but not available for semantic search")
 
         for item in normalized["items"]:
             db.session.add(TransactionItem(

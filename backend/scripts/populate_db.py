@@ -6,8 +6,8 @@ import os
 from datetime import datetime, timedelta
 import random
 
-# Add the backend directory to the path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add the backend directory (parent of scripts/) to the path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app
 from models.database import db

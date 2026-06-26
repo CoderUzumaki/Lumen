@@ -1,15 +1,17 @@
 # routes/chat.py
+import logging
 
 from flask import Blueprint, request, jsonify
+
 from ai.hybrid_query_engine import HybridQueryEngine
-import os
+from config import Config
+
+logger = logging.getLogger(__name__)
 
 chat_bp = Blueprint('chat', __name__)
 
-# Initialize engine with SQLite database path
-engine = HybridQueryEngine(
-    db_path="instance/lumen.db"
-)
+# Initialize engine with the configured SQLite database path.
+engine = HybridQueryEngine(db_path=str(Config.DATABASE_PATH))
 
 @chat_bp.route('/chat', methods=['POST'])
 def chat():
@@ -30,7 +32,7 @@ def chat():
     user_id = data.get('user_id', '1')  # Get from auth in production, default to '1' as string
     
     try:
-        print(f"Processing query: {data['query']} for user: {user_id}")
+        logger.info(f"Processing query: {data['query']} for user: {user_id}")
         result = engine.query(data['query'], str(user_id))  # Ensure user_id is string
         
         return jsonify({
@@ -39,7 +41,7 @@ def chat():
         }), 200
     
     except Exception as e:
-        print(f"Error in chat endpoint: {e}")
+        logger.info(f"Error in chat endpoint: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({

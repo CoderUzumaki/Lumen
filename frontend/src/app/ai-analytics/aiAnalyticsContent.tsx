@@ -11,6 +11,7 @@ import AISuggestionsCard from "@/components/ai-analytics/aiSuggestionsCard";
 import SpendingTrendGraph from "@/components/ai-analytics/spendingTrendGraph";
 import CategoryPieChart from "@/components/ai-analytics/categoryPieChart";
 
+import { logger } from "@/lib/logger";
 export default function AIAnalyticsContent() {
 	const [analysisTriggered, setAnalysisTriggered] = useState(false);
 
@@ -20,7 +21,7 @@ export default function AIAnalyticsContent() {
 			if (analysisTriggered) return;
 
 			try {
-				console.log("🚀 Triggering AI analysis...");
+				logger.debug("🚀 Triggering AI analysis...");
 				const response = await fetch(
 					"http://localhost:5000/api/analytics/analyze",
 					{
@@ -40,7 +41,7 @@ export default function AIAnalyticsContent() {
 
 				if (response.ok) {
 					const data = await response.json();
-					console.log("✅ AI Analysis complete:", data);
+					logger.debug("✅ AI Analysis complete:", data);
 					setAnalysisTriggered(true);
 				} else {
 					console.error("❌ Analysis failed:", await response.text());

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { logger } from "@/lib/logger";
 const AnimatedChatDemo = ({ isActive }: { isActive: boolean }) => {
 	const [messages, setMessages] = useState([
 		{ text: "Hi! How can I help you today?", isBot: true, visible: false },
@@ -487,7 +488,7 @@ export function FeaturesSection() {
 		const observer = new IntersectionObserver(
 			([entry]) => {
 				if (entry.isIntersecting) {
-					console.log("[v0] Features Section is now visible"); // Added debug log
+					logger.debug("[v0] Features Section is now visible"); // Added debug log
 					setIsVisible(true);
 				}
 			},
