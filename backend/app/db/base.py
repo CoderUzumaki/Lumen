@@ -1,12 +1,17 @@
-"""SQLAlchemy declarative base + async engine wiring for Lumen.
+"""SQLAlchemy declarative base + shared column mixins + async engine wiring.
 
-Every ORM model inherits from `Base`. `Base` provides the shared columns
-`id` / `created_at` / `updated_at` per BUILD.md's BOOT-05 spec, so downstream
-migrations don't need to restate them per table.
+Every ORM model inherits from `Base`. The shared columns (id, created_at,
+updated_at) are provided by mixins so tables can opt in only to what they
+actually need — `user_preferences` uses its own natural key, `positions` /
+`themes` have no `updated_at`, etc.
 
-At runtime the app uses `asyncpg` (via `AsyncEngine` + `AsyncSession`).
-Alembic runs synchronously and uses `psycopg2` for migrations — `env.py`
-swaps the driver on the way in.
+Runtime uses `asyncpg` via `AsyncEngine` + `AsyncSession`. Alembic runs
+synchronously with `psycopg2` — see `alembic/env.py` for the driver swap.
+
+Deviation from BOOT-05: BUILD.md's BOOT-05 spec put `id` / `created_at` /
+`updated_at` on Base directly. DATA-01's schema requires per-table opt-in
+(user_preferences has no `id`; positions / themes have no `updated_at`).
+Refactored to mixins here; every subsequent model composes what it needs.
 """
 from __future__ import annotations
 
@@ -27,25 +32,35 @@ from app.utils.config import Config
 
 
 class Base(DeclarativeBase):
-    """Declarative base with the columns every Lumen model shares.
+    """Bare declarative base. Models compose mixins for shared columns."""
 
-    - `id`         : UUID primary key, defaults to `uuid.uuid4()` on insert.
-    - `created_at` : server-generated timestamp at insert time.
-    - `updated_at` : server-generated timestamp, refreshed on every UPDATE.
+    pass
 
-    Models add their own columns on top; nothing here needs to be repeated.
-    """
+
+class IdMixin:
+    """UUID primary key, defaults to `uuid.uuid4()` on insert."""
 
     id: Mapped[uuid.UUID] = mapped_column(
         PostgresUUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
     )
+
+
+class CreatedAtMixin:
+    """Server-generated `created_at` timestamp."""
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
+
+
+class TimestampsMixin(CreatedAtMixin):
+    """`created_at` + `updated_at`. Extends CreatedAtMixin so you can pick
+    one or both without duplicate column declarations."""
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -54,19 +69,13 @@ class Base(DeclarativeBase):
     )
 
 
-# --- Async engine + session factory ------------------------------------------
-#
-# The engine is created lazily on first access so that importing `app.db.base`
-# doesn't require a valid DATABASE_URL at import time (needed for Alembic
-# offline mode and for tooling that just wants the Base metadata).
-
+# --- Async engine + session factory (lazy) ----------------------------------
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
 def get_engine() -> AsyncEngine:
-    """Return the process-wide async engine, creating it on first call."""
     global _engine
     if _engine is None:
         _engine = create_async_engine(Config.DATABASE_URL, pool_pre_ping=True)
@@ -74,7 +83,6 @@ def get_engine() -> AsyncEngine:
 
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
-    """Return the process-wide async session factory, creating it on first call."""
     global _session_factory
     if _session_factory is None:
         _session_factory = async_sessionmaker(
@@ -86,11 +94,6 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 async def get_db_session() -> AsyncSession:
-    """FastAPI dependency: yield an AsyncSession scoped to a single request.
-
-    Usage:
-        async def route(db: AsyncSession = Depends(get_db_session)) -> ...:
-    """
     factory = get_session_factory()
     async with factory() as session:
         yield session

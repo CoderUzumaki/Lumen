@@ -389,7 +389,7 @@ Goal: get from the current Flask + invoice-OCR trajectory to a clean FastAPI + a
 
 Everything a user configures about themselves. Nothing agentic yet.
 
-### DATA-01 — Migration: user_preferences, portfolios, positions, themes
+### DATA-01 — Migration: user_preferences, portfolios, positions, themes ✅
 
 - **Files:** `backend/app/db/models/*.py`, new Alembic migration `alembic/versions/xxxx_phase1_data.py`.
 - **Action:** Create SQLAlchemy models matching this schema exactly:

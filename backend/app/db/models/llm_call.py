@@ -1,6 +1,6 @@
 """`llm_calls` — one row per LLM invocation, for benchmarking.
 
-Full spec lives in OPT-05. BOOT-06 lands this table so the LLM wrapper has
+Full spec lives in OPT-05. BOOT-06 landed this table so the LLM wrapper has
 somewhere to write; OPT-05 later adds the companion `llm_cache` table and
 the semantic-lookup logic.
 """
@@ -12,10 +12,10 @@ from sqlalchemy import Boolean, Integer, String
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base
+from app.db.base import Base, IdMixin, TimestampsMixin
 
 
-class LlmCall(Base):
+class LlmCall(IdMixin, TimestampsMixin, Base):
     __tablename__ = "llm_calls"
 
     agent_name: Mapped[str] = mapped_column(String, nullable=False)

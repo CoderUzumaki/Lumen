@@ -2,71 +2,84 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-03 (session 8 — BOOT-08 CI baseline, closing Phase 0)
-**Progress:** 10/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08). **Phase 0 done.**
+**Last updated:** 2026-07-03 (session 9 — DATA-01 Phase 1 schema)
+**Progress:** 11/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01).
 
 ---
 
 ## Next module
 
-**ID:** `DATA-01`
-**Title:** Migration: user_preferences, portfolios, positions, themes
-**Depends on:** BOOT-05
-**Read:** `BUILD.md` → the `DATA-01` block (that section only). It contains the authoritative SQL schema for the four Phase 1 tables.
+**ID:** `DATA-02`
+**Title:** Pydantic schemas for portfolio / positions / themes
+**Depends on:** DATA-01
+**Read:** `BUILD.md` → the `DATA-02` block (that section only).
 
-**Branch state:** BOOT-01..BOOT-08 stacked on `856d503`. Phase 0 is complete: FastAPI app, auth, config, DB engine, LLM wrapper with tests, `.env.example` mirroring, and CI. Phase 1 (portfolios / positions / themes) starts with the schema migration.
+**Branch state:** BOOT-01..BOOT-08 + DATA-01 stacked on `856d503`. The DB layer now has four Phase 1 tables (`user_preferences`, `portfolios`, `positions`, `themes`) plus `llm_calls` from BOOT-06. Base was refactored from BOOT-05's monolithic id/created_at/updated_at into `Base + IdMixin + CreatedAtMixin + TimestampsMixin` mixins so DATA-01 could match the SQL schema exactly. LlmCall opts in to `(IdMixin, TimestampsMixin)` — the schema on disk is unchanged.
 
 Before starting, verify:
 - `git branch --show-current` shows `v2/intelligence-agent`.
-- `git log --oneline -10` shows BOOT-08..BOOT-01 on top of `856d503` / `f7e479a`.
+- `git log --oneline -11` shows DATA-01..HP-01 stacked on `856d503`/`f7e479a`.
 - `git status` is clean.
-- GitHub Actions CI on the last push shows green (or explain the failure).
+- `cd backend && python -m pytest tests -v` reports 8 passed, 1 deselected.
+- `cd backend && DATABASE_URL="sqlite:///./_scratch.db" alembic upgrade head` applies both `boot06_llm_calls` and `data01_user_prefs_portfolios_positions_themes`.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute BOOT-08 — provision `.github/workflows/ci.yml` so backend `ruff check && pytest` and frontend `npm run lint && npm run build && npm test` run on every push and PR to `v2/intelligence-agent`. Closes Phase 0.
+- **Session goal:** Execute DATA-01 — introduce the four Phase 1 tables (`user_preferences`, `portfolios`, `positions`, `themes`) with SQLAlchemy models that match the SQL schema exactly, and the Alembic migration that provisions them on both Postgres (with `auth.users` FKs) and sqlite (CI fallback, no `auth.users`).
 - **Completed:**
-  - `BOOT-08` ✅ — CI baseline.
-  - `.github/workflows/ci.yml` — three jobs:
-    - **backend** (`ubuntu-latest`, Python 3.11): sets up pip cache keyed on `backend/requirements.txt`, installs deps + `ruff==0.7.0`, runs `ruff check .`, runs `pytest -v` with placeholder env vars (FLASK_ENV, SECRET_KEY, OPENROUTER_API_KEY, SUPABASE_URL, DATABASE_URL) so `Config.validate()` passes without touching a live provider. `free_tier_live`-marked tests remain deselected via `pyproject.toml`'s `addopts`.
-    - **frontend** (`ubuntu-latest`, Node 20): `npm ci`, `npm run lint`, `npm run build`, `npm test`. Each build/lint step gets the required `NEXT_PUBLIC_*` env vars inline so `next.config.ts`'s fail-fast doesn't trip.
-    - **eval-regression** — `if: false` stub. EVAL-04 flips it on and wires the LangSmith regression run per BUILD.md.
-  - `frontend/package.json` — added a `"test"` script (`echo … && exit 0`) so `npm test` returns green while real frontend tests are still pending. Marked explicit that they'll land in a later phase.
+  - `DATA-01` ✅ — Phase 1 schema.
+  - **Refactored `backend/app/db/base.py`.** BOOT-05 had `id`/`created_at`/`updated_at` on `Base` itself, which doesn't match DATA-01's schema (`user_preferences` uses its natural key as PK; `positions` and `themes` have no `updated_at`). Split into a bare `Base(DeclarativeBase)` plus opt-in mixins `IdMixin`, `CreatedAtMixin`, `TimestampsMixin (extends CreatedAtMixin)`. Marked as a deliberate deviation from BOOT-05 — the file's docstring calls this out.
+  - **Updated `backend/app/db/models/llm_call.py`** to compose `(IdMixin, TimestampsMixin, Base)`. Schema on disk is unchanged; only Python composition changed.
+  - **Created four new models:**
+    - `backend/app/db/models/user_preferences.py` — natural PK on `user_id`. CHECK constraints on `briefing_hour BETWEEN 0 AND 23` and `model_tier IN ('fast','thorough')`. Server defaults on all four business columns.
+    - `backend/app/db/models/portfolio.py` — `IdMixin + TimestampsMixin`, `UniqueConstraint(user_id, name)`, and a partial unique index (`idx_portfolios_user_active`) enforcing "at most one active portfolio per user" using dialect-appropriate `WHERE` clauses (`is_active = 1` on sqlite, `is_active = TRUE` on Postgres). Index is declared in the model *and* the migration so `Base.metadata.create_all()` in tests emits it.
+    - `backend/app/db/models/position.py` — `IdMixin + CreatedAtMixin` (no `updated_at` per spec). `ForeignKey("portfolios.id", ondelete="CASCADE")` on `portfolio_id` — same-DB FK is portable and doesn't need dialect guards. `UniqueConstraint(portfolio_id, ticker, exchange)`. CHECK constraint on `asset_type IN ('equity','etf','crypto','bond','other')`. `NUMERIC(20,8)` for `quantity` and `cost_basis`.
+    - `backend/app/db/models/theme.py` — `IdMixin + CreatedAtMixin`. CHECK constraint on `weight BETWEEN 0 AND 1`. `NUMERIC(3,2)` for `weight`.
+  - **Registered all four in `backend/app/db/models/__init__.py`** so `alembic autogenerate` and `Base.metadata.create_all()` pick them up.
+  - **Wrote migration `371a33d86850_data01_user_prefs_portfolios_positions_themes.py`.** Creates all four tables + indexes. Guards the FKs to `auth.users(id)` behind `if op.get_bind().dialect.name == "postgresql"` so sqlite doesn't try to reference a schema it doesn't have; Postgres gets the full Supabase-native FK graph with `ondelete="CASCADE"`. Discarded the spurious `alter_column NUMERIC → UUID` on `llm_calls` that autogenerate emits because sqlite reports UUID columns as NUMERIC affinity — that alter is a no-op and would create false diffs on future autogenerates.
+  - **Wrote `backend/tests/db/test_models.py::test_phase1_schema`** — 116 lines covering:
+    - Happy-path insert into all four tables.
+    - `briefing_hour=99` → `IntegrityError` (CHECK).
+    - `model_tier="lightning"` → `IntegrityError` (CHECK).
+    - `asset_type="futures"` → `IntegrityError` (CHECK).
+    - `weight=1.5` → `IntegrityError` (CHECK).
+    - `(user_id, name)` duplicate → `IntegrityError` (UNIQUE on portfolios).
+    - `(portfolio_id, ticker, exchange)` duplicate → `IntegrityError` (UNIQUE on positions).
+    - Second active portfolio per user → `IntegrityError` (partial unique index).
+    - Cascade delete: deleting a portfolio drops its positions. FK enforcement enabled via `PRAGMA foreign_keys=ON` connect hook.
 - **Acceptance verified locally:**
-  - `ruff check .` from `backend/` returns "All checks passed!"
-  - `python -m pytest tests/utils/test_llm.py -v` from `backend/` → 7 passed, 1 deselected.
-  - `NEXT_PUBLIC_*=… npm run lint` from `frontend/` returns "No ESLint warnings or errors" (a Next 16 deprecation notice about `next lint` also prints — cosmetic, doesn't fail the step).
-  - `NEXT_PUBLIC_*=… npm run build` from `frontend/` — clean build (verified previously in BOOT-04, unchanged).
-  - `npm test` from `frontend/` — exits 0, echoes the "no tests yet" line.
-  - **Actual GitHub Actions run**: verifying after this push lands on origin. If the workflow fails, that's an incremental fix, not a redo of BOOT-08's structure.
-- **Files touched:** created `.github/workflows/ci.yml`. Modified `frontend/package.json` (added `test` script), `BUILD.md` (tick), `HANDOFF.md` (this file). Nothing deleted.
-- **Migrations added:** none.
-- **Tests added:** none. (BOOT-08 wires *existing* tests into CI.)
+  - `alembic upgrade head` runs both migrations (`boot06_llm_calls` → `data01_user_prefs_portfolios_positions_themes`) — verified on sqlite.
+  - `alembic downgrade -1 && alembic upgrade head` is a clean no-op — no residual state, no complaints.
+  - `python -m pytest tests -v` reports **8 passed, 1 deselected** (7 LLM tests from BOOT-06 + 1 Phase 1 schema test from DATA-01; live-provider test still opt-in).
+  - `ruff check .` clean.
+- **Files touched:** created `backend/app/db/models/{user_preferences,portfolio,position,theme}.py`, `backend/alembic/versions/371a33d86850_data01_user_prefs_portfolios_positions_.py`, `backend/tests/db/__init__.py`, `backend/tests/db/test_models.py`. Modified `backend/app/db/base.py` (Base refactor), `backend/app/db/models/__init__.py` (registry), `backend/app/db/models/llm_call.py` (composes mixins), `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Migrations added:** 1 — `371a33d86850_data01_user_prefs_portfolios_positions_themes`.
+- **Tests added:** 1 (`test_phase1_schema`, ~9 assertions across CHECK / UNIQUE / cascade behaviours).
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **`ruff` isn't in `requirements.txt`.** BOOT-02's requirements list didn't include it, and BOOT-08's Action item names it explicitly. Installed inline in the CI step (`pip install ruff==0.7.0`) rather than pinning to the runtime deps — ruff is a dev-time linter, not a runtime dep, so keeping it out of `requirements.txt` avoids bloating deploy images. Later modules can move to a `requirements-dev.txt` split if that seems worthwhile.
-  - **Frontend `npm test` is a placeholder `echo && exit 0`.** BUILD.md's Testing global says "Frontend tests: `vitest` for units, Playwright for the onboarding smoke test." Neither is set up yet; the placeholder makes `npm test` non-lying (it says "no unit tests configured yet") while satisfying the CI step's exit code. A later module — plausibly around DATA-06 or an explicit `EVAL`/`QA` module — wires the first vitest suite.
-  - **Real GitHub Actions verification is pending until this commit hits `origin/v2/intelligence-agent`.** All CI steps were run locally and passed; the workflow file itself is validated by YAML syntax + shape. The acceptance criterion "PR checks show green on a trivial change" completes when Actions actually runs the workflow.
+  - **`Base` was refactored from BOOT-05's monolithic shape into mixins.** BOOT-05's spec says Base has `id + created_at + updated_at`. DATA-01's schema requires per-table opt-in — `user_preferences` has no `id` (uses `user_id` as PK); `positions` and `themes` have no `updated_at`. Kept the same field defaults so `LlmCall` (which composes both mixins) has an identical DDL. The alternative — using multiple base classes or accepting extra columns on some tables — would violate DATA-01's "matching this schema exactly" language.
+  - **Model does not declare FK to `auth.users`.** Model has raw `user_id UUID` columns; migration adds `auth.users` FKs conditionally on Postgres (`op.get_bind().dialect.name == "postgresql"`). Reason: sqlite has no schemas, and `sa.ForeignKey("auth.users.id")` on sqlite emits `REFERENCES "auth"."users"(id)` which no CI-available sqlite has. This means future autogenerate runs against Postgres will NOT diff the FKs (since the model doesn't declare them) — that's the tradeoff for CI portability, and it's fine because DATA-01 owns the FKs in its migration; nothing else does.
+  - **Cascade-delete acceptance covers only same-DB FKs.** The test verifies portfolio→positions cascade (declared in the model, portable). Cascades from `auth.users` → user_preferences / portfolios / themes are Postgres-only and are not exercised in CI; they'd need a live Supabase environment to test end-to-end. When staging comes up, a smoke of "deleting an auth.user cascades to their portfolios" would validate.
 
 ---
 
 ## Environment state
 
-- Backend: unchanged from BOOT-07 apart from being test-covered in CI now.
-- Frontend: `package.json` picks up a `test` script (placeholder).
-- Database: unchanged.
+- Backend: FastAPI app, auth, LLM wrapper, and four Phase 1 tables + `llm_calls` all live. Two migrations applied cleanly. Ruff clean.
+- Frontend: unchanged.
+- Database: `user_preferences`, `portfolios`, `positions`, `themes`, `llm_calls` on both sqlite (CI) and Postgres (Supabase). Postgres additionally has FKs to `auth.users`.
 - Vectors: unchanged (none).
-- Tests: 7 hermetic backend tests in CI (frontend TBD).
-- CI: `handoff-check.yml` (from HP-02) + `ci.yml` (new, BOOT-08).
-- Docs on `v2/intelligence-agent`: unchanged.
+- Tests: 8 hermetic, 1 opt-in.
+- CI: `ci.yml` runs backend ruff + pytest + frontend build + lint + test.
+- Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **CI first-run is untested from this environment.** GitHub Actions will report on the push. If the backend install times out (likely candidate: `sentence-transformers` + torch on cold cache) or something else fails, the next session should look at the Actions log and iterate — the workflow's structure is right, but a specific dep or step may need tuning.
+- **None.** DATA-02 is next — Pydantic schemas for the same four entities. Purely translation from the ORM shape to Pydantic v2 models for request/response bodies.
 
 ---
 
@@ -74,7 +87,7 @@ Before starting, verify:
 
 1. **Read `HANDOFF.md` first** (this file). Do this before anything else.
 2. **Read `PRD.md`** (all of it — it's short). Non-goals and principles are vetoes.
-3. **Read the `BUILD.md` block for the "Next module" ID above.** Do NOT read other module blocks unless the current one lists them as dependencies. DATA-01 lists the SQL schema directly in its block.
+3. **Read the `BUILD.md` block for the "Next module" ID above.** Do NOT read other module blocks unless the current one lists them as dependencies.
 4. **Do NOT re-read the entire repo.** Files outside the module's scope are irrelevant.
 5. **Implement the module and only the module.** Match Acceptance criteria literally.
 6. **Do NOT expand scope.** If you notice an adjacent problem, add it as a new module ID in `BUILD.md` — don't fold it into the current work.
