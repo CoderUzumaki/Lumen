@@ -1,0 +1,94 @@
+name: Handoff freshness
+
+# Enforces the handoff protocol from BUILD.md.
+# Two hard checks (must-pass): HANDOFF.md exists and has the required sections.
+# Two soft checks (warnings only): freshness (>14 days) and code-changed-without-handoff-update.
+# The intent is signal, not friction — warnings surface in the CI summary without blocking a merge.
+
+on:
+  push:
+    branches:
+      - 'v2/intelligence-agent'
+      - 'feat/**'
+  pull_request:
+    branches:
+      - 'v2/intelligence-agent'
+
+jobs:
+  handoff-check:
+    name: HANDOFF.md protocol
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify HANDOFF.md exists
+        run: |
+          if [ ! -f HANDOFF.md ]; then
+            echo "::error file=HANDOFF.md::HANDOFF.md is missing at repo root. See BUILD.md → Handoff Protocol."
+            exit 1
+          fi
+
+      - name: Verify HANDOFF.md structure
+        run: |
+          missing=""
+          grep -q "^\*\*Last updated:\*\*" HANDOFF.md || missing="$missing Last-updated"
+          grep -q "^## Next module" HANDOFF.md || missing="$missing Next-module"
+          grep -q "^## Last session" HANDOFF.md || missing="$missing Last-session"
+          grep -q "^## Environment state" HANDOFF.md || missing="$missing Environment-state"
+          if [ -n "$missing" ]; then
+            echo "::error file=HANDOFF.md::HANDOFF.md is missing required sections:$missing. See the template in BUILD.md → Handoff Protocol."
+            exit 1
+          fi
+          echo "All required sections present."
+
+      - name: Check HANDOFF.md freshness
+        run: |
+          # Expected format: **Last updated:** YYYY-MM-DD (session <n>)
+          last_updated=$(grep -oP '(?<=\*\*Last updated:\*\* )\d{4}-\d{2}-\d{2}' HANDOFF.md | head -1)
+          if [ -z "$last_updated" ]; then
+            echo "::warning file=HANDOFF.md::Could not parse 'Last updated:' date. Expected 'YYYY-MM-DD' immediately after '**Last updated:**'."
+            exit 0
+          fi
+          last_epoch=$(date -d "$last_updated" +%s 2>/dev/null || echo "")
+          if [ -z "$last_epoch" ]; then
+            echo "::warning file=HANDOFF.md::Could not parse date '$last_updated' as YYYY-MM-DD."
+            exit 0
+          fi
+          now_epoch=$(date +%s)
+          age_days=$(( (now_epoch - last_epoch) / 86400 ))
+          echo "HANDOFF.md last updated $age_days days ago ($last_updated)."
+          if [ "$age_days" -gt 14 ]; then
+            echo "::warning file=HANDOFF.md::HANDOFF.md is $age_days days old. If a recent session shipped code without updating it, the next session will have to reconstruct context."
+          fi
+
+      - name: Check code changed without HANDOFF.md update (push only)
+        if: github.event_name == 'push'
+        run: |
+          base="${{ github.event.before }}"
+          head="${{ github.sha }}"
+          # New-branch push (before is all-zeros) — compare against refactor merge-base.
+          if [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            git fetch origin refactor --depth=1 || true
+            base=$(git merge-base "$head" origin/refactor 2>/dev/null || echo "$head~1")
+          fi
+          changed=$(git diff --name-only "$base" "$head" 2>/dev/null || echo "")
+          code_changed=$(echo "$changed" | grep -E '^(backend|frontend)/' || true)
+          handoff_changed=$(echo "$changed" | grep -E '^HANDOFF\.md$' || true)
+          if [ -n "$code_changed" ] && [ -z "$handoff_changed" ]; then
+            echo "::warning file=HANDOFF.md::This push modified backend/ or frontend/ but did not touch HANDOFF.md. If this ends a session, update HANDOFF.md before handing off."
+          fi
+
+      - name: Check code changed without HANDOFF.md update (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+          changed=$(git diff --name-only "$base_sha" "$head_sha" 2>/dev/null || echo "")
+          code_changed=$(echo "$changed" | grep -E '^(backend|frontend)/' || true)
+          handoff_changed=$(echo "$changed" | grep -E '^HANDOFF\.md$' || true)
+          if [ -n "$code_changed" ] && [ -z "$handoff_changed" ]; then
+            echo "::warning file=HANDOFF.md::This PR modifies backend/ or frontend/ but does not update HANDOFF.md. If merging ends a session, update HANDOFF.md first."
+          fi
