@@ -231,7 +231,7 @@ Goal: get from the current Flask + invoice-OCR trajectory to a clean FastAPI + a
   - `git log --oneline v2/intelligence-agent..main` is empty (no missed commits).
 - **Depends on:** none.
 
-### BOOT-02 — FastAPI scaffolding
+### BOOT-02 — FastAPI scaffolding ✅
 
 - **Files:** `backend/app/main.py`, `backend/app/__init__.py`, `backend/pyproject.toml`, `backend/requirements.txt`, `backend/alembic.ini`, `backend/app/db/base.py`.
 - **Action:**
