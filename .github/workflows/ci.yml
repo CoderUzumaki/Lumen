@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [v2/intelligence-agent]
+  pull_request:
+    branches: [v2/intelligence-agent]
+
+jobs:
+  backend:
+    name: Backend (lint + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff==0.7.0
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Pytest
+        env:
+          # Placeholder values so Config.validate() / test imports don't fail.
+          # Real integrations use their own secrets; nothing here hits a live
+          # provider (the free_tier_live marker is deselected by default).
+          FLASK_ENV: development
+          SECRET_KEY: ci-secret
+          OPENROUTER_API_KEY: ci-openrouter-key
+          SUPABASE_URL: https://ci.example.supabase.co
+          DATABASE_URL: sqlite+aiosqlite:///./_ci.db
+        run: pytest -v
+
+  frontend:
+    name: Frontend (lint + build + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        env:
+          NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+          NEXT_PUBLIC_SUPABASE_URL: https://ci.example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key
+        run: npm run lint
+
+      - name: Build
+        env:
+          NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+          NEXT_PUBLIC_SUPABASE_URL: https://ci.example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  # LangSmith eval regression job — enabled by EVAL-04. Kept here as a stub so
+  # BOOT-08's CI file is the single source of truth.
+  eval-regression:
+    name: Eval regression (skipped until EVAL-04)
+    runs-on: ubuntu-latest
+    if: false
+    steps:
+      - run: echo "placeholder — EVAL-04 wires the LangSmith regression run"

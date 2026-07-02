@@ -372,7 +372,7 @@ Goal: get from the current Flask + invoice-OCR trajectory to a clean FastAPI + a
   - Every required var in `Config` appears in `.env.example`.
 - **Depends on:** BOOT-03.
 
-### BOOT-08 — CI baseline
+### BOOT-08 — CI baseline ✅
 
 - **Files:** `.github/workflows/ci.yml`.
 - **Action:**
