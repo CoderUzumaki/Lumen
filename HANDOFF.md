@@ -2,67 +2,76 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-02 (session 3 — BOOT-03 Config + FastAPI auth port)
-**Progress:** 5/60 modules complete (HP-01, HP-02, BOOT-01, BOOT-02, BOOT-03)
+**Last updated:** 2026-07-02 (session 4 — BOOT-04 frontend scaffolding reset)
+**Progress:** 6/60 modules complete (HP-01, HP-02, BOOT-01, BOOT-02, BOOT-03, BOOT-04)
 
 ---
 
 ## Next module
 
-**ID:** `BOOT-04`
-**Title:** Frontend scaffolding reset
-**Depends on:** BOOT-01
-**Read:** `BUILD.md` → the `BOOT-04` block (that section only)
+**ID:** `BOOT-05`
+**Title:** Supabase database bootstrap + Alembic wiring
+**Depends on:** BOOT-02
+**Read:** `BUILD.md` → the `BOOT-05` block (that section only)
 
-**Branch state:** BOOT-01..BOOT-03 are on top of `856d503`. Backend now has `backend/app/main.py` wired to `Config.validate()` + `configure_logging()` on lifespan; `backend/app/utils/{config,auth,logging_config}.py` are the authoritative ports; the old paths (`backend/config.py`, `backend/utils/*`, `backend/scripts/`) are deleted. Frontend still has the auth-only skeleton from BOOT-01 — that's BOOT-04's problem: rebuild the `/` landing, wire `QueryClientProvider` + `ThemeProvider` into `layout.tsx`, prune `package.json`, add the new deps.
+**Branch state:** BOOT-01..BOOT-04 stacked on `856d503`. Backend serves `/health` + `/api/me` on Next-plus-Supabase-plus-Postgres shape. Frontend now builds cleanly (Next 15 + Providers stack + plain `/` landing + Suspense-wrapped `/signin`). BOOT-05's job is Postgres/Alembic wiring: `backend/app/db/base.py` gets the id/created_at/updated_at columns and the async engine + session factory; `backend/alembic/env.py` (already present as a BOOT-02 shim) gets extended with the sync-vs-async driver split spec'd in BUILD.md.
 
 Before starting, verify:
 - `git branch --show-current` shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows BOOT-03, BOOT-02, BOOT-01 stacked on top of `856d503` / `f7e479a`.
+- `git log --oneline -6` shows BOOT-04, BOOT-03, BOOT-02, BOOT-01 on top of `856d503` and `f7e479a`.
 - `git status` is clean.
-- `python -c "from app.utils.auth import require_auth; from app.utils.config import Config"` succeeds from `backend/` with deps installed.
+- `cd frontend && npm install && npm run build` succeeds (with `NEXT_PUBLIC_*` env vars set — see `next.config.ts`).
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute BOOT-03 — port the surviving `backend/config.py`, `backend/utils/auth.py`, `backend/utils/logging_config.py` into `backend/app/utils/`, adapt `require_auth` from a Flask decorator to a FastAPI dependency returning a `UserContext` Pydantic model, add the new env vars from BUILD.md §Environment variables, and wire everything into `main.py`.
+- **Session goal:** Execute BOOT-04 — reset the frontend scaffold. `/` becomes a plain landing, `layout.tsx` wraps children in Providers (Auth + Query + Theme), `package.json` sheds the trajectory-only deps and picks up the ones the intelligence-agent modules will need, and `npm run build` succeeds cleanly.
 - **Completed:**
-  - `BOOT-03` ✅ — config + auth port.
-  - `backend/app/utils/__init__.py` (empty, package marker).
-  - `backend/app/utils/config.py` — the full BUILD.md §Environment variables surface as `Config.*` attributes: `ALLOWED_ORIGINS`, `DATABASE_URL`, `LOG_LEVEL`, `SUPABASE_URL`, `SUPABASE_JWT_AUD`, `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `LLM_TEXT_MODEL_FAST`, `LLM_TEXT_MODEL_THOROUGH`, `LLM_RATE_LIMIT_RPM` (JSON), `LLM_DAILY_BUDGET_USD`, `EMBEDDING_MODEL`, `EMBEDDING_DEVICE`, `NEWSAPI_KEY`, `MARKETAUX_KEY`, `GDELT_ENABLED`, `EDGAR_USER_AGENT`, `RSS_FEEDS`, `YFINANCE_CACHE_PATH`, `CHROMA_PATH`, `LANGSMITH_*`, `LANGFUSE_*`, `INGEST_INTERVAL_MINUTES`, `CLUSTER_SIMILARITY_THRESHOLD`, `PREFILTER_THRESHOLD`, `SECRET_KEY`, `FLASK_ENV`. Kept the ephemeral-dev-SECRET_KEY behaviour from the original. `Config.validate()` requires `SECRET_KEY`, `OPENROUTER_API_KEY`, `SUPABASE_URL` — everything else is optional-at-boot and validates at point-of-use. Discarded from the original: `LLM_VISION_MODEL`, `OPENROUTER_CHAT_URL`, `LLM_TEXT_MODEL`, `LLM_EMBEDDING_MODEL`, `OPENROUTER_MODEL`, `DEFAULT_CURRENCY`, `DATABASE_PATH`/`DATABASE_URI` (superseded by `DATABASE_URL`), `SUPABASE_KEY`, old `CHROMA_DB_PATH`.
-  - `backend/app/utils/auth.py` — `UserContext` Pydantic model (`user_id: UUID`, `email: str`, `role: str`); `async def require_auth(request: Request) -> UserContext` FastAPI dependency raising `HTTPException(401)` on failure; `verify_token()` preserves the JWKS caching + audience/issuer/anon-role checks from the Flask port. Fixed a carry-over bug: `PyJWKClient.get_signing_key_from_jwt` raises `jwt.DecodeError` (not `PyJWKClientError`) on malformed tokens — now caught and mapped to `TokenError("invalid_token", ...)`.
-  - `backend/app/utils/logging_config.py` — ported verbatim per Action item 4; only tweak was replacing the Flask-era noisy-logger list (`werkzeug`) with `httpx`. BUILD.md §Structured logging targets structlog, but BOOT-03's spec is "port unchanged" — a later observability module can migrate.
-  - `backend/app/main.py` — lifespan now calls `configure_logging()` and `Config.validate()` (removes the BOOT-02 deferred deviation). CORS now reads `Config.ALLOWED_ORIGINS`. Added `GET /api/me` protected by `Depends(require_auth)`, returning `_ok({"user_id", "email", "role"})`.
-  - Deleted the old paths: `backend/config.py`, `backend/utils/__init__.py`, `backend/utils/auth.py`, `backend/utils/logging_config.py`, `backend/scripts/__init__.py` (with the now-empty `backend/scripts/`).
+  - `BOOT-04` ✅ — frontend scaffolding reset.
+  - `frontend/next.config.ts` — TypeScript config, keeps the existing `NEXT_PUBLIC_*` fail-fast check; replaces `frontend/next.config.js` (deleted).
+  - `frontend/package.json` — trimmed and re-pinned:
+    - **Removed** trajectory deps: `axios`, `framer-motion`, `motion`, `three`, `ogl`, `postprocessing`, `mathjs`, `recharts`, `@tabler/icons-react` (each only ever imported by the deleted landing / analytics / chatbot pages).
+    - **Added** intelligence-agent deps: `@tanstack/react-query@^5.62.0`, `react-markdown@^9.0.1`, `eventsource-parser@^3.0.0`, `date-fns@^4.1.0`, `zod@^3.23.8`.
+    - **Kept** everything the surviving `components/ui/*`, `auth/*`, and `lib/*` need: all `@radix-ui/*`, `@supabase/supabase-js`, `class-variance-authority`, `clsx`, `lucide-react`, `tailwindcss` + `@tailwindcss/postcss`, `tailwind-merge`.
+    - **Bumped** `next` from `14.2.5` → `^15.0.4` and `eslint-config-next` to match — see the deviation below.
+  - `frontend/src/components/theme-provider.tsx` — minimal client component that pins `data-theme="dark"` + `.dark` on `<html>`. A real light/dark toggle waits for v0.2 per PRD §12.
+  - `frontend/src/components/providers.tsx` — client-only stack (`ThemeProvider → QueryClientProvider → AuthProvider`). `QueryClient` is memoized behind `useState` so Fast Refresh doesn't drop the cache.
+  - `frontend/src/app/layout.tsx` — Server Component. Sets `<html lang="en" className="dark" data-theme="dark">`, imports `./globals.css`, wraps children in `<Providers>`. Metadata rewritten to the Personal Financial Intelligence Agent tagline.
+  - `frontend/src/app/page.tsx` — plain placeholder landing (title, one-paragraph pitch, "Sign in" / "View source" buttons, disclaimer). DEPLOY-05 replaces this with the real marketing page.
+  - `frontend/src/app/globals.css` — trimmed ~700 lines of trajectory-specific animation keyframes (fade-in-hero, animate-float, pulse-glow, drawCircle, gradient-background-N, etc.). Kept the Tailwind v4 boilerplate + shadcn OKLCH tokens + base layer so the surviving `components/ui/*` primitives keep rendering. DESIGN-01 (cross-cutting) rewrites the tokens to BUILD.md's canonical palette.
+  - `frontend/src/app/signin/page.tsx` — wrapped in a Suspense boundary (see deviation below); auth flow otherwise untouched.
+  - `frontend/package-lock.json` — regenerated by npm to reflect the Next 15 bump.
 - **Acceptance verified locally:**
-  - `from app.utils.auth import require_auth` and `from app.utils.config import Config` import cleanly (system Python 3.11.5 with `fastapi`, `PyJWT[crypto]`, `pydantic`, `python-dotenv` installed).
-  - `Config.validate()` with `FLASK_ENV=production` and every required var unset raises `ValueError: Missing required environment variable(s): SECRET_KEY, OPENROUTER_API_KEY, SUPABASE_URL. ...`.
-  - In-process ASGI:
-    - `GET /health` → 200 with envelope `{"data": {"status": "ok", "commit": "dev"}, "error": null}`.
-    - `GET /api/me` no `Authorization` header → 401 with envelope `{"data": null, "error": {"code": "unauthorized", "message": "missing_token"}}`.
-    - `GET /api/me` with `Authorization: Bearer not-a-real-jwt` → 401 with envelope `{... "message": "invalid_token"}`.
-    - `GET /api/me` with malformed `Authorization: NotBearer xyz` → 401 with envelope `{... "message": "missing_token"}` (parser rejects non-Bearer scheme before token verification).
-  - `GET /api/me` with a real Supabase JWT was NOT tested end-to-end — that requires a live Supabase project and a signed token. The JWKS verification path is a straight port of the working refactor-branch code plus the DecodeError fix; the frontend AUTH tests will exercise it live once BOOT-04 is up.
-- **Files touched:** created `backend/app/utils/__init__.py`, `backend/app/utils/config.py`, `backend/app/utils/auth.py`, `backend/app/utils/logging_config.py`. Modified `backend/app/main.py` (imports, lifespan, CORS source, `/api/me`), `BUILD.md` (tick), `HANDOFF.md` (this file). Deleted `backend/config.py`, `backend/utils/__init__.py`, `backend/utils/auth.py`, `backend/utils/logging_config.py`, `backend/scripts/__init__.py`.
+  - `npm install` in `frontend/` succeeds with zero errors (system Node 22.19.0, npm 11.6.2).
+  - `NEXT_PUBLIC_BACKEND_URL=http://localhost:8000 NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... npm run build` succeeds with zero errors and zero missing-module warnings. Build output shows three routes — `/`, `/_not-found`, `/signin` — all statically prerendered:
+    ```
+    Route (app)                                 Size  First Load JS
+    ┌ ○ /                                      162 B         106 kB
+    ├ ○ /_not-found                            993 B         103 kB
+    └ ○ /signin                              13.5 kB         180 kB
+    ```
+  - `/signin` still resolves (statically prerendered). A live end-to-end signin against a real Supabase project was NOT executed — that requires a configured Supabase auth project. The build succeeding is the strongest reproducible signal we can produce here.
+  - `/` renders the plain landing (no framework errors, no missing modules).
+- **Files touched:** created `frontend/next.config.ts`, `frontend/src/app/page.tsx`, `frontend/src/components/providers.tsx`, `frontend/src/components/theme-provider.tsx`. Modified `frontend/package.json`, `frontend/package-lock.json`, `frontend/src/app/globals.css`, `frontend/src/app/layout.tsx`, `frontend/src/app/signin/page.tsx`, `BUILD.md` (tick), `HANDOFF.md` (this file). Deleted `frontend/next.config.js`.
 - **Migrations added:** none.
-- **Tests added:** none. The first backend test file appears in BOOT-06 (`test_llm.py`). Ad-hoc ASGI smoke lives in the transcript only.
+- **Tests added:** none. Frontend tests appear in BOOT-08 (CI baseline) or later.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **Deleted the old paths after porting.** BUILD.md's Files scope for BOOT-03 lists the *new* paths under `backend/app/utils/`; it doesn't explicitly say to delete the originals. But keeping both would create two competing sources of truth (and confusing imports). Deletes were staged alongside the port.
-  - **Fixed a carry-over bug in the JWKS lookup.** The original `backend/utils/auth.py` had a `requests.RequestException` catch that never triggered (PyJWKClient uses `urllib.request`, not `requests`) and did NOT catch `jwt.DecodeError`, which propagates from `get_signing_key_from_jwt` on malformed tokens. Dropped the dead `requests` catch and added the `DecodeError` catch → `TokenError("invalid_token")`. Behaviour improvement is user-visible in the smoke output above.
-  - **BOOT-02's deferred `Config.validate()` + `configure_logging()` lifespan wiring is now done.** No net new deviation; this is the BOOT-02 deviation resolving inside BOOT-03 as the spec intends.
-  - **`logging_config.py` remained stdlib.** BUILD.md's global §Structured logging targets `structlog` JSON output with `request_id`/`user_id`/`route`/`module` fields — but BOOT-03's Action item 4 explicitly says "Port `logging_config.py` unchanged." Ported unchanged; the structlog migration is on a later observability module's plate.
+  - **Bumped `next` from 14.2.5 → 15.0.4 and `eslint-config-next` to match.** BUILD.md's BOOT-04 Files list names `next.config.ts`, which Next.js 14 does not accept (`Configuring Next.js via 'next.config.ts' is not supported. Please replace the file with 'next.config.js' or 'next.config.mjs'`). PRD §10 says "Next.js 15 (App Router)" — so 15 is the intended target and the current pin was just legacy. Kept React on 18.3.1 (Next 15 supports both). If a later module wants React 19, that's a separate bump.
+  - **Wrapped `signin/page.tsx` in a `Suspense` boundary.** Next 15 tightened the rule: `useSearchParams()` must be under Suspense at prerender time. The Suspense wrapper is the minimal edit — the rest of the page (including its behaviour) is untouched. BOOT-04's acceptance says "existing auth flow untouched"; the flow is untouched, the framework's ergonomics were what changed.
+  - **Did NOT rewrite `globals.css` to BUILD.md's canonical design tokens.** BUILD.md's design-system section defines `--bg-base`, `--bg-surface`, `--text-primary`, `--confirmed`/`--refuted`/`--partial`/`--neutral`, etc. Rewriting the tokens now would break every `components/ui/*` primitive (which reads `--background`, `--foreground`, `--card`, etc.). DESIGN-01 is the cross-cutting module that owns that rewrite; it will migrate the ui primitives at the same time.
+  - **Did NOT touch `frontend/public/*`.** The dealership imagery, Cliste logo, and placeholder-avatar files are still there. BUILD.md's BOOT-04 Files scope is `frontend/src/*` + config; DEPLOY-05 / DEPLOY-06 handle the public assets when the real landing gets built.
 
 ---
 
 ## Environment state
 
-- Backend: FastAPI app boots, validates config, serves `GET /health` (public) and `GET /api/me` (auth-required). Everything else — LLM wrapper, models, ingestion, agents — is empty and waits for BOOT-04..BOOT-08 and beyond. `backend/app/` is the authoritative source tree; the pre-BOOT-01 paths at `backend/config.py` / `backend/utils/*` / `backend/scripts/` are gone.
-- Frontend: unchanged from BOOT-01 — auth-only skeleton, no `/` route. BOOT-04 rebuilds.
-- Database: unchanged. Alembic can still autogenerate against `DATABASE_URL` (defaults to a sqlite scratch when unset).
-- Vectors: no vector store yet.
-- Tests: still no v2 tests.
+- Backend: FastAPI app boots, `GET /health` public, `GET /api/me` protected by Supabase JWT. Everything else — LLM wrapper, models, ingestion, agents — still empty.
+- Frontend: builds cleanly. Routes: `/` (plain landing placeholder), `/signin` (Supabase sign-in). Providers stack in place for TanStack Query, Auth, and Theme. Component set is auth + shadcn primitives only; no product UI yet.
+- Database: unchanged.
+- Vectors: unchanged (none).
+- Tests: none.
 - CI: `.github/workflows/handoff-check.yml` remains installed.
 - Docs on `v2/intelligence-agent`: `PRD.md`, `BUILD.md`, `HANDOFF.md`, `CONTRIBUTING.md`, `LICENSE`, `README.md`, `TODO.md`, `docs/AUTH.md`, `docs/screenshots/README.md`.
 
@@ -70,7 +79,7 @@ Before starting, verify:
 
 ## Open questions / blockers
 
-- **None.** BOOT-04 can start immediately.
+- **None.** BOOT-05 can start immediately. It wires the async SQLAlchemy engine + session factory in `backend/app/db/base.py`, adds the id/created_at/updated_at shared columns, and updates `backend/alembic/env.py` so `alembic upgrade head` works against both a local Postgres and the Supabase Postgres.
 
 ---
 
@@ -78,7 +87,7 @@ Before starting, verify:
 
 1. **Read `HANDOFF.md` first** (this file). Do this before anything else.
 2. **Read `PRD.md`** (all of it — it's short). Non-goals and principles are vetoes.
-3. **Read the `BUILD.md` block for the "Next module" ID above.** Do NOT read other module blocks unless the current one lists them as dependencies. For BOOT-04 you also want the "Design system" section under §Global conventions since the frontend now needs its tokens.
+3. **Read the `BUILD.md` block for the "Next module" ID above.** Do NOT read other module blocks unless the current one lists them as dependencies.
 4. **Do NOT re-read the entire repo.** Files outside the module's scope are irrelevant.
 5. **Implement the module and only the module.** Match Acceptance criteria literally.
 6. **Do NOT expand scope.** If you notice an adjacent problem, add it as a new module ID in `BUILD.md` — don't fold it into the current work.

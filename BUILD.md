@@ -299,7 +299,7 @@ Goal: get from the current Flask + invoice-OCR trajectory to a clean FastAPI + a
   - `Config.validate()` fails startup if any required env var missing.
 - **Depends on:** BOOT-02.
 
-### BOOT-04 — Frontend scaffolding reset
+### BOOT-04 — Frontend scaffolding reset ✅
 
 - **Files:** `frontend/src/app/layout.tsx`, `frontend/src/app/page.tsx`, `frontend/src/app/globals.css`, `frontend/next.config.ts`, `frontend/package.json`.
 - **Action:**

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -23,7 +23,18 @@ import {
 } from "@/components/ui/card";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
+// Next 15 requires useSearchParams() to be under a Suspense boundary at
+// prerender time. Wrapping the inner client component keeps the existing auth
+// flow untouched while satisfying the framework.
 export default function SignInPage() {
+	return (
+		<Suspense fallback={null}>
+			<SignInInner />
+		</Suspense>
+	);
+}
+
+function SignInInner() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const { loading, user } = useAuth();
