@@ -213,7 +213,7 @@ Anything the user or a future session proposes that isn't in this document goes 
 
 Goal: get from the current Flask + invoice-OCR trajectory to a clean FastAPI + agent-ready foundation. No product functionality yet.
 
-### BOOT-01 — Cut the `v2/intelligence-agent` branch and prune legacy
+### BOOT-01 — Cut the `v2/intelligence-agent` branch and prune legacy ✅
 
 - **Files:** everything under `backend/` except `backend/config.py`, `backend/utils/auth.py`, `backend/utils/logging_config.py`, `backend/.gitignore`. Everything under `frontend/src/` except `lib/supabase/*`, `components/auth/*`, `app/signin/*`, `app/layout.tsx`, `middleware.ts` (if any), and truly generic UI primitives under `components/ui/`.
 - **Action:**

@@ -10,7 +10,6 @@ import {
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 
-import { tokenManager } from "@/lib/api/client";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type AuthContextValue = {
@@ -20,28 +19,6 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-function syncSessionToLocalState(session: Session | null) {
-	if (!session) {
-		tokenManager.removeToken();
-		return;
-	}
-
-	tokenManager.setToken(session.access_token);
-	tokenManager.setUser({
-		id: session.user.id,
-		email: session.user.email ?? "",
-		name:
-			session.user.user_metadata?.full_name ??
-			session.user.user_metadata?.name ??
-			session.user.email ??
-			"User",
-		picture:
-			session.user.user_metadata?.avatar_url ??
-			session.user.user_metadata?.picture ??
-			"",
-	});
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
 	const [loading, setLoading] = useState(true);
@@ -73,7 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 			setSession(currentSession);
 			setUser(currentSession?.user ?? null);
-			syncSessionToLocalState(currentSession);
 			setLoading(false);
 		};
 
@@ -88,7 +64,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 			setSession(nextSession);
 			setUser(nextSession?.user ?? null);
-			syncSessionToLocalState(nextSession);
 			setLoading(false);
 		});
 

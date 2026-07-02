@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import Aurora from "@/components/landing/Aurora";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -88,14 +87,6 @@ export default function SignInPage() {
 	if (loading) {
 		return (
 			<div className="min-h-screen bg-black text-white relative overflow-hidden">
-				<div className="fixed inset-0">
-					<Aurora
-						colorStops={["#475569", "#64748b", "#475569"]}
-						amplitude={1.2}
-						blend={0.6}
-						speed={0.8}
-					/>
-				</div>
 				<div className="relative z-10 flex min-h-screen items-center justify-center px-4">
 					<div className="flex items-center gap-3 rounded-full border border-white/15 bg-white/10 px-5 py-3 backdrop-blur-md">
 						<Loader2 className="h-5 w-5 animate-spin" />
@@ -110,15 +101,6 @@ export default function SignInPage() {
 
 	return (
 		<div className="min-h-screen bg-black text-white relative overflow-hidden">
-			<div className="fixed inset-0">
-				<Aurora
-					colorStops={["#475569", "#64748b", "#475569"]}
-					amplitude={1.2}
-					blend={0.6}
-					speed={0.8}
-				/>
-			</div>
-
 			<div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-10">
 				<Card className="w-full max-w-lg border-white/15 bg-white/10 text-white shadow-2xl backdrop-blur-xl">
 					<CardHeader className="space-y-4">
