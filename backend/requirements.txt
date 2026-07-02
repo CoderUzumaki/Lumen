@@ -19,7 +19,7 @@ langfuse==2.53.0
 chromadb==0.5.11
 sentence-transformers==3.2.1
 apscheduler==3.10.4
-tenacity==9.0.0
+tenacity==8.5.0
 python-dotenv==1.0.1
 yfinance==0.2.44
 feedparser==6.0.11
