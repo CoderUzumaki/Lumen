@@ -10,14 +10,16 @@
 ## Next module
 
 **ID:** `BOOT-01`
-**Title:** Cut the `v2/intelligence-agent` branch and prune legacy
+**Title:** Prune legacy code from `v2/intelligence-agent` (the branch itself is already cut)
 **Depends on:** none
 **Read:** `BUILD.md` → the `BOOT-01` block (that section only)
 
+**Branch state:** `v2/intelligence-agent` is already created and checked out at commit `f7e479a` (which contains PRD.md, BUILD.md, HANDOFF.md, and the CI workflow — nothing else). The "cut branch" half of BOOT-01 is done; the remaining work is only the legacy pruning.
+
 Before starting, verify:
+- `git branch --show-current` shows `v2/intelligence-agent`.
+- `git log --oneline -2` shows `f7e479a` on top of `af39bef`.
 - `git status` is clean.
-- `git branch --show-current` shows `refactor` (or you are about to check it out).
-- `git fetch origin && git log origin/refactor..refactor` is empty (local matches remote).
 
 ---
 
@@ -45,8 +47,8 @@ Before starting, verify:
 - Database: local dev untouched; Supabase project unchanged.
 - Vectors: existing Chroma index at `backend/chroma_db/` is stale — BOOT-01 deletes it.
 - Tests: no v2 tests exist yet.
-- CI: `.github/workflows/handoff-check.yml` installed (HP-02). Product-code CI still comes in BOOT-08.
-- Files uncommitted on this worktree (pending your review before the branch cut): `PRD.md`, `BUILD.md`, `HANDOFF.md`, `.github/workflows/handoff-check.yml`.
+- CI: `.github/workflows/handoff-check.yml` installed (HP-02). Product-code CI still comes in BOOT-08. Workflow has not yet run (branch not pushed to origin at time of writing).
+- Docs committed on `v2/intelligence-agent` at `f7e479a`. Branch not yet pushed to origin — user will push when ready.
 
 ---
 
