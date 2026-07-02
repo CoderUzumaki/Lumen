@@ -6,10 +6,11 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-# BOOT-05 will extend this file to import app.db.base:Base.metadata as
-# target_metadata and to wire the sync driver swap consistently. For BOOT-02
-# the goal is only that `alembic revision --autogenerate` runs and produces an
-# empty migration (no models declared yet).
+# Alembic runs synchronously so we swap the asyncpg driver used at runtime
+# to psycopg2 for migrations. `Config.DATABASE_URL` is the source of truth;
+# `env.py` only owns the driver swap and the target_metadata wiring.
+from app.db.base import Base
+from app.utils.config import Config
 
 config = context.config
 
@@ -18,26 +19,24 @@ if config.config_file_name is not None:
 
 
 def _sync_database_url() -> str:
-    """Compose an Alembic-compatible sync DB URL from DATABASE_URL.
+    """Return an Alembic-compatible sync URL.
 
-    Alembic runs synchronously, so if the runtime uses asyncpg we swap to the
-    sync psycopg driver here. Falls back to a local sqlite scratch file when
-    DATABASE_URL is unset, so `alembic revision --autogenerate` works during
-    BOOT-02 acceptance runs without a live Postgres.
+    Priority:
+      1. `DATABASE_URL` env var, if set. Swap `postgresql+asyncpg://` →
+         `postgresql+psycopg2://`; leave any other dialect (sqlite, etc.)
+         alone.
+      2. `Config.DATABASE_URL` (which itself defaults to the local Postgres
+         connection string in `Config`), same swap.
     """
-    url = os.environ.get("DATABASE_URL", "sqlite:///./_alembic_scratch.db")
+    url = os.environ.get("DATABASE_URL") or Config.DATABASE_URL
     if url.startswith("postgresql+asyncpg://"):
         url = url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+    # Bare `postgresql://` defaults to psycopg2 in SQLAlchemy, so no swap needed.
     return url
 
 
 config.set_main_option("sqlalchemy.url", _sync_database_url())
 
-# No models registered yet at BOOT-02, but Alembic needs a MetaData for
-# --autogenerate to run at all. Import the empty Base.metadata so the
-# autogenerate acceptance produces an empty migration. BOOT-05 will extend
-# app.db.base with real models; this line then Just Works.
-from app.db.base import Base  # noqa: E402
 target_metadata = Base.metadata
 
 

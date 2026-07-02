@@ -313,7 +313,7 @@ Goal: get from the current Flask + invoice-OCR trajectory to a clean FastAPI + a
   - `/signin` still works (existing auth flow untouched).
 - **Depends on:** BOOT-01.
 
-### BOOT-05 — Supabase database bootstrap + Alembic wiring
+### BOOT-05 — Supabase database bootstrap + Alembic wiring ✅
 
 - **Files:** `backend/app/db/base.py`, `backend/alembic/env.py`.
 - **Action:**
