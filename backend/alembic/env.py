@@ -10,6 +10,9 @@ from sqlalchemy import engine_from_config, pool
 # to psycopg2 for migrations. `Config.DATABASE_URL` is the source of truth;
 # `env.py` only owns the driver swap and the target_metadata wiring.
 from app.db.base import Base
+# Import the model registry so every mapped class registers itself with
+# Base.metadata before autogenerate diffs against the live DB.
+import app.db.models  # noqa: F401
 from app.utils.config import Config
 
 config = context.config

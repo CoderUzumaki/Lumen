@@ -329,7 +329,7 @@ Goal: get from the current Flask + invoice-OCR trajectory to a clean FastAPI + a
   - Supabase Postgres: same.
 - **Depends on:** BOOT-02.
 
-### BOOT-06 — LLM wrapper (free-tier)
+### BOOT-06 — LLM wrapper (free-tier) ✅
 
 - **Files:** `backend/app/utils/llm.py`, `backend/app/utils/tracing.py`, `backend/app/utils/rate_limit.py`.
 - **Action:**

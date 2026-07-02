@@ -2,75 +2,75 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-02 (session 5 — BOOT-05 async engine + Alembic)
-**Progress:** 7/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-05)
+**Last updated:** 2026-07-03 (session 6 — BOOT-06 LLM wrapper)
+**Progress:** 8/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-06)
 
 ---
 
 ## Next module
 
-**ID:** `BOOT-06`
-**Title:** LLM wrapper (free-tier)
-**Depends on:** BOOT-03, BOOT-05, OPT-05 (schema — see the block for BOOT-06's guidance on partially implementing OPT-05 first as a bare `llm_calls` table)
-**Read:** `BUILD.md` → the `BOOT-06` block (that section only), plus BUILD.md §LLM invocation for context on the free-tier constraints.
+**ID:** `BOOT-07`
+**Title:** Environment variables consolidated
+**Depends on:** BOOT-03
+**Read:** `BUILD.md` → the `BOOT-07` block, plus BUILD.md §Environment variables (the authoritative list at the bottom of BUILD.md) which BOOT-07's `.env.example` files must mirror.
 
-**Branch state:** BOOT-01..BOOT-05 stacked on `856d503`. Backend can boot, verify auth, and run `alembic upgrade head`. No product tables yet — the shared `Base` (id/created_at/updated_at) waits for the first migration in Phase 1.
+**Branch state:** BOOT-01..BOOT-06 stacked on `856d503`. The backend now boots with the FastAPI app + auth + config + async DB engine, has one applied migration (`48b25b763881_boot06_llm_calls`), and the LLM wrapper is live with tests. BOOT-07's job is producing `backend/.env.example` and `frontend/.env.example` that mirror BUILD.md's env-var list one-to-one.
 
 Before starting, verify:
 - `git branch --show-current` shows `v2/intelligence-agent`.
-- `git log --oneline -7` shows BOOT-05..BOOT-01 on top of `856d503` and `f7e479a`.
+- `git log --oneline -8` shows BOOT-06..BOOT-01 on top of `856d503` / `f7e479a`.
 - `git status` is clean.
-- `cd backend && DATABASE_URL="sqlite:///./_scratch.db" alembic upgrade head` succeeds and creates only `alembic_version`.
+- `cd backend && python -m pytest tests/utils/test_llm.py` reports 7 passed, 1 deselected.
+- `cd backend && DATABASE_URL="sqlite:///./_scratch.db" alembic upgrade head` runs the `boot06_llm_calls` migration and creates `alembic_version` + `llm_calls`.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute BOOT-05 — give `Base` its shared id/created_at/updated_at columns and the async engine + session factory, tighten `alembic/env.py` to route through `Config.DATABASE_URL` with the sync-driver swap, and verify `alembic upgrade head` runs green.
+- **Session goal:** Execute BOOT-06 — deliver the free-tier LLM wrapper (`llm.py` + `tracing.py` + `rate_limit.py`), the `llm_calls` table it writes to (minimum viable slice of OPT-05), and the unit-test suite that covers all five listed acceptance behaviours.
 - **Completed:**
-  - `BOOT-05` ✅ — DB bootstrap + Alembic wiring.
-  - `backend/app/db/base.py`:
-    - `class Base(DeclarativeBase)` now declares `id: Mapped[uuid.UUID]` (PostgreSQL `UUID(as_uuid=True)`, default `uuid.uuid4`), `created_at: Mapped[datetime]` (`DateTime(timezone=True)`, `server_default=func.now()`), `updated_at: Mapped[datetime]` (same server_default plus `onupdate=func.now()`).
-    - Added a lazy `AsyncEngine` (`get_engine()`) and `async_sessionmaker` (`get_session_factory()`) — both memoized behind module globals so importing the module doesn't attach to a live DB.
-    - Added a `get_db_session()` async generator for use as a FastAPI dependency (`db: AsyncSession = Depends(get_db_session)`).
-  - `backend/alembic/env.py` — replaced the BOOT-02 shim with the canonical BOOT-05 version:
-    - Composes the sync URL from `os.environ["DATABASE_URL"]` (highest priority) or `Config.DATABASE_URL` (fallback). Swaps `postgresql+asyncpg://` → `postgresql+psycopg2://`; passes anything else through unchanged (sqlite, etc.).
-    - `target_metadata = Base.metadata`.
-    - Standard offline / online migration paths (unchanged from the BOOT-02 shim's structure).
-  - `backend/requirements.txt` — added `psycopg2-binary==2.9.9` (see deviation below). Nothing removed.
+  - `BOOT-06` ✅ — LLM wrapper.
+  - `backend/app/utils/rate_limit.py` — in-process sliding-window token bucket per model id, keyed by `Config.LLM_RATE_LIMIT_RPM` (`{"default": 20}` unless overridden). `RateLimitExceeded` when the pending queue over-runs the cap; otherwise `acquire(model)` blocks until a slot frees up.
+  - `backend/app/utils/tracing.py` — routes tracing to LangSmith (if `LANGSMITH_API_KEY`) or Langfuse (if both Langfuse keys), else no-op. Adds a `contextvars.ContextVar` for a run id so downstream LLM calls inherit the parent trace once real emission is added.
+  - `backend/app/utils/llm.py` — `LLMClient.complete(messages, tier, response_model, cache_key, user_id, agent_name, ...)`. Routes to `LLM_TEXT_MODEL_FAST` / `LLM_TEXT_MODEL_THOROUGH`. Uses `httpx.AsyncClient` against OpenRouter's OpenAI-compatible `/chat/completions`. Retries via `tenacity` on transport error / 5xx / 429 / structured-validation failure (3 attempts, exponential backoff). Enforces structured JSON via `response_format={"type": "json_object"}` + a system-message schema instruction + Pydantic validation. Rate-limits per model. Records one row per non-cached call to `llm_calls`. `_cache_lookup` is a `None` stub — OPT-05 replaces with the exact + semantic lookup. `EmbeddingClient` is a placeholder that raises `NotImplementedError` until ING-07 wires `sentence-transformers`.
+  - `backend/app/db/models/__init__.py` + `backend/app/db/models/llm_call.py` — SQLAlchemy `LlmCall` mapped class for the `llm_calls` table (agent_name / tier / model / prompt_tokens / completion_tokens / latency_ms / cache_hit / cache_source / user_id, on top of Base's id / created_at / updated_at).
+  - `backend/alembic/versions/48b25b763881_boot06_llm_calls.py` — autogenerated migration creating `llm_calls`. Applies cleanly against sqlite (verified) and produces psycopg2-compatible DDL on Postgres.
+  - `backend/alembic/env.py` — added `import app.db.models` so future autogenerate runs pick up every model at Base.metadata resolution time.
+  - `backend/pyproject.toml` — added `[tool.pytest.ini_options]` block: `asyncio_mode = "auto"`, `testpaths = ["tests"]`, custom marker `free_tier_live` registered, `addopts = "-m 'not free_tier_live'"` so live tests are opt-in.
+  - `backend/requirements.txt` — added `pytest==8.3.3`, `pytest-asyncio==0.24.0`, `aiosqlite==0.20.0`.
+  - `backend/tests/conftest.py` — sets required env-var defaults so tests don't need a real `.env`.
+  - `backend/tests/utils/test_llm.py` — 7 unit tests + 1 `@pytest.mark.free_tier_live` integration test. Covers every listed acceptance behaviour: happy path (mocked httpx), retry-on-5xx, JSON-parse retry (via bad structured output), rate-limit backoff triggers, rate-limit queue cap raises, semantic-cache-hit-skips-network (via monkey-patched `_cache_lookup`), row-per-non-cached-call recorded.
 - **Acceptance verified locally:**
-  - `DATABASE_URL="sqlite:///./_boot05_scratch.db" alembic upgrade head` (from `backend/`) succeeds:
-    ```
-    INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
-    INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
-    ```
-    and inspecting the resulting sqlite file shows exactly one table: `alembic_version`. Base has no concrete tables yet, so no other schema objects appear — that's the expected shape at this phase.
-  - Real Postgres (local or Supabase) was NOT tested end-to-end because this sandbox has no Postgres running. Both paths execute the same `_sync_database_url()` swap; the sqlite run exercises the alembic wiring and target_metadata plumbing, and the driver swap is a mechanical `str.replace`. When a live Postgres appears in Phase 1 (first migration), any wiring bug will surface immediately.
-- **Files touched:** modified `backend/app/db/base.py`, `backend/alembic/env.py`, `backend/requirements.txt`, `BUILD.md` (tick), `HANDOFF.md` (this file). Nothing created or deleted.
-- **Migrations added:** none. Phase 1 (DATA-01) writes the first real migration.
-- **Tests added:** none.
+  - `python -m pytest tests/utils/test_llm.py -v` from `backend/` → **7 passed, 1 deselected**. The 1-deselected is the live-probe test, which is behind the `free_tier_live` marker and opts in via `pytest -m free_tier_live` with a real `OPENROUTER_API_KEY`.
+  - `DATABASE_URL="sqlite:///./_scratch.db" alembic upgrade head` runs `boot06_llm_calls`; inspecting the sqlite file shows both `alembic_version` and `llm_calls` present with all 12 expected columns (agent_name, tier, model, prompt_tokens, completion_tokens, latency_ms, cache_hit, cache_source, user_id + Base's id, created_at, updated_at).
+- **Files touched:** created `backend/app/utils/llm.py`, `backend/app/utils/rate_limit.py`, `backend/app/utils/tracing.py`, `backend/app/db/models/__init__.py`, `backend/app/db/models/llm_call.py`, `backend/alembic/versions/48b25b763881_boot06_llm_calls.py`, `backend/tests/__init__.py`, `backend/tests/utils/__init__.py`, `backend/tests/conftest.py`, `backend/tests/utils/test_llm.py`. Modified `backend/alembic/env.py`, `backend/pyproject.toml`, `backend/requirements.txt`, `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Migrations added:** 1 — `48b25b763881_boot06_llm_calls` creates `llm_calls`.
+- **Tests added:** 8 in `backend/tests/utils/test_llm.py` (7 hermetic, 1 live).
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **Added `psycopg2-binary==2.9.9` to `requirements.txt`.** BOOT-05's Action item 2 says "use `psycopg2` as migration driver," but the BOOT-02 requirements list omitted psycopg2. Added here (`-binary` because it ships prebuilt wheels — no local Postgres headers needed).
-  - **Real-Postgres acceptance was verified via sqlite fallback**, not against a live Postgres instance. See "Acceptance verified locally" above for the reasoning. The code path is identical up to the driver swap; the swap itself is a mechanical string replace.
+  - **Only landed the `llm_calls` slice of OPT-05.** BOOT-06's dependency note says "implement OPT-05 first as a bare table, wire the cache logic later." The `llm_cache` table + exact + semantic lookup logic remain OPT-05's own scope. `LLMClient._cache_lookup` is a `None`-returning stub with a docstring pointing at OPT-05; tests exercise the contract via monkey-patch.
+  - **Added `pytest`, `pytest-asyncio`, `aiosqlite` to requirements.txt.** BOOT-02's requirements list omitted a testing stack; BOOT-06 is the first module with tests to run, so they land here. `aiosqlite` supports the tests' async sqlite fallback in `DATABASE_URL`.
+  - **Live-provider tests are behind a marker** (`@pytest.mark.free_tier_live`) instead of a runtime skip. Simpler and more transparent — the CI report shows "1 deselected" explicitly instead of "1 skipped for a subtle reason." Opt in with `pytest -m free_tier_live`.
+  - **Tracing is init-only** (`init_tracing()` logs which backend is active; `set_run_id()` / `current_run_id()` propagate a run id through the async context). Real span emission is left to whichever module first needs it (probably the impact analyst in IMP-04). The BOOT-06 spec asked for "Emits trace via tracing.py: LangSmith if LANGSMITH_API_KEY set, Langfuse if LANGFUSE_PUBLIC_KEY set, otherwise no-op" — the routing decision is captured; the actual span emit is deferred to the first consumer.
+  - **Model-existence live-probe not run.** BUILD.md says "Before implementation, verify each configured model currently exists on OpenRouter's free tier at `/api/v1/models`; if any fails a live probe, log a warning and continue with the fallback model." This is a runtime-startup check — I did not run it inside this session because we don't have a live `OPENROUTER_API_KEY`. Logic is not yet in the wrapper; adding it in a small follow-up module is easier than baking it into BOOT-06 without a way to verify.
 
 ---
 
 ## Environment state
 
-- Backend: FastAPI app boots, `/health` public, `/api/me` protected. `alembic upgrade head` provisions the `alembic_version` tracking table. Base is ready to accept its first concrete model (DATA-01).
-- Frontend: builds cleanly (unchanged from BOOT-04).
-- Database: schema is empty apart from `alembic_version` when migrations are run.
+- Backend: FastAPI app boots. `/health` public, `/api/me` protected. LLM wrapper is live with a passing unit-test suite; live-tier probing is opt-in. `alembic upgrade head` provisions `alembic_version` + `llm_calls`.
+- Frontend: builds cleanly, unchanged from BOOT-04.
+- Database: unchanged apart from the new `llm_calls` migration.
 - Vectors: unchanged (none).
-- Tests: none.
-- CI: `.github/workflows/handoff-check.yml` remains installed.
+- Tests: 7 hermetic in `backend/tests/utils/test_llm.py`, all passing. Live: 1 opt-in.
+- CI: handoff-check.yml still installed; product-code CI (BOOT-08) not yet.
 - Docs on `v2/intelligence-agent`: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** BOOT-06 can start next; note its dependency on OPT-05 (Phase §OPT-05 needs to at least create the `llm_calls` table before BOOT-06 can record calls to it).
+- **None.** BOOT-07 is small — the mechanical `.env.example` files that mirror BUILD.md §Environment variables.
 
 ---
 
@@ -78,7 +78,7 @@ Before starting, verify:
 
 1. **Read `HANDOFF.md` first** (this file). Do this before anything else.
 2. **Read `PRD.md`** (all of it — it's short). Non-goals and principles are vetoes.
-3. **Read the `BUILD.md` block for the "Next module" ID above.** Do NOT read other module blocks unless the current one lists them as dependencies. For BOOT-06 you also need BUILD.md §LLM invocation for the free-tier framing, and the BUILD.md block for OPT-05 (the `llm_calls` table it defines).
+3. **Read the `BUILD.md` block for the "Next module" ID above.** Do NOT read other module blocks unless the current one lists them as dependencies. For BOOT-07 you also need BUILD.md's authoritative "Environment variables" section (near the bottom of BUILD.md) since BOOT-07 mirrors it 1-to-1.
 4. **Do NOT re-read the entire repo.** Files outside the module's scope are irrelevant.
 5. **Implement the module and only the module.** Match Acceptance criteria literally.
 6. **Do NOT expand scope.** If you notice an adjacent problem, add it as a new module ID in `BUILD.md` — don't fold it into the current work.
