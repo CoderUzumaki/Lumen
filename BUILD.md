@@ -281,7 +281,7 @@ Goal: get from the current Flask + invoice-OCR trajectory to a clean FastAPI + a
   - `alembic revision --autogenerate -m "init"` produces an empty migration (no models yet).
 - **Depends on:** BOOT-01.
 
-### BOOT-03 — Port `Config` and auth utilities
+### BOOT-03 — Port `Config` and auth utilities ✅
 
 - **Files:** `backend/app/utils/config.py`, `backend/app/utils/auth.py`, `backend/app/utils/logging_config.py`.
 - **Action:**

@@ -6,11 +6,15 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.utils.auth import UserContext, require_auth
+from app.utils.config import Config
+from app.utils.logging_config import configure_logging
 
 log = logging.getLogger("lumen")
 
@@ -43,11 +47,12 @@ _HTTP_CODE_MAP: dict[int, str] = {
 
 
 # --- Lifespan ----------------------------------------------------------------
-# BOOT-03 will wire Config.validate() + structlog init here. BOOT-06 will wire
-# LangSmith / Langfuse tracing. Kept as a bare startup log for BOOT-02.
+# BOOT-06 will wire LangSmith / Langfuse tracing here.
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    configure_logging()
+    Config.validate()
     log.info("lumen_startup", extra={"version": app.version})
     yield
     log.info("lumen_shutdown")
@@ -71,7 +76,7 @@ def _allowed_origins() -> list[str]:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins(),
+    allow_origins=Config.ALLOWED_ORIGINS or _allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -119,3 +124,12 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
 @app.get("/health")
 async def health() -> dict[str, Any]:
     return _ok({"status": "ok", "commit": os.environ.get("GIT_SHA", "dev")})
+
+
+@app.get("/api/me")
+async def me(user: UserContext = Depends(require_auth)) -> dict[str, Any]:
+    return _ok({
+        "user_id": str(user.user_id),
+        "email": user.email,
+        "role": user.role,
+    })

@@ -1,17 +1,20 @@
 """Centralized logging configuration.
 
-Call `configure_logging()` once at process start (done in app.py).
+Call `configure_logging()` once at process start (from `app.main` lifespan).
 Every module then uses `logger = logging.getLogger(__name__)`.
 
 Environment:
     LOG_LEVEL   DEBUG | INFO | WARNING | ERROR | CRITICAL  (default INFO)
-    LOG_FORMAT  'plain' | 'json'                            (default 'plain')
+
+BUILD.md §Structured logging targets `structlog` with JSON output. A later
+observability module will migrate; BOOT-03 ports the existing stdlib config
+verbatim per its Action item 4.
 """
+from __future__ import annotations
 
 import logging
 import os
 import sys
-
 
 _CONFIGURED = False
 
@@ -30,13 +33,12 @@ def configure_logging() -> None:
     handler.setFormatter(logging.Formatter(fmt))
 
     root = logging.getLogger()
-    # Replace any handlers Flask / Gunicorn may have attached
     root.handlers = [handler]
     root.setLevel(level)
 
     # Quiet down noisy third-party loggers unless the user explicitly raised the level.
     if level > logging.DEBUG:
-        for noisy in ("werkzeug", "urllib3", "chromadb.telemetry"):
+        for noisy in ("urllib3", "chromadb.telemetry", "httpx"):
             logging.getLogger(noisy).setLevel(logging.WARNING)
 
     _CONFIGURED = True
