@@ -41,9 +41,10 @@ export default function AnalyticsContent() {
 	const [timeRange, setTimeRange] = useState<TimeRange>(
 		tabParam || "monthly"
 	);
+	const now = new Date();
 	const [selectedPeriod, setSelectedPeriod] = useState<SelectedPeriod>({
-		year: 2024, // Default to 2024 where test data exists
-		month: 10, // November (0-indexed, so 10 = November)
+		year: now.getFullYear(),
+		month: now.getMonth(),
 	});
 
 	// Generate period options based on time range

@@ -13,7 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { analyticsApi, tokenManager } from "@/lib/api/client";
+import { analyticsApi } from "@/lib/api/client";
 
 interface SelectedPeriod {
 	year: number;
@@ -119,11 +119,8 @@ export default function SpendingTrendChart({
 		const fetchChartData = async () => {
 			try {
 				setLoading(true);
-				const user = tokenManager.getUser();
-				// if (!user?.id) return;
 
 				const response = await analyticsApi.getTimeRangeAnalytics(
-					"123",
 					timeRange,
 					selectedPeriod.year,
 					selectedPeriod.month,

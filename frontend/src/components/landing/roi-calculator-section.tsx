@@ -57,6 +57,7 @@ export function ROICalculatorSection() {
 				timeSaved: 75,
 				accuracy: 95,
 				costReduction: 60,
+				conversion: 20,
 			},
 			retail: {
 				avgOrder: 65,
@@ -64,6 +65,7 @@ export function ROICalculatorSection() {
 				timeSaved: 70,
 				accuracy: 94,
 				costReduction: 55,
+				conversion: 18,
 			},
 			realestate: {
 				avgOrder: 5000,
@@ -71,6 +73,7 @@ export function ROICalculatorSection() {
 				timeSaved: 80,
 				accuracy: 96,
 				costReduction: 70,
+				conversion: 15,
 			},
 			hospitality: {
 				avgOrder: 180,
@@ -78,6 +81,7 @@ export function ROICalculatorSection() {
 				timeSaved: 65,
 				accuracy: 93,
 				costReduction: 50,
+				conversion: 22,
 			},
 			healthcare: {
 				avgOrder: 250,
@@ -85,6 +89,7 @@ export function ROICalculatorSection() {
 				timeSaved: 85,
 				accuracy: 97,
 				costReduction: 75,
+				conversion: 12,
 			},
 			finance: {
 				avgOrder: 1200,
@@ -92,6 +97,7 @@ export function ROICalculatorSection() {
 				timeSaved: 80,
 				accuracy: 96,
 				costReduction: 70,
+				conversion: 16,
 			},
 			automotive: {
 				avgOrder: 25000,
@@ -99,6 +105,7 @@ export function ROICalculatorSection() {
 				timeSaved: 70,
 				accuracy: 95,
 				costReduction: 60,
+				conversion: 14,
 			},
 			default: {
 				avgOrder: 150,
@@ -106,6 +113,7 @@ export function ROICalculatorSection() {
 				timeSaved: 75,
 				accuracy: 95,
 				costReduction: 60,
+				conversion: 20,
 			},
 		};
 
@@ -129,6 +137,7 @@ export function ROICalculatorSection() {
 		timeSaved: businessConfig.timeSaved,
 		accuracy: businessConfig.accuracy,
 		costReduction: businessConfig.costReduction,
+		conversion: businessConfig.conversion,
 	};
 
 	// Current metrics

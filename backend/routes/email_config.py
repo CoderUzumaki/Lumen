@@ -11,6 +11,7 @@ from flask import Blueprint, g, request, jsonify
 from models import EmailConfig, User
 from models.database import db
 from utils.auth import require_auth
+from utils.crypto import encrypt_secret
 from utils.email_service import EmailService
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ def create_config():
         imap_server=data['imap_server'],
         imap_port=data.get('imap_port', 993),
         imap_username=data.get('imap_username'),
-        imap_password=data.get('imap_password'),
+        imap_password=encrypt_secret(data.get("imap_password", "")),
         use_ssl=data.get('use_ssl', True),
         polling_enabled=data.get('polling_enabled', False),
         polling_interval_minutes=data.get('polling_interval_minutes', 5),
@@ -135,7 +136,7 @@ def update_config():
     if 'mark_as_read' in data:
         config.mark_as_read = data['mark_as_read']
     if 'imap_password' in data:
-        config.imap_password = data['imap_password']
+        config.imap_password = encrypt_secret(data['imap_password'])
     if 'imap_server' in data:
         config.imap_server = data['imap_server']
     if 'imap_port' in data:
@@ -253,13 +254,18 @@ def resume_polling():
     return jsonify({'message': 'Polling resumed'})
 
 
+@email_config_bp.route('/gmail/auth-url', methods=['GET'])
 @email_config_bp.route('/gmail/auth', methods=['GET'])
 @require_auth
 def gmail_auth():
-    """Get Gmail OAuth authorization URL"""
-    # TODO: Implement OAuth flow
+    """Gmail OAuth is not implemented — use IMAP with an app password."""
     return jsonify({
-        'error': 'Gmail OAuth not yet implemented. Use IMAP with App Password instead.'
+        'error': 'gmail_oauth_unavailable',
+        'message': (
+            'Gmail OAuth is not available yet. Configure email polling with '
+            'IMAP: use an app-specific password from your Google Account '
+            'security settings and enter it in the email configuration dialog.'
+        ),
     }), 501
 
 

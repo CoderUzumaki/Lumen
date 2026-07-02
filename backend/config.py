@@ -86,12 +86,46 @@ class Config:
 
     # === Storage paths (all absolute) ===
     DATABASE_PATH = _env_path("DATABASE_PATH", INSTANCE_DIR / "lumen.db")
-    # SQLAlchemy URI form. On Windows, `sqlite:///C:\path\to.db` is the canonical
-    # absolute form (three slashes + drive letter). On POSIX the same `sqlite:///`
-    # prefix plus a leading slash works because the path itself starts with `/`.
-    DATABASE_URI = f"sqlite:///{DATABASE_PATH}"
+
+    @staticmethod
+    def _resolve_database_uri() -> str:
+        """Prefer DATABASE_URL (Postgres on Render); fall back to local SQLite."""
+        raw = (os.getenv("DATABASE_URL") or "").strip()
+        if raw:
+            url = raw
+            if url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql://", 1)
+            try:
+                from sqlalchemy.engine import make_url
+
+                make_url(url)
+                return url
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "DATABASE_URL is set but not a valid SQLAlchemy URL; "
+                    "falling back to SQLite at %s",
+                    Config.DATABASE_PATH,
+                )
+
+        # Use forward slashes so Windows paths parse correctly (sqlite:///C:/...)
+        path = Config.DATABASE_PATH.as_posix()
+        return f"sqlite:///{path}"
+
+    DATABASE_URI = None  # set after class body
 
     CHROMA_DB_PATH = _env_path("CHROMA_DB_PATH", BACKEND_DIR / "chroma_db")
+
+    # Fixed dev UUID for demo seed data (see docs/AUTH.md)
+    DEV_USER_ID = os.getenv(
+        "DEV_USER_ID", "00000000-0000-0000-0000-000000000123"
+    )
+
+    # Chroma/RAG — disable on Render unless a persistent disk is mounted
+    ENABLE_CHROMA = os.getenv("ENABLE_CHROMA", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     # === OpenRouter / LLM ===
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -116,6 +150,10 @@ class Config:
     # Legacy alias: some older modules still read `OPENROUTER_MODEL` from the
     # environment. Keep the alias so they get the text model by default.
     OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", LLM_TEXT_MODEL)
+
+    # === Upload limits ===
+    MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "10"))
+    MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
     # === Localization ===
     DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "INR")
@@ -151,6 +189,7 @@ class Config:
         required = {
             "OPENROUTER_API_KEY": cls.OPENROUTER_API_KEY,
             "SECRET_KEY": cls.SECRET_KEY,
+            "SUPABASE_URL": cls.SUPABASE_URL,
         }
         missing = [name for name, value in required.items() if not value]
         if missing:
@@ -173,3 +212,6 @@ config = {
     "production": ProductionConfig,
     "default": DevelopmentConfig,
 }
+
+# Resolve DATABASE_URI after class definition (needs DATABASE_PATH).
+Config.DATABASE_URI = Config._resolve_database_uri()

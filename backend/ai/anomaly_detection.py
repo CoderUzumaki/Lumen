@@ -407,51 +407,28 @@ Respond in JSON format:
             'anomalies': final_anomalies
         }
     
-    def save_anomalies_to_db(self, user_id: int, anomalies: List[Dict]):
-        """Save anomalies to database"""
-        # Create anomalies table
-        db.session.execute(db.text("""
-            CREATE TABLE IF NOT EXISTS anomalies (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                transaction_id TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                anomaly_type VARCHAR(50),
-                detection_method VARCHAR(50),
-                risk_score REAL,
-                risk_level VARCHAR(20),
-                explanation TEXT,
-                flags TEXT,
-                llm_explanation TEXT,
-                recommendation VARCHAR(20),
-                is_false_positive BOOLEAN,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (transaction_id) REFERENCES transactions(id)
-            )
-        """))
-        
-        # Insert anomalies
+    def save_anomalies_to_db(self, user_id, anomalies: List[Dict]):
+        """Save anomalies to database via SQLAlchemy."""
+        from models import FraudAnomaly
         import uuid
+
         for anomaly in anomalies:
-            db.session.execute(db.text("""
-                INSERT INTO anomalies 
-                (id, transaction_id, user_id, anomaly_type, detection_method,
-                 risk_score, risk_level, explanation, flags, llm_explanation, recommendation)
-                VALUES (:id, :transaction_id, :user_id, :anomaly_type, :detection_method,
-                        :risk_score, :risk_level, :explanation, :flags, :llm_explanation, :recommendation)
-            """), {
-                'id': str(uuid.uuid4()),
-                'transaction_id': anomaly['transaction_id'],
-                'user_id': str(user_id),
-                'anomaly_type': anomaly['anomaly_type'],
-                'detection_method': anomaly['detection_method'],
-                'risk_score': int(anomaly['risk_score'] * 100),  # Convert to 0-100 scale
-                'risk_level': anomaly.get('risk_level', 'LOW'),
-                'explanation': anomaly['explanation'],
-                'flags': json.dumps(anomaly['flags']),
-                'llm_explanation': anomaly.get('llm_explanation'),
-                'recommendation': anomaly.get('recommendation')
-            })
-        
+            db.session.add(
+                FraudAnomaly(
+                    id=str(uuid.uuid4()),
+                    transaction_id=anomaly["transaction_id"],
+                    user_id=str(user_id),
+                    anomaly_type=anomaly.get("anomaly_type"),
+                    detection_method=anomaly.get("detection_method"),
+                    risk_score=int(anomaly["risk_score"] * 100),
+                    risk_level=anomaly.get("risk_level", "LOW"),
+                    explanation=anomaly.get("explanation"),
+                    flags=json.dumps(anomaly.get("flags", [])),
+                    llm_explanation=anomaly.get("llm_explanation"),
+                    recommendation=anomaly.get("recommendation"),
+                )
+            )
+
         db.session.commit()
 
 

@@ -156,13 +156,13 @@ export function GlassmorphismNav() {
 
               {/* Desktop CTA Button */}
               <div className="hidden md:block">
-                <button
-                  className="relative bg-white hover:bg-gray-50 text-black font-medium px-6 py-2 rounded-full flex items-center transition-all duration-300 hover:scale-105 hover:shadow-lg cursor-pointer group"
-                  onClick={() => scrollToSection("#contact")}
+                <Link
+                  href="/signin?next=/dashboard"
+                  className="relative bg-white hover:bg-gray-50 text-black font-medium px-6 py-2 rounded-full inline-flex items-center transition-all duration-300 hover:scale-105 hover:shadow-lg cursor-pointer group"
                 >
                   <span className="mr-2">Get Started</span>
                   <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-1" />
-                </button>
+                </Link>
               </div>
 
               {/* Mobile Menu Button */}
@@ -238,18 +238,19 @@ export function GlassmorphismNav() {
                   ),
                 )}
                 <div className="h-px bg-white/10 my-2" />
-                <button
+                <Link
+                  href="/signin?next=/dashboard"
                   className={`relative bg-white hover:bg-gray-50 text-black font-medium px-6 py-3 rounded-full flex items-center transition-all duration-300 hover:scale-105 hover:shadow-lg cursor-pointer group transform ${
                     isOpen ? "animate-mobile-menu-item" : ""
                   }`}
                   style={{
                     animationDelay: isOpen ? `${navigation.length * 80 + 150}ms` : "0ms",
                   }}
-                  onClick={() => scrollToSection("#contact")}
+                  onClick={() => setIsOpen(false)}
                 >
                   <span className="mr-2">Get Started</span>
                   <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-1" />
-                </button>
+                </Link>
               </div>
             </div>
           </div>

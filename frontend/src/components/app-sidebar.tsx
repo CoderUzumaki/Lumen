@@ -110,7 +110,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 				<div className="flex items-center gap-2 px-2 py-2">
 					<img
 						src="/lumen.svg"
-						alt="Invox Logo"
+						alt="Lumen"
 						className="w-8 h-8"
 					/>
 					<span className="text-xl font-bold text-gray-800 group-data-[collapsible=icon]:hidden">

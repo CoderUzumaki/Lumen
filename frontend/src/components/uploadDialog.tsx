@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { X, Upload, CheckCircle, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
@@ -16,10 +16,16 @@ interface FileWithStatus {
 	extractedData?: any;
 }
 
-export function DialogDemo() {
+export function DialogDemo({ defaultOpen = false }: { defaultOpen?: boolean }) {
 	const [files, setFiles] = useState<FileWithStatus[]>([]);
 	const [uploading, setUploading] = useState(false);
-	const [open, setOpen] = useState(false);
+	const [open, setOpen] = useState(defaultOpen);
+
+	useEffect(() => {
+		if (defaultOpen) {
+			setOpen(true);
+		}
+	}, [defaultOpen]);
 
 	const onFiles = useCallback((selected: FileList | null) => {
 		if (!selected) return;
@@ -66,10 +72,7 @@ export function DialogDemo() {
 			try {
 				logger.debug("📤 Uploading file:", fileItem.file.name);
 				// Use OCR API to extract data - this saves to database automatically
-				const result = await ocrApi.extractInvoice(
-					fileItem.file,
-					"123"
-				);
+				const result = await ocrApi.extractInvoice(fileItem.file);
 
 				logger.debug("📥 OCR API Response:", result);
 
@@ -122,26 +125,19 @@ export function DialogDemo() {
 
 		setUploading(false);
 
-		// Check if all files were successful
-		const allSuccess = files.every((f) => f.status === "success");
-		if (allSuccess) {
-			logger.debug("✅ All uploads successful! Closing dialog in 1.5s...");
-			// Close dialog after a short delay and emit final event
-			setTimeout(() => {
-				logger.debug(
-					"📢 Emitting final INVOICE_UPDATED event before closing dialog"
-				);
-				setOpen(false);
-				setFiles([]);
-				// Emit one final event to ensure all components refresh
-				eventBus.emit(EVENTS.INVOICE_UPDATED);
-			}, 1500);
-		} else {
-			console.warn(
-				"⚠️ Some uploads failed",
-				files.filter((f) => f.status !== "success")
-			);
-		}
+		setFiles((current) => {
+			const allSuccess =
+				current.length > 0 &&
+				current.every((f) => f.status === "success");
+			if (allSuccess) {
+				setTimeout(() => {
+					setOpen(false);
+					setFiles([]);
+					eventBus.emit(EVENTS.INVOICE_UPDATED);
+				}, 1500);
+			}
+			return current;
+		});
 	};
 
 	const getStatusIcon = (status: FileWithStatus["status"]) => {
@@ -165,7 +161,7 @@ export function DialogDemo() {
 				<Button>Upload Documents</Button>
 			</DialogTrigger>
 			<DialogContent className="max-w-3xl bg-linear-to-b from-[#0b0612] to-[#05020a] border-neutral-800">
-				<DialogTitle className="hidden"></DialogTitle>
+				<DialogTitle className="sr-only">Upload documents</DialogTitle>
 				<div className="flex items-start justify-between gap-4">
 					<div className="flex items-center gap-3">
 						<div className="p-2 rounded-xl bg-neutral-800/50">

@@ -1,6 +1,7 @@
 "use client";
-import { useState, ReactNode, ComponentType } from "react";
+import { useState, ReactNode } from "react";
 import { logger } from "@/lib/logger";
+import type { LucideIcon } from "lucide-react";
 import {
 	Paperclip,
 	Bot,
@@ -10,6 +11,8 @@ import {
 	MoreHorizontal,
 	Globe,
 	ChevronRight,
+	Cloud,
+	Link2,
 } from "lucide-react";
 import {
 	Popover,
@@ -18,7 +21,7 @@ import {
 } from "@/components/ui/popover";
 
 interface Action {
-	icon: ComponentType<{ className?: string }> | (() => JSX.Element);
+	icon: LucideIcon;
 	label: string;
 	badge?: string;
 	action: () => void;
@@ -75,29 +78,17 @@ export default function ComposerActionsPopover({
 			action: () => logger.debug("Canvas"),
 		},
 		{
-			icon: () => (
-				<div className="h-4 w-4 rounded bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center">
-					<div className="h-2 w-2 bg-white rounded-full" />
-				</div>
-			),
+			icon: Cloud,
 			label: "Connect Google Drive",
 			action: () => logger.debug("Connect Google Drive"),
 		},
 		{
-			icon: () => (
-				<div className="h-4 w-4 rounded bg-gradient-to-br from-blue-600 to-blue-400 flex items-center justify-center">
-					<div className="h-2 w-2 bg-white rounded-full" />
-				</div>
-			),
+			icon: Cloud,
 			label: "Connect OneDrive",
 			action: () => logger.debug("Connect OneDrive"),
 		},
 		{
-			icon: () => (
-				<div className="h-4 w-4 rounded bg-gradient-to-br from-teal-500 to-teal-400 flex items-center justify-center">
-					<div className="h-2 w-2 bg-white rounded-full" />
-				</div>
-			),
+			icon: Link2,
 			label: "Connect Sharepoint",
 			action: () => logger.debug("Connect Sharepoint"),
 		},
@@ -196,7 +187,7 @@ export default function ComposerActionsPopover({
 						<div className="flex-1 p-3">
 							<div className="space-y-1">
 								{moreActions.map((action, index) => {
-									const IconComponent = action.icon;
+									const Icon = action.icon;
 									return (
 										<button
 											key={index}
@@ -205,12 +196,7 @@ export default function ComposerActionsPopover({
 											}
 											className="flex items-center gap-3 w-full p-2 text-sm text-left hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg"
 										>
-											{typeof IconComponent ===
-											"function" ? (
-												<IconComponent />
-											) : (
-												<IconComponent className="h-4 w-4" />
-											)}
+											<Icon className="h-4 w-4" />
 											<span>{action.label}</span>
 										</button>
 									);

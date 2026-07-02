@@ -198,6 +198,26 @@ def create_transaction():
         }), 500
 
 
+@database_query_bp.route('/transactions/<transaction_id>', methods=['DELETE'])
+@require_auth
+def delete_transaction(transaction_id):
+    """Delete a transaction owned by the authenticated user."""
+    try:
+        transaction = Transaction.query.filter_by(
+            id=transaction_id, user_id=str(g.user_id)
+        ).first()
+        if not transaction:
+            return jsonify({'success': False, 'error': 'Transaction not found'}), 404
+
+        TransactionItem.query.filter_by(transaction_id=transaction_id).delete()
+        db.session.delete(transaction)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Transaction deleted'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Delete failed'}), 500
+
+
 @database_query_bp.route('/transactions/<transaction_id>', methods=['PUT'])
 @require_auth
 def update_transaction(transaction_id):

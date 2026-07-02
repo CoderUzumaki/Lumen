@@ -1,9 +1,10 @@
 "use client"
 import type React from "react"
-import type { ComponentProps, ReactNode } from "react"
+import type { ReactNode } from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import { FacebookIcon, InstagramIcon, LinkedinIcon, YoutubeIcon } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
 
 interface FooterLink {
   title: string
@@ -20,37 +21,34 @@ const footerLinks: FooterSection[] = [
   {
     label: "Product",
     links: [
-      { title: "Features", href: "/features" },
-      { title: "AI Team", href: "/ai-team" },
-      { title: "ROI Calculator", href: "/roi-calculator" },
-      { title: "Integration", href: "/integration" },
+      { title: "Dashboard", href: "/dashboard" },
+      { title: "AI Analytics", href: "/ai-analytics" },
+      { title: "Chat", href: "/chatbot" },
+      { title: "Upload", href: "/upload" },
     ],
   },
   {
-    label: "Company",
+    label: "Analytics",
     links: [
-      { title: "About Us", href: "/about" },
-      { title: "Contact", href: "/contact" },
-      { title: "Privacy Policy", href: "/privacy" },
-      { title: "Terms of Service", href: "/terms" },
+      { title: "Weekly", href: "/analytics?tab=weekly" },
+      { title: "Monthly", href: "/analytics?tab=monthly" },
+      { title: "Yearly", href: "/analytics?tab=yearly" },
     ],
   },
   {
-    label: "Resources",
+    label: "Account",
     links: [
-      { title: "Blog", href: "/blog" },
-      { title: "Case Studies", href: "/case-studies" },
-      { title: "Documentation", href: "/docs" },
-      { title: "Support", href: "/support" },
+      { title: "Sign in", href: "/signin" },
+      { title: "Get started", href: "/signin?next=/dashboard" },
     ],
   },
   {
-    label: "Social Links",
+    label: "Social",
     links: [
-      { title: "Facebook", href: "#", icon: FacebookIcon },
-      { title: "Instagram", href: "#", icon: InstagramIcon },
-      { title: "Youtube", href: "#", icon: YoutubeIcon },
-      { title: "LinkedIn", href: "#", icon: LinkedinIcon },
+      { title: "Facebook", href: "https://facebook.com", icon: FacebookIcon },
+      { title: "Instagram", href: "https://instagram.com", icon: InstagramIcon },
+      { title: "Youtube", href: "https://youtube.com", icon: YoutubeIcon },
+      { title: "LinkedIn", href: "https://linkedin.com", icon: LinkedinIcon },
     ],
   },
 ]
@@ -62,7 +60,7 @@ export function Footer() {
 
       <div className="grid w-full gap-8 xl:grid-cols-3 xl:gap-8">
         <AnimatedContainer className="space-y-4">
-          <Image src="/images/cliste-logo.png" alt="Cliste Logo" width={64} height={64} className="size-16" />
+          <Image src="/images/lumen-logo.svg" alt="Lumen" width={64} height={64} className="size-16" />
           <div className="text-muted-foreground mt-8 text-sm md:mt-0 md:block hidden">
             <p>© {new Date().getFullYear()} Lumen. All rights reserved.</p>
           </div>
@@ -76,13 +74,13 @@ export function Footer() {
                 <ul className="text-muted-foreground mt-4 space-y-2 text-sm">
                   {section.links.map((link) => (
                     <li key={link.title}>
-                      <a
+                      <Link
                         href={link.href}
                         className="hover:text-foreground inline-flex items-center transition-all duration-300"
                       >
                         {link.icon && <link.icon className="me-1 size-4" />}
                         {link.title}
-                      </a>
+                      </Link>
                     </li>
                   ))}
                 </ul>
@@ -94,36 +92,35 @@ export function Footer() {
 
       <div className="md:hidden mt-8 text-center space-y-2">
         <p className="text-muted-foreground text-sm">© {new Date().getFullYear()} Lumen. All rights reserved.</p>
-        <p className="text-muted-foreground text-xs">Web Development by Humexa</p>
       </div>
 
       <div className="hidden md:block mt-8 pt-6 border-t border-foreground/10 w-full">
-        <p className="text-muted-foreground text-xs text-center">Web Development by Humexa</p>
+        <p className="text-muted-foreground text-xs text-center">AI-powered invoice management for modern teams</p>
       </div>
     </footer>
   )
 }
 
-type ViewAnimationProps = {
+type AnimatedContainerProps = {
   delay?: number
-  className?: ComponentProps<typeof motion.div>["className"]
   children: ReactNode
+  className?: string
 }
 
-function AnimatedContainer({ className, delay = 0.1, children }: ViewAnimationProps) {
+function AnimatedContainer({ delay = 0.1, children, className }: AnimatedContainerProps) {
   const shouldReduceMotion = useReducedMotion()
 
   if (shouldReduceMotion) {
-    return children
+    return <div className={className}>{children}</div>
   }
 
   return (
     <motion.div
-      initial={{ filter: "blur(4px)", translateY: -8, opacity: 0 }}
-      whileInView={{ filter: "blur(0px)", translateY: 0, opacity: 1 }}
-      viewport={{ once: true }}
-      transition={{ delay, duration: 0.8 }}
       className={className}
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ delay, duration: 0.5 }}
     >
       {children}
     </motion.div>

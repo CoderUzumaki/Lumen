@@ -220,50 +220,21 @@ class AnalyticsOrchestrator:
         """Get financial health risk score"""
         return self.risk_engine.calculate_overall_risk(user_id)
     
-    def save_insight(self, user_id: int, insight: Dict):
-        """
-        Save an insight to database for display
-        
-        Args:
-            user_id: User ID
-            insight: Insight dictionary with type, title, description, etc.
-        """
-        # Create insights table if not exists
-        db.session.execute(db.text("""
-            CREATE TABLE IF NOT EXISTS insights (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                insight_type VARCHAR(50) NOT NULL,
-                title TEXT NOT NULL,
-                description TEXT NOT NULL,
-                severity VARCHAR(20),
-                metadata TEXT,
-                confidence_score REAL,
-                is_actionable BOOLEAN DEFAULT 0,
-                action_taken BOOLEAN DEFAULT 0,
-                is_read BOOLEAN DEFAULT 0,
-                expires_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """))
-        
-        db.session.execute(db.text("""
-            INSERT INTO insights 
-            (user_id, insight_type, title, description, severity, 
-             metadata, confidence_score, is_actionable)
-            VALUES (:user_id, :insight_type, :title, :description, :severity, 
-                    :metadata, :confidence_score, :is_actionable)
-        """), {
-            'user_id': user_id,
-            'insight_type': insight.get('type', 'general'),
-            'title': insight.get('title', ''),
-            'description': insight.get('description', ''),
-            'severity': insight.get('severity', 'info'),
-            'metadata': json.dumps(insight.get('metadata', {})),
-            'confidence_score': insight.get('confidence', 1.0),
-            'is_actionable': insight.get('is_actionable', False)
-        })
-        
+    def save_insight(self, user_id, insight: Dict):
+        """Save an insight to the database for display."""
+        from models import AnalyticsInsight
+
+        row = AnalyticsInsight(
+            user_id=str(user_id),
+            insight_type=insight.get("type", "general"),
+            title=insight.get("title", ""),
+            description=insight.get("description", ""),
+            severity=insight.get("severity", "info"),
+            meta=json.dumps(insight.get("metadata", {})),
+            confidence_score=insight.get("confidence", 1.0),
+            is_actionable=insight.get("is_actionable", False),
+        )
+        db.session.add(row)
         db.session.commit()
     
     def generate_insights_from_analysis(self, analysis_results: Dict) -> List[Dict]:

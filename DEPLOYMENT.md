@@ -17,6 +17,27 @@ Complete guide for deploying LUMEN to production environments.
 
 ---
 
+### Backend Deployment (Render)
+
+A `render.yaml` blueprint is included at the repo root. It provisions:
+
+- **lumen-api** — Flask/Gunicorn web service
+- **lumen-frontend** — Next.js web service  
+- **lumen-db** — managed Postgres
+
+Deploy via the Render dashboard (New → Blueprint) or `render deploy` CLI after connecting the repo.
+
+Required env vars are documented in `backend/.env.example` and `frontend/.env.example`.
+
+Run migrations on deploy:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+---
+
 ## 🎨 Frontend Deployment (Vercel)
 
 ### Why Vercel?
@@ -156,7 +177,7 @@ OPENROUTER_API_KEY=sk-xxxxx
 GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/google-creds.json
 SECRET_KEY=<generate-strong-key>
 FLASK_ENV=production
-CORS_ORIGINS=https://your-app.vercel.app
+ALLOWED_ORIGINS=https://your-app.vercel.app
 ```
 
 ### Step 5: Add Google Credentials

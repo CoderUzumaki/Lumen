@@ -46,8 +46,7 @@ export default function AnimatedListItemUse() {
 			);
 
 			// Fetch from database API
-			const userId = "123"; // TODO: Get from auth context
-			const response = await transactionApi.getTransactions(userId, {
+			const response = await transactionApi.getTransactions({
 				page: 1,
 				page_size: 1000,
 				sort_by: "created_at",

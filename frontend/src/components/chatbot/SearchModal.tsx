@@ -74,7 +74,11 @@ export default function SearchModal({
 		};
 
 		filteredConversations
-			.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+			.sort(
+				(a, b) =>
+					new Date(b.updatedAt).getTime() -
+					new Date(a.updatedAt).getTime()
+			)
 			.forEach((conv) => {
 				const group = getTimeGroup(conv.updatedAt);
 				groups[group].push(conv);
@@ -93,7 +97,7 @@ export default function SearchModal({
 		handleClose();
 	};
 
-	const handleSelectConversation = (id) => {
+	const handleSelectConversation = (id: string) => {
 		onSelect(id);
 		handleClose();
 	};

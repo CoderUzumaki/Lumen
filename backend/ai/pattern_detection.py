@@ -202,68 +202,33 @@ class PatternDetectionAgent:
         
         return patterns
     
-    def save_patterns_to_db(self, user_id: int, patterns: List[Dict]):
-        """
-        Save detected patterns to database
-        
-        Args:
-            user_id: User ID
-            patterns: List of detected patterns
-        """
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        # Create patterns table if not exists
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS spending_patterns (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                pattern_type VARCHAR(50),
-                vendor_name VARCHAR(255),
-                category VARCHAR(100),
-                frequency_days INTEGER,
-                average_amount REAL,
-                amount_variance REAL,
-                last_occurrence DATE,
-                next_predicted_date DATE,
-                confidence_score REAL,
-                occurrence_count INTEGER,
-                is_active BOOLEAN DEFAULT 1,
-                metadata TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        # Clear old patterns for this user
-        cursor.execute("DELETE FROM spending_patterns WHERE user_id = ?", (user_id,))
-        
-        # Insert new patterns
+    def save_patterns_to_db(self, user_id, patterns: List[Dict]):
+        """Save detected patterns to database via SQLAlchemy."""
+        from models import SpendingPattern
+        from models.database import db
+
+        SpendingPattern.query.filter_by(user_id=str(user_id)).delete()
+
         for pattern in patterns:
-            cursor.execute("""
-                INSERT INTO spending_patterns 
-                (user_id, pattern_type, vendor_name, category, frequency_days,
-                 average_amount, amount_variance, last_occurrence, next_predicted_date,
-                 confidence_score, occurrence_count, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                user_id,
-                pattern['pattern_type'],
-                pattern.get('vendor_name'),
-                pattern.get('category'),
-                pattern.get('frequency_days'),
-                pattern.get('average_amount'),
-                pattern.get('amount_variance'),
-                pattern.get('last_occurrence'),
-                pattern['next_predicted_date'],
-                pattern['confidence_score'],
-                pattern.get('occurrence_count', 0),
-                json.dumps(pattern)
-            ))
-        
-        conn.commit()
-        conn.close()
-        
+            db.session.add(
+                SpendingPattern(
+                    user_id=str(user_id),
+                    pattern_type=pattern.get("pattern_type"),
+                    vendor_name=pattern.get("vendor_name"),
+                    category=pattern.get("category"),
+                    frequency_days=pattern.get("frequency_days"),
+                    average_amount=pattern.get("average_amount"),
+                    amount_variance=pattern.get("amount_variance"),
+                    last_occurrence=pattern.get("last_occurrence"),
+                    next_predicted_date=pattern.get("next_predicted_date"),
+                    confidence_score=pattern.get("confidence_score"),
+                    occurrence_count=pattern.get("occurrence_count", 0),
+                    is_active=True,
+                    meta=json.dumps(pattern),
+                )
+            )
+
+        db.session.commit()
         return len(patterns)
     
     def generate_reminders(self, user_id: int, days_ahead: int = 7) -> List[Dict]:

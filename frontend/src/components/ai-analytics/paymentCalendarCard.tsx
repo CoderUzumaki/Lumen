@@ -33,19 +33,23 @@ export default function PaymentCalendarCard() {
 		forecast: [],
 	});
 	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		const fetchPaymentDates = async () => {
 			try {
-				const response = await analyticsApi.getAllTimeSummary("123");
+				setError(null);
+				const response = await analyticsApi.getAllTimeSummary();
 				if (response.success && response.payment_calendar) {
 					setPaymentDates(response.payment_calendar);
 				} else {
 					setPaymentDates({ upcoming: [], forecast: [] });
+					setError("Could not load payment calendar.");
 				}
 			} catch (err) {
 				console.error("Failed to load payment calendar", err);
 				setPaymentDates({ upcoming: [], forecast: [] });
+				setError("Could not load payment calendar.");
 			} finally {
 				setLoading(false);
 			}
@@ -81,6 +85,26 @@ export default function PaymentCalendarCard() {
 
 	const isUpcoming = (day: number) => paymentDates.upcoming.includes(day);
 	const isForecast = (day: number) => paymentDates.forecast.includes(day);
+
+	if (loading) {
+		return (
+			<Card className="bg-white border border-gray-200 shadow-sm">
+				<CardContent className="flex items-center justify-center h-[280px]">
+					<p className="text-gray-500">Loading calendar...</p>
+				</CardContent>
+			</Card>
+		);
+	}
+
+	if (error) {
+		return (
+			<Card className="bg-white border border-gray-200 shadow-sm">
+				<CardContent className="flex items-center justify-center h-[280px]">
+					<p className="text-gray-500">{error}</p>
+				</CardContent>
+			</Card>
+		);
+	}
 
 	return (
 		<motion.div variants={cardVariants} initial="hidden" animate="visible">

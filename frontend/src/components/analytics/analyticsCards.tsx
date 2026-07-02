@@ -10,7 +10,7 @@ import {
 	Activity,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { analyticsApi, tokenManager } from "@/lib/api/client";
+import { analyticsApi } from "@/lib/api/client";
 
 import { logger } from "@/lib/logger";
 interface SelectedPeriod {
@@ -95,19 +95,7 @@ export default function AnalyticsCards({
 		const fetchAnalytics = async () => {
 			try {
 				setLoading(true);
-				// Hardcode to "123" for testing where transaction data exists
-				const userId = "123";
-
-				logger.debug("Fetching analytics with params:", {
-					userId,
-					timeRange,
-					year: selectedPeriod.year,
-					month: selectedPeriod.month,
-					week: selectedPeriod.week,
-				});
-
 				const response = await analyticsApi.getTimeRangeAnalytics(
-					userId,
 					timeRange,
 					selectedPeriod.year,
 					selectedPeriod.month,

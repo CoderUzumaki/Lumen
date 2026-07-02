@@ -58,21 +58,24 @@ const getImpactColor = (severity: string) => {
 export default function AISuggestionsCard() {
 	const [suggestions, setSuggestions] = useState<any[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		const fetchSuggestions = async () => {
 			try {
+				setError(null);
 				const response = await aiAnalyticsApi.getInsights({
-					userId: "123",
 					limit: 10,
 				});
 				if (response.success && response.insights) {
 					setSuggestions(response.insights);
 				} else {
+					setError("Could not load AI suggestions.");
 					setSuggestions([]);
 				}
 			} catch (err) {
 				console.error("Failed to load AI suggestions", err);
+				setError("Could not load AI suggestions.");
 				setSuggestions([]);
 			} finally {
 				setLoading(false);
@@ -86,6 +89,16 @@ export default function AISuggestionsCard() {
 			<Card className="bg-white border border-gray-200 shadow-sm h-full">
 				<CardContent className="flex items-center justify-center h-[300px]">
 					<p className="text-gray-500">Loading AI suggestions...</p>
+				</CardContent>
+			</Card>
+		);
+	}
+
+	if (error) {
+		return (
+			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+				<CardContent className="flex items-center justify-center h-[300px]">
+					<p className="text-gray-500">{error}</p>
 				</CardContent>
 			</Card>
 		);

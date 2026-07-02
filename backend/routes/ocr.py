@@ -4,6 +4,9 @@ import logging
 from flask import Blueprint, g, request, jsonify
 
 from utils.auth import require_auth
+from utils.errors import api_error
+from utils.limiter import limiter
+from utils.upload_validation import validate_upload
 from utils.image_processing import (
     image_to_base64,
     convert_pdf_to_images,
@@ -19,6 +22,7 @@ ocr_bp = Blueprint('ocr', __name__)
 
 
 @ocr_bp.route('/extract', methods=['POST'])
+@limiter.limit("15 per minute")
 @require_auth
 def extract_invoice_data():
     """
@@ -37,6 +41,10 @@ def extract_invoice_data():
     
     try:
         file_content = file.read()
+        upload_error = validate_upload(file.filename, file_content)
+        if upload_error:
+            return jsonify({"error": upload_error}), 400
+
         file_ext = file.filename.lower().split('.')[-1]
         
         # Determine media type
@@ -90,11 +98,12 @@ def extract_invoice_data():
         try:
             normalized = normalize_transaction(structured_data)
         except Exception as e:
-            return jsonify({
-                'success': False,
-                'error': f'Normalization failed: {str(e)}',
-                'ocr_data': structured_data
-            }), 500
+            return api_error(
+                "Failed to normalize extracted data",
+                status=500,
+                code="normalization_failed",
+                log=e,
+            )
         
         # Step 3: Save to database (optional - graceful degradation)
         transaction_id = None
@@ -126,8 +135,4 @@ def extract_invoice_data():
         return jsonify(response_data), 200
     
     except Exception as e:
-        logger.info(f"Error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return api_error("Invoice extraction failed", code="extract_failed", log=e)

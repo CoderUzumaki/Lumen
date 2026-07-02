@@ -35,7 +35,7 @@ export function SectionCards() {
 				logger.debug("📊 SectionCards: Fetching invoices from API...");
 
 				// Always fetch from API with hardcoded user ID
-				const response = await transactionApi.getTransactions("123", {
+				const response = await transactionApi.getTransactions({
 					page: 1,
 					page_size: 1000,
 					sort_by: "created_at",

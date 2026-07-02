@@ -72,7 +72,7 @@ export default function CategoryPieChart() {
 					return;
 				}
 
-				const response = await transactionApi.getTransactions("123", {
+				const response = await transactionApi.getTransactions({
 					page: 1,
 					page_size: 1000,
 				});

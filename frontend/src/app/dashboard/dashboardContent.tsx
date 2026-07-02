@@ -18,8 +18,12 @@ import {
 } from "@/components/ui/sidebar";
 import { DialogDemo } from "@/components/uploadDialog";
 import { ExportDialog } from "@/components/exportDialog";
+import { useSearchParams } from "next/navigation";
 
 export default function DashboardContent() {
+	const searchParams = useSearchParams();
+	const openUpload = searchParams.get("upload") === "1";
+
 	return (
 		<>
 			<SidebarProvider>
@@ -45,7 +49,7 @@ export default function DashboardContent() {
 							</Breadcrumb>
 						</div>
 						<div className="absolute top-0 right-0 m-3 flex gap-2">
-							<DialogDemo />
+							<DialogDemo defaultOpen={openUpload} />
 						</div>
 					</header>
 					<div className="flex flex-1 flex-col gap-4 p-4 pt-0">

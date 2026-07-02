@@ -1,33 +1,70 @@
 # Flask + DB
+
 Flask
+
 Flask-Cors
+
 Flask-SQLAlchemy
+
+Flask-Limiter
+
 SQLAlchemy
+
 python-dotenv
 
-# OCR (Google Vision API)
-google-cloud-vision
+gunicorn
+
+cryptography
+
+
 
 # Vector Database
+
 chromadb
 
+
+
 # ML / Analytics
+
 numpy
+
 pandas
+
 scikit-learn
+
 openai
 
+
+
 # PDF/Image processing
+
 pdf2image
+
 Pillow
 
+
+
 # API + Utils
+
 requests
+
 typing_extensions
+
+
 
 # Auth (Supabase JWT verification)
 PyJWT[crypto]
 
+# Migrations + tests
+alembic
+pytest
+
+# Postgres (required when DATABASE_URL is set)
+psycopg2-binary
+
 # Email (optional)
+
 email-validator
+
 imapclient
+

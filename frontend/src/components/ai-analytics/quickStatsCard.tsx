@@ -21,16 +21,21 @@ const cardVariants = {
 export default function QuickStatsCard() {
 	const [stats, setStats] = useState<any>(null);
 	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		const fetchDashboard = async () => {
 			try {
-				const response = await aiAnalyticsApi.getDashboard("123");
+				setError(null);
+				const response = await aiAnalyticsApi.getDashboard();
 				if (response.success) {
 					setStats(response.data);
+				} else {
+					setError("Could not load dashboard stats.");
 				}
-			} catch (error) {
-				console.error("Failed to fetch dashboard:", error);
+			} catch (err) {
+				console.error("Failed to fetch dashboard:", err);
+				setError("Could not load dashboard stats.");
 			} finally {
 				setIsLoading(false);
 			}
@@ -39,7 +44,7 @@ export default function QuickStatsCard() {
 		fetchDashboard();
 	}, []);
 
-	if (isLoading || !stats) {
+	if (isLoading) {
 		return (
 			<motion.div
 				variants={cardVariants}
@@ -59,6 +64,26 @@ export default function QuickStatsCard() {
 							<div className="h-4 bg-gray-200 rounded w-3/4"></div>
 							<div className="h-4 bg-gray-200 rounded w-1/2"></div>
 						</div>
+					</CardContent>
+				</Card>
+			</motion.div>
+		);
+	}
+
+	if (error || !stats) {
+		return (
+			<motion.div variants={cardVariants} initial="hidden" animate="visible">
+				<Card className="bg-white border border-gray-200 shadow-sm">
+					<CardHeader className="pb-3">
+						<CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+							<AlertCircle className="w-5 h-5 text-amber-600" />
+							Quick Stats
+						</CardTitle>
+					</CardHeader>
+					<CardContent>
+						<p className="text-sm text-gray-600">
+							{error || "No analytics data yet. Upload invoices to get started."}
+						</p>
 					</CardContent>
 				</Card>
 			</motion.div>

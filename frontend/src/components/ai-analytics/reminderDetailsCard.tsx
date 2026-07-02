@@ -23,19 +23,23 @@ const cardVariants = {
 export default function ReminderDetailsCard() {
 	const [reminders, setReminders] = useState<any[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		const fetchReminders = async () => {
 			try {
-				const response = await analyticsApi.getAllTimeSummary("123");
+				setError(null);
+				const response = await analyticsApi.getAllTimeSummary();
 				if (response.success && response.upcoming_payments) {
 					setReminders(response.upcoming_payments);
 				} else {
 					setReminders([]);
+					setError("Could not load reminders.");
 				}
 			} catch (err) {
 				console.error("Failed to load reminders", err);
 				setReminders([]);
+				setError("Could not load reminders.");
 			} finally {
 				setLoading(false);
 			}
@@ -68,7 +72,11 @@ export default function ReminderDetailsCard() {
 					</CardTitle>
 				</CardHeader>
 				<CardContent className="flex-1 overflow-hidden">
-					{reminders.length === 0 ? (
+					{error ? (
+						<div className="text-center py-8 text-gray-500">
+							{error}
+						</div>
+					) : reminders.length === 0 ? (
 						<div className="text-center py-8 text-gray-500">
 							No reminders or forecasts available
 						</div>

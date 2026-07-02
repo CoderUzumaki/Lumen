@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Mail, RefreshCw, Pause, Play, Settings } from "lucide-react";
 import { emailConfigApi } from "@/lib/api/client";
+import { toast } from "@/lib/toast";
 import { EmailConfigDialog } from "./emailConfigDialog";
 
 export function EmailStatusCard() {
@@ -47,12 +48,10 @@ export function EmailStatusCard() {
         await emailConfigApi.resumePolling();
       }
       await fetchStatus();
-    } catch (error: any) {
-      alert(
-        `Failed to toggle polling: ${
-          error.response?.data?.detail || error.message
-        }`
-      );
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to toggle polling: ${message}`);
     } finally {
       setActionLoading(false);
     }
@@ -62,16 +61,14 @@ export function EmailStatusCard() {
     setActionLoading(true);
     try {
       const result = await emailConfigApi.pollNow();
-      alert(
+      toast.success(
         `Polling complete! Checked ${result.emails_checked} emails, created ${result.invoices_created} invoices.`
       );
       await fetchStatus();
-    } catch (error: any) {
-      alert(
-        `Failed to poll emails: ${
-          error.response?.data?.detail || error.message
-        }`
-      );
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to poll emails: ${message}`);
     } finally {
       setActionLoading(false);
     }

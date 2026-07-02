@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, Integer, Float, DateTime, ForeignKey
+from sqlalchemy import String, Text, Integer, Float, DateTime, ForeignKey, Boolean
 from models.database import db
 import json
 
@@ -48,11 +48,13 @@ class Transaction(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     __table_args__ = (
-        db.UniqueConstraint("vendor_name", "invoice_number", name="u_vendor_invoice"),
+        db.UniqueConstraint(
+            "user_id", "vendor_name", "invoice_number", name="u_user_vendor_invoice"
+        ),
     )
 
     items = db.relationship("TransactionItem", backref="transaction")
-    anomalies = db.relationship("Anomaly", backref="transaction")
+    fraud_anomalies = db.relationship("FraudAnomaly", backref="transaction")
 
 
 class TransactionItem(db.Model):
@@ -67,29 +69,79 @@ class TransactionItem(db.Model):
     total_price = db.Column(db.Float, nullable=True)
 
 
-class Anomaly(db.Model):
+class FraudAnomaly(db.Model):
+    """Fraud / spending anomalies detected by the AI analytics pipeline."""
     __tablename__ = "anomalies"
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     transaction_id = db.Column(String(36), db.ForeignKey("transactions.id"), nullable=False)
-
+    user_id = db.Column(String(36), nullable=True)
+    anomaly_type = db.Column(db.String(50))
+    detection_method = db.Column(db.String(50))
     risk_score = db.Column(db.Integer, nullable=False)
-    anomalies = db.Column(db.Text)  # Store JSON as TEXT in SQLite
-    explanation = db.Column(db.Text, nullable=True)
+    risk_level = db.Column(db.String(20))
+    explanation = db.Column(db.Text)
+    flags = db.Column(db.Text)
+    llm_explanation = db.Column(db.Text)
+    recommendation = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-class Insight(db.Model):
+class AnalyticsInsight(db.Model):
+    """Actionable insights shown on the AI analytics dashboard."""
     __tablename__ = "insights"
 
-    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = db.Column(String(36), db.ForeignKey("users.id"))
-    transaction_id = db.Column(String(36), db.ForeignKey("transactions.id"))
-
-    insight = db.Column(db.Text, nullable=True)
-    reminder = db.Column(db.Text, nullable=True)
-    advice = db.Column(db.Text, nullable=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(String(36), nullable=False, index=True)
+    insight_type = db.Column(db.String(50), nullable=False)
+    title = db.Column(db.Text, nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    severity = db.Column(db.String(20))
+    meta = db.Column("metadata", db.Text)
+    confidence_score = db.Column(db.Float)
+    is_actionable = db.Column(db.Boolean, default=False)
+    action_taken = db.Column(db.Boolean, default=False)
+    is_read = db.Column(db.Boolean, default=False)
+    expires_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class SpendingPattern(db.Model):
+    """Recurring spending patterns detected per user."""
+    __tablename__ = "spending_patterns"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(String(36), nullable=False, index=True)
+    pattern_type = db.Column(db.String(50))
+    vendor_name = db.Column(db.String(255))
+    category = db.Column(db.String(100))
+    frequency_days = db.Column(db.Integer)
+    average_amount = db.Column(db.Float)
+    amount_variance = db.Column(db.Float)
+    last_occurrence = db.Column(db.String)
+    next_predicted_date = db.Column(db.String)
+    confidence_score = db.Column(db.Float)
+    occurrence_count = db.Column(db.Integer)
+    is_active = db.Column(db.Boolean, default=True)
+    meta = db.Column("metadata", db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ChatMessage(db.Model):
+    """Persisted chat history per user."""
+    __tablename__ = "chat_messages"
+
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(String(36), nullable=False, index=True)
+    role = db.Column(db.String(20), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# Legacy alias — some imports may still reference Insight / Anomaly
+Insight = AnalyticsInsight
+Anomaly = FraudAnomaly
 
 
 class EmbeddingMeta(db.Model):

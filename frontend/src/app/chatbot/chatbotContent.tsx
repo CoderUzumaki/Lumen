@@ -15,6 +15,7 @@ import {
   INITIAL_FOLDERS,
 } from "@/components/chatbot/mockData";
 import { chatApi } from "@/lib/api/client";
+import { toast } from "@/lib/toast";
 
 interface MessageType {
   id: string;
@@ -157,7 +158,7 @@ export default function AIAssistantUI() {
   const [thinkingConvId, setThinkingConvId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
-  // Fetch suggestions on mount
+  // Fetch suggestions and restore chat history on mount
   useEffect(() => {
     chatApi
       .getSuggestions()
@@ -168,6 +169,38 @@ export default function AIAssistantUI() {
       })
       .catch((error) => {
         console.error("Failed to fetch suggestions:", error);
+      });
+
+    chatApi
+      .getHistory(100)
+      .then((response) => {
+        if (!response.success || !response.messages?.length) return;
+        const historyMessages: MessageType[] = response.messages.map(
+          (m: { id: string; role: string; content: string; created_at: string }) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            createdAt: m.created_at,
+          })
+        );
+        const id = "server-history";
+        const last = historyMessages[historyMessages.length - 1];
+        setConversations([
+          {
+            id,
+            title: "Recent conversation",
+            updatedAt: last?.createdAt || new Date().toISOString(),
+            messageCount: historyMessages.length,
+            preview: last?.content?.slice(0, 80) || "Chat history",
+            pinned: false,
+            folder: null,
+            messages: historyMessages,
+          },
+        ]);
+        setSelectedId(id);
+      })
+      .catch((error) => {
+        console.error("Failed to load chat history:", error);
       });
   }, []);
 
@@ -192,10 +225,10 @@ export default function AIAssistantUI() {
 
   useEffect(() => {
     if (!selectedId && conversations.length > 0) {
-      createNewChat();
+      setSelectedId(conversations[0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [conversations.length]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return conversations;
@@ -248,14 +281,16 @@ export default function AIAssistantUI() {
     setSidebarOpen(false);
   }
 
-  function createFolder() {
-    const name = prompt("Folder name");
-    if (!name) return;
-    if (folders.some((f) => f.name.toLowerCase() === name.toLowerCase()))
-      return alert("Folder already exists.");
+  function createFolder(name?: string) {
+    const folderName = name ?? prompt("Folder name");
+    if (!folderName) return;
+    if (folders.some((f) => f.name.toLowerCase() === folderName.toLowerCase())) {
+      toast.error("Folder already exists.");
+      return;
+    }
     setFolders((prev) => [
       ...prev,
-      { id: Math.random().toString(36).slice(2), name },
+      { id: Math.random().toString(36).slice(2), name: folderName },
     ]);
   }
 
@@ -291,7 +326,7 @@ export default function AIAssistantUI() {
     // Call the actual API
     const currentConvId = convId;
     chatApi
-      .sendMessage(content, "123") // Using user_id "123" - should come from auth in production
+      .sendMessage(content)
       .then((response) => {
         setIsThinking(false);
         setThinkingConvId(null);

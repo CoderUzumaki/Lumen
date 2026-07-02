@@ -6,6 +6,8 @@ from flask import Blueprint, g, request, jsonify
 from ai.analytics_orchestrator import AnalyticsOrchestrator
 from models.database import db
 from utils.auth import require_auth
+from utils.errors import api_error
+from utils.limiter import limiter
 
 # Create blueprint
 ai_analytics_bp = Blueprint('ai_analytics', __name__, url_prefix='/api/analytics')
@@ -20,6 +22,7 @@ def init_analytics():
         orchestrator = AnalyticsOrchestrator()
 
 @ai_analytics_bp.route('/analyze', methods=['POST'])
+@limiter.limit("5 per minute")
 @require_auth
 def run_analysis():
     """
@@ -62,10 +65,7 @@ def run_analysis():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return api_error("Analysis failed", code="analysis_failed", log=e)
 
 
 @ai_analytics_bp.route('/dashboard', methods=['GET'])
@@ -85,13 +85,7 @@ def get_dashboard():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@ai_analytics_bp.route('/reminders', methods=['GET'])
+        return api_error("Could not load dashboard", code="dashboard_failed", log=e)
 @require_auth
 def get_reminders():
     """Get smart reminders for the authenticated user.
@@ -114,13 +108,7 @@ def get_reminders():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@ai_analytics_bp.route('/anomalies', methods=['GET'])
+        return api_error("Could not load reminders", code="reminders_failed", log=e)
 @require_auth
 def get_anomalies():
     """Get detected anomalies for the authenticated user.
@@ -143,13 +131,7 @@ def get_anomalies():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@ai_analytics_bp.route('/forecast', methods=['GET'])
+        return api_error("Could not load anomalies", code="anomalies_failed", log=e)
 @require_auth
 def get_forecast():
     """Get spending forecast for the authenticated user.
@@ -171,13 +153,7 @@ def get_forecast():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@ai_analytics_bp.route('/risk-score', methods=['GET'])
+        return api_error("Could not load forecast", code="forecast_failed", log=e)
 @require_auth
 def get_risk_score():
     """Get financial health risk score for the authenticated user."""
@@ -194,13 +170,7 @@ def get_risk_score():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@ai_analytics_bp.route('/insights', methods=['GET'])
+        return api_error("Could not load risk score", code="risk_score_failed", log=e)
 @require_auth
 def get_insights():
     """Get all insights for the authenticated user.
@@ -240,13 +210,7 @@ def get_insights():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@ai_analytics_bp.route('/insights/<int:insight_id>/read', methods=['POST'])
+        return api_error("Could not load insights", code="insights_failed", log=e)
 @require_auth
 def mark_insight_read(insight_id):
     """Mark an insight as read. Only succeeds if the insight belongs to the
@@ -271,13 +235,7 @@ def mark_insight_read(insight_id):
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@ai_analytics_bp.route('/patterns', methods=['GET'])
+        return api_error("Could not update insight", code="insight_update_failed", log=e)
 @require_auth
 def get_patterns():
     """Get detected spending patterns for the authenticated user.
@@ -308,22 +266,7 @@ def get_patterns():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@ai_analytics_bp.route('/health', methods=['GET'])
+        return api_error("Could not load patterns", code="patterns_failed", log=e)
 def health_check():
     """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'service': 'analytics',
-        'agents': {
-            'pattern_detection': 'ready',
-            'fraud_detection': 'ready',
-            'forecasting': 'ready',
-            'risk_assessment': 'ready'
-        }
-    }), 200
+    return jsonify({'status': 'healthy'}), 200

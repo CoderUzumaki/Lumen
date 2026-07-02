@@ -49,16 +49,21 @@ const getSeverityIcon = (severity: string) => {
 export default function AnomalyDetectionCard() {
 	const [anomalies, setAnomalies] = useState<any[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		const fetchAnomalies = async () => {
 			try {
-				const response = await aiAnalyticsApi.getAnomalies("123");
+				setError(null);
+				const response = await aiAnalyticsApi.getAnomalies();
 				if (response.success) {
 					setAnomalies(response.anomalies || []);
+				} else {
+					setError("Could not load anomalies.");
 				}
-			} catch (error) {
-				console.error("Failed to fetch anomalies:", error);
+			} catch (err) {
+				console.error("Failed to fetch anomalies:", err);
+				setError("Could not load anomalies.");
 			} finally {
 				setIsLoading(false);
 			}
@@ -98,6 +103,10 @@ export default function AnomalyDetectionCard() {
 						<div className="animate-pulse space-y-3">
 							<div className="h-20 bg-slate-700 rounded"></div>
 							<div className="h-20 bg-slate-700 rounded"></div>
+						</div>
+					) : error ? (
+						<div className="text-center py-8 text-slate-400">
+							{error}
 						</div>
 					) : anomalies.length === 0 ? (
 						<div className="text-center py-8 text-slate-400">

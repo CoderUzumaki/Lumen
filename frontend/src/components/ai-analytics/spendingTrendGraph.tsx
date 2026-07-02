@@ -57,7 +57,7 @@ export default function SpendingTrendGraph() {
 	useEffect(() => {
 		const fetchSpendingTrends = async () => {
 			try {
-				const response = await analyticsApi.getAllTimeSummary("123");
+				const response = await analyticsApi.getAllTimeSummary();
 				if (response.success && response.monthly_trends) {
 					setSpendingData(response.monthly_trends);
 				} else {

@@ -83,7 +83,7 @@ interface SidebarProps {
 	query: string;
 	setQuery: Dispatch<SetStateAction<string>>;
 	searchRef: RefObject<HTMLInputElement>;
-	createFolder: () => void;
+	createFolder: (folderName: string) => void;
 	createNewChat: () => void;
 	templates?: Template[];
 	setTemplates?: Dispatch<SetStateAction<Template[]>>;
@@ -162,17 +162,32 @@ export default function Sidebar({
 
 	const handleCreateTemplate = (templateData: Partial<Template>) => {
 		if (editingTemplate) {
-			const updatedTemplates = templates.map((t) =>
-				t.id === editingTemplate.id
-					? { ...templateData, id: editingTemplate.id }
-					: t
+			const updated: Template = {
+				id: editingTemplate.id,
+				name: templateData.name ?? editingTemplate.name,
+				content: templateData.content ?? editingTemplate.content,
+				snippet: templateData.snippet ?? editingTemplate.snippet,
+				createdAt:
+					templateData.createdAt ?? editingTemplate.createdAt,
+				updatedAt:
+					templateData.updatedAt ?? new Date().toISOString(),
+			};
+			setTemplates(
+				templates.map((t) =>
+					t.id === editingTemplate.id ? updated : t
+				)
 			);
-			setTemplates(updatedTemplates);
 			setEditingTemplate(null);
 		} else {
-			const newTemplate = {
-				...templateData,
+			const newTemplate: Template = {
 				id: Date.now().toString(),
+				name: templateData.name ?? "",
+				content: templateData.content ?? "",
+				snippet: templateData.snippet ?? "",
+				createdAt:
+					templateData.createdAt ?? new Date().toISOString(),
+				updatedAt:
+					templateData.updatedAt ?? new Date().toISOString(),
 			};
 			setTemplates([...templates, newTemplate]);
 		}
