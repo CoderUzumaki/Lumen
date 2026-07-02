@@ -23,12 +23,15 @@ failure mode.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from functools import wraps
+from pathlib import Path
 from typing import Any, Callable
 
 import jwt
 import requests
+from dotenv import load_dotenv
 from flask import g, jsonify, request
 from jwt import PyJWKClient
 
@@ -62,13 +65,32 @@ _jwks_client: PyJWKClient | None = None
 _jwks_url: str | None = None
 
 
+def _resolve_supabase_url() -> str:
+    """Resolve SUPABASE_URL robustly even under the Flask debug reloader.
+
+    `Config.SUPABASE_URL` is loaded at import time. In local dev, especially
+    with reloaders or stale parent processes, that cached value can lag behind
+    the current `.env`. Fall back to the live environment, and as a final
+    defense explicitly reload `backend/.env` once before giving up.
+    """
+    base = Config.SUPABASE_URL or os.getenv("SUPABASE_URL")
+    if base:
+        return base
+
+    backend_env = Path(__file__).resolve().parents[1] / ".env"
+    load_dotenv(backend_env, override=False)
+    base = os.getenv("SUPABASE_URL")
+    if base:
+        return base
+
+    raise AuthConfigError(
+        "SUPABASE_URL is not set. Cannot verify auth tokens. "
+        "Set it in your .env file or shell environment."
+    )
+
+
 def _jwks_url_from_config() -> str:
-    base = Config.SUPABASE_URL
-    if not base:
-        raise AuthConfigError(
-            "SUPABASE_URL is not set. Cannot verify auth tokens. "
-            "Set it in your .env file or shell environment."
-        )
+    base = _resolve_supabase_url()
     return f"{base.rstrip('/')}/auth/v1/.well-known/jwks.json"
 
 
@@ -85,7 +107,7 @@ def _get_jwks_client() -> PyJWKClient:
 
 
 def _expected_issuer() -> str:
-    return f"{Config.SUPABASE_URL.rstrip('/')}/auth/v1"
+    return f"{_resolve_supabase_url().rstrip('/')}/auth/v1"
 
 
 # --- Token verification ---------------------------------------------------

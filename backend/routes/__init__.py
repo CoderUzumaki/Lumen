@@ -15,6 +15,7 @@ from .ai_analytics import ai_analytics_bp
 from .analytics import analytics_bp
 from .database_query import database_query_bp
 from .email_config import email_config_bp
+from .auth import auth_bp
 
 
 def register_routes(app):
@@ -27,3 +28,4 @@ def register_routes(app):
     app.register_blueprint(analytics_bp)
     app.register_blueprint(database_query_bp)
     app.register_blueprint(email_config_bp)
+    app.register_blueprint(auth_bp)

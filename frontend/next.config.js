@@ -3,7 +3,11 @@
 // Fail fast if a required public env var is missing. This runs at build time
 // (next build) and at dev-server start (next dev), so a missing var blocks
 // both rather than silently shipping with `undefined` baked into the bundle.
-const requiredPublic = ["NEXT_PUBLIC_BACKEND_URL"];
+const requiredPublic = [
+	"NEXT_PUBLIC_BACKEND_URL",
+	"NEXT_PUBLIC_SUPABASE_URL",
+	"NEXT_PUBLIC_SUPABASE_ANON_KEY",
+];
 
 const missing = requiredPublic.filter((name) => !process.env[name]);
 if (missing.length > 0) {

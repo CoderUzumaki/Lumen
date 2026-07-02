@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 // Backend API base URL. next.config.js enforces this at build time, so by the
 // time this module loads the value should be defined. The explicit check
@@ -79,7 +80,11 @@ const createApiClient = (): AxiosInstance => {
 				// Unauthorized - clear token and redirect to signin
 				tokenManager.removeToken();
 				if (typeof window !== "undefined") {
-					window.location.href = "/signin";
+					const next =
+						window.location.pathname + window.location.search;
+					window.location.href = `/signin?reason=expired&next=${encodeURIComponent(
+						next
+					)}`;
 				}
 			}
 			return Promise.reject(error);
@@ -97,13 +102,6 @@ export const apiClient = createApiClient();
  */
 export const authApi = {
 	/**
-	 * Get Google OAuth URL to redirect user for login
-	 */
-	getGoogleAuthUrl: (): string => {
-		return `${API_BASE_URL}/api/v1/auth/google`;
-	},
-
-	/**
 	 * Get current user information
 	 */
 	getCurrentUser: async () => {
@@ -112,9 +110,11 @@ export const authApi = {
 	},
 
 	/**
-	 * Logout user - clear local storage
+	 * Logout user and clear local session state
 	 */
-	logout: (): void => {
+	logout: async (): Promise<void> => {
+		const supabase = getSupabaseBrowserClient();
+		await supabase.auth.signOut();
 		tokenManager.removeToken();
 		if (typeof window !== "undefined") {
 			window.location.href = "/";

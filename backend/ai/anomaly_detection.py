@@ -285,7 +285,7 @@ Respond in JSON format:
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": self.OPENROUTER_MODEL,
+                    "model": _Config.get_llm_text_model(),
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.3,
                     "max_tokens": 300

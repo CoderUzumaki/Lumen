@@ -73,7 +73,7 @@ class SQLAgent:
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": Config.LLM_TEXT_MODEL,
+                    "model": Config.get_llm_text_model(),
                     "messages": [
                         {
                             "role": "user",

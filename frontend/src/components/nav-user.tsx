@@ -25,8 +25,7 @@ import {
 	SidebarMenuItem,
 	useSidebar,
 } from "@/components/ui/sidebar";
-// import { tokenManager } from "@/lib/api/client";
-// import { signOut } from "next-auth/react";
+import { authApi } from "@/lib/api/client";
 
 export function NavUser({
 	user,
@@ -120,9 +119,7 @@ export function NavUser({
 						<DropdownMenuSeparator />
 						<DropdownMenuItem
 							onClick={async () => {
-								// tokenManager.removeToken();
-								localStorage.removeItem("user");
-								// await signOut({ callbackUrl: "/" });
+								await authApi.logout();
 							}}
 						>
 							<LogOut />

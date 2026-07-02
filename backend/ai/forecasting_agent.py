@@ -304,7 +304,7 @@ Return as JSON array of strings:
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": self.OPENROUTER_MODEL,
+                    "model": _Config.get_llm_text_model(),
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.7,
                     "max_tokens": 300

@@ -22,7 +22,7 @@ import {
 	SidebarHeader,
 	SidebarRail,
 } from "@/components/ui/sidebar";
-import { authApi, tokenManager } from "@/lib/api/client"; // This is sample data.
+import { useAuth } from "@/components/auth/auth-provider";
 const data = {
 	navMain: [
 		{
@@ -65,6 +65,7 @@ const data = {
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+	const { user: authUser } = useAuth();
 	const [user, setUser] = React.useState<{
 		name: string;
 		email: string;
@@ -76,44 +77,28 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 	});
 
 	React.useEffect(() => {
-		const fetchUserData = async () => {
-			if (typeof window !== "undefined") {
-				// First try to get from localStorage
-				const userStr = localStorage.getItem("invox_user");
-				if (userStr) {
-					const userData = JSON.parse(userStr);
-					setUser({
-						name: userData.name || "User",
-						email: userData.email || "user@example.com",
-						avatar:
-							userData.picture ||
-							`https://ui-avatars.com/api/?name=${encodeURIComponent(
-								userData.name || "User"
-							)}&background=random`,
-					});
-				} else {
-					// If not in localStorage, fetch from backend
-					try {
-						const userData = await authApi.getCurrentUser();
-						tokenManager.setUser(userData);
-						setUser({
-							name: userData.name || "User",
-							email: userData.email || "user@example.com",
-							avatar:
-								userData.picture ||
-								`https://ui-avatars.com/api/?name=${encodeURIComponent(
-									userData.name || "User"
-								)}&background=random`,
-						});
-					} catch (error) {
-						console.error("Error fetching user data:", error);
-					}
-				}
-			}
-		};
+		if (!authUser) {
+			return;
+		}
 
-		fetchUserData();
-	}, []);
+		const name =
+			authUser.user_metadata?.full_name ??
+			authUser.user_metadata?.name ??
+			authUser.email ??
+			"User";
+		const avatar =
+			authUser.user_metadata?.avatar_url ??
+			authUser.user_metadata?.picture ??
+			`https://ui-avatars.com/api/?name=${encodeURIComponent(
+				name
+			)}&background=random`;
+
+		setUser({
+			name,
+			email: authUser.email || "user@example.com",
+			avatar,
+		});
+	}, [authUser]);
 
 	return (
 		<Sidebar

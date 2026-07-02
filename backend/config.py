@@ -104,7 +104,12 @@ class Config:
     )
     # Text model used for chat synthesis, SQL generation, classification,
     # anomaly explanation, forecasting reasoning.
-    LLM_TEXT_MODEL = os.getenv("LLM_TEXT_MODEL", "anthropic/claude-3.5-sonnet")
+    LLM_TEXT_MODEL = os.getenv("LLM_TEXT_MODEL") or "openrouter/free"
+
+    @classmethod
+    def get_llm_text_model(cls) -> str:
+        """Resolve the text model from the live environment (not import-time cache)."""
+        return os.getenv("LLM_TEXT_MODEL") or cls.LLM_TEXT_MODEL or "openrouter/free"
     # Embedding model used by the RAG store.
     LLM_EMBEDDING_MODEL = os.getenv("LLM_EMBEDDING_MODEL", "openai/text-embedding-3-small")
 
