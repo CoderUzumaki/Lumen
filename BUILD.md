@@ -363,7 +363,7 @@ Goal: get from the current Flask + invoice-OCR trajectory to a clean FastAPI + a
   - `llm_calls` table receives a row for every non-cached invocation.
 - **Depends on:** BOOT-03, BOOT-05, OPT-05 (schema — implement OPT-05 first as a bare table, wire the cache logic later).
 
-### BOOT-07 — Environment variables consolidated
+### BOOT-07 — Environment variables consolidated ✅
 
 - **Files:** `backend/.env.example`, `frontend/.env.example`.
 - **Action:** Write both `.env.example` files with every variable Lumen ever reads. Group logically. Include a one-line description per var. See §Environment variables at the bottom of this document for the authoritative list.
