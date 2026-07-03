@@ -6,15 +6,15 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.routes import me as me_routes
 from app.routes import portfolios as portfolios_routes
 from app.routes import positions as positions_routes
-from app.utils.auth import UserContext, require_auth
 from app.utils.config import Config
 from app.utils.logging_config import configure_logging
 
@@ -131,14 +131,6 @@ async def health() -> dict[str, Any]:
     return _ok({"status": "ok", "commit": os.environ.get("GIT_SHA", "dev")})
 
 
-@app.get("/api/me")
-async def me(user: UserContext = Depends(require_auth)) -> dict[str, Any]:
-    return _ok({
-        "user_id": str(user.user_id),
-        "email": user.email,
-        "role": user.role,
-    })
-
-
+app.include_router(me_routes.router)
 app.include_router(portfolios_routes.router)
 app.include_router(positions_routes.router)

@@ -513,7 +513,7 @@ Everything a user configures about themselves. Nothing agentic yet.
   - Deleting a theme deletes the Chroma doc.
 - **Depends on:** DATA-01, DATA-02, ING-07.
 
-### DATA-05 — User preferences route
+### DATA-05 — User preferences route ✅
 
 - **Files:** `backend/app/routes/me.py`.
 - **Action:**
