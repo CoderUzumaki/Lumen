@@ -2,8 +2,8 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-03 (session 15 — ING-03 Marketaux adapter)
-**Progress:** 17/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01, DATA-02, DATA-03, DATA-05, ING-01, ING-02, ING-03).
+**Last updated:** 2026-07-03 (session 16 — ING-04 GDELT adapter)
+**Progress:** 18/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01, DATA-02, DATA-03, DATA-05, ING-01, ING-02, ING-03, ING-04).
 
 DATA-04 postponed (needs ING-07).
 
@@ -11,56 +11,59 @@ DATA-04 postponed (needs ING-07).
 
 ## Next module
 
-**ID:** `ING-04`
-**Title:** GDELT adapter
+**ID:** `ING-05`
+**Title:** EDGAR adapter
 **Depends on:** ING-01
-**Read:** `BUILD.md` → the `ING-04` block. GDELT's DOC 2.0 API has no API key (unlimited free), soft rate-limit ~1 req/sec. Adapter needs a semaphore to serialize calls.
+**Read:** `BUILD.md` → the `ING-05` block. Notable: needs a bundled `ticker_to_cik.json` map for the top 3000 US tickers (or fetched once at startup — call is a decision). Uses `EDGAR_USER_AGENT` env var per SEC fair-use policy.
 
-**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/05 + ING-01/02/03 stacked on `856d503`. `NewsItemIn` now has an optional `hints: dict[str, Any] = {}` field. `NewsAPISource` + `MarketauxSource` share the same never-raise contract via `BaseSource`.
+**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/05 + ING-01/02/03/04 stacked on `856d503`. Four adapters live: `NewsAPISource`, `MarketauxSource`, `GDELTSource`. Two markers registered — `free_tier_live` (LLM live probe) and `integration` (source live probes). Both opt-in via `pytest -m …`.
 
 Before starting, verify:
 - `git branch --show-current` shows `v2/intelligence-agent`.
-- `git log --oneline -17` shows ING-03..HP-01 on top of `856d503` / `f7e479a`.
+- `git log --oneline -18` shows ING-04..HP-01 on top of `856d503` / `f7e479a`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **86 passed, 1 deselected**.
+- `cd backend && python -m pytest tests -q` reports **92 passed, 2 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute ING-03 — Marketaux adapter matching the NewsAPI adapter's shape, plus extension of `NewsItemIn` to carry Marketaux's structured entity hints.
+- **Session goal:** Execute ING-04 — GDELT adapter (no API key, ~1 req/sec soft rate limit, ArtList JSON format).
 - **Completed:**
-  - `ING-03` ✅ — Marketaux adapter.
-  - `backend/app/schemas/news.py` — added `hints: dict[str, Any] = Field(default_factory=dict)` to `NewsItemIn`. BUILD.md interpretation: "add it to the schema as `hints: dict = {}`" is the field; adapters populate keys like `hints["tickers"]` for extensibility.
-  - `backend/app/pipelines/sources/marketaux.py` — `MarketauxSource(BaseSource)`. Endpoint `https://api.marketaux.com/v1/news/all` with the exact query params from BUILD.md (`filter_entities=true`, `language=en`, `limit=50`, `published_after=<since ISO>`, `api_token=<key>`). Extracts `entities[].symbol` values from each row (deduping while preserving order) into `NewsItemIn.hints["tickers"]`; omits the key entirely when no entities are present so `hints == {}`. Body falls back from `description` → `snippet`. Same never-raise contract: missing key logs and returns `[]`; retries on 429 / 5xx / transport; exhausted retries return `[]`; malformed row is skipped.
-  - `backend/tests/pipelines/sources/test_marketaux.py` — 6 tests: hints_tickers populated + deduped + order-preserved, missing API key → empty, 429 retried then succeeds, exhausted retries → empty, non-retryable 4xx → empty, malformed row is skipped.
+  - `ING-04` ✅ — GDELT adapter.
+  - `backend/app/pipelines/sources/gdelt.py` — `GDELTSource(BaseSource)`. Endpoint `https://api.gdeltproject.org/api/v2/doc/doc`; query params `mode=ArtList`, `format=JSON`, `sort=DateDesc`, `maxrecords=250`, and `startdatetime` in GDELT's `YYYYMMDDHHMMSS` shape. Class-level `asyncio.Semaphore(1)` + inter-request `_MIN_INTERVAL_S` (1.0s) enforce the ~1 req/sec ceiling across all instances of the adapter — the shared state pattern GDELT's per-IP throttle needs. `seendate` is parsed from `%Y%m%dT%H%M%SZ` (no separators). `source_id` is null (GDELT has no stable id). `hints["domain"]` is set when the article has a domain. Server-side `startdatetime` filter is backed up by a client-side re-check so items older than `since` are dropped even if the server returned them. Same never-raise contract: retries 429 / 5xx via tenacity; exhausted returns []; non-retryable 4xx returns []; malformed article skipped.
+  - `backend/pyproject.toml` — registered the `integration` pytest marker and extended `addopts` to `"not free_tier_live and not integration"` so both live-provider suites stay opt-in by default.
+  - `backend/tests/pipelines/sources/test_gdelt.py` — 6 hermetic + 1 opt-in live probe (`@pytest.mark.integration`). Hermetic tests cover: article mapping + query params + startdatetime encoding; since-filter drops older items; 429 retried then succeeds; exhausted retries returns []; malformed seendate skipped not fatal; the class semaphore actually serializes concurrent calls (measured peak concurrency == 1 across two parallel fetches).
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **86 passed, 1 deselected**.
+  - `python -m pytest tests -q` → **92 passed, 2 deselected**.
   - `ruff check .` clean.
-- **Files touched:** created `backend/app/pipelines/sources/marketaux.py`, `backend/tests/pipelines/sources/test_marketaux.py`. Modified `backend/app/schemas/news.py` (added `hints` field), `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Files touched:** created `backend/app/pipelines/sources/gdelt.py`, `backend/tests/pipelines/sources/test_gdelt.py`. Modified `backend/pyproject.toml` (marker + addopts), `BUILD.md` (tick), `HANDOFF.md` (this file).
 - **Migrations added:** none.
-- **Tests added:** 6.
+- **Tests added:** 7 (6 hermetic + 1 live).
 - **In-flight work:** none.
-- **Deviations from BUILD.md:** none. The one interpretive call was "`hints_tickers: list[str]` field on the NewsItemIn (a new optional field — add it to the schema as `hints: dict = {}` for extensibility)" — read as: schema stores `hints: dict`, Marketaux populates `hints["tickers"]`. That preserves extensibility (future adapters can add `hints["topics"]`, `hints["sentiment"]`, …) without a schema change per source.
+- **Deviations from BUILD.md:** none. GDELT's odd `YYYYMMDDTHHMMSSZ` `seendate` format required a manual `strptime`; that's an implementation detail, not a spec change. `hints["domain"]` is a small extra beyond BUILD.md's ING-04 text — using the `hints` extensibility slot from ING-03 to carry GDELT's `domain` field so downstream authority scoring (later module) has the publisher name without re-parsing raw_payload.
 
 ---
 
 ## Environment state
 
-- Backend: three adapters now — `BaseSource` (abstract), `NewsAPISource`, `MarketauxSource`. None wired into an orchestrator yet — ING-10 owns that.
+- Backend: four adapters (Base + NewsAPI + Marketaux + GDELT). Two pytest markers gate live-provider tests. `NewsAPISource`, `MarketauxSource`, `GDELTSource` all follow the same never-raise contract.
 - Frontend: unchanged.
 - Database: unchanged.
 - Vectors: unchanged (none).
-- Tests: **86 hermetic, 1 opt-in.**
-- CI: green on ING-02 push.
+- Tests: **92 hermetic, 2 opt-in.**
+- CI: green on ING-03 push.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** ING-04 (GDELT) is next — no API key needed, soft rate limit ~1 req/sec via semaphore, ArtList JSON format.
+- **ING-05 introduces a data file — `ticker_to_cik.json` mapping the top 3000 US tickers to their SEC CIK numbers.** Two clean paths:
+  1. Bundle a static JSON at implementation time (needs a one-time download from SEC's [company_tickers.json](https://www.sec.gov/files/company_tickers.json) API, hand-verified).
+  2. Fetch it lazily at adapter startup and cache in memory.
+  Recommend (1) for MVP determinism — the CIK set changes rarely. The file lives in `backend/app/pipelines/sources/data/ticker_to_cik.json` (or similar) and is committed. The next session's implementer should choose.
 
 ---
 

@@ -21,7 +21,8 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
 	"free_tier_live: hits a real free-tier LLM endpoint; skipped by default. Enable with `pytest -m free_tier_live`.",
+	"integration: hits a real external API (news sources, etc.); skipped by default. Enable with `pytest -m integration`.",
 ]
-# Live-provider tests are opt-in via marker; default runs stay hermetic.
-addopts = "-m 'not free_tier_live'"
+# Live-provider tests are opt-in via markers; default runs stay hermetic.
+addopts = "-m 'not free_tier_live and not integration'"
 

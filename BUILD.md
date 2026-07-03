@@ -651,7 +651,7 @@ Continuous background pipeline. Five sources, one normalized schema, deduped int
 - **Acceptance:** unit tests pass; hints_tickers populated from Marketaux response.
 - **Depends on:** ING-01.
 
-### ING-04 — GDELT adapter
+### ING-04 — GDELT adapter ✅
 
 - **Files:** `backend/app/pipelines/sources/gdelt.py`.
 - **Action:** GDELT's DOC 2.0 API. Query URL pattern:
