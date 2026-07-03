@@ -12,6 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.routes import portfolios as portfolios_routes
+from app.routes import positions as positions_routes
 from app.utils.auth import UserContext, require_auth
 from app.utils.config import Config
 from app.utils.logging_config import configure_logging
@@ -104,8 +106,11 @@ async def _http_exception_handler(request: Request, exc: StarletteHTTPException)
 
 @app.exception_handler(RequestValidationError)
 async def _validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    # DATA-03's acceptance requires ticker validation failures to return 400
+    # (with the `validation_error` code) — deviating from FastAPI's default
+    # 422 to match BUILD.md's stable-code contract.
     return JSONResponse(
-        status_code=422,
+        status_code=400,
         content=_err("validation_error", "Request validation failed", details=exc.errors()),
     )
 
@@ -133,3 +138,7 @@ async def me(user: UserContext = Depends(require_auth)) -> dict[str, Any]:
         "email": user.email,
         "role": user.role,
     })
+
+
+app.include_router(portfolios_routes.router)
+app.include_router(positions_routes.router)

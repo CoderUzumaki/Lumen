@@ -464,7 +464,7 @@ Everything a user configures about themselves. Nothing agentic yet.
   - `pytest backend/tests/schemas/test_portfolio.py` covers valid + invalid cases per field.
 - **Depends on:** DATA-01.
 
-### DATA-03 — Portfolio & positions routes
+### DATA-03 — Portfolio & positions routes ✅
 
 - **Files:** `backend/app/routes/portfolios.py`, `backend/app/routes/positions.py`.
 - **Action:** Implement CRUD endpoints:

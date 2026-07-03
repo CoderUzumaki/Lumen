@@ -2,67 +2,91 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-03 (session 10 — DATA-02 Pydantic schemas)
-**Progress:** 12/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01, DATA-02).
+**Last updated:** 2026-07-03 (session 11 — DATA-03 portfolios + positions routes)
+**Progress:** 13/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-03).
 
 ---
 
 ## Next module
 
-**ID:** `DATA-03`
-**Title:** Portfolio & positions routes
-**Depends on:** DATA-01, DATA-02, BOOT-03
-**Read:** `BUILD.md` → the `DATA-03` block (that section only). It enumerates the exact endpoint list, ownership scoping rules (cross-user access returns 404, not 403), and the "activate deactivates the previous active" semantic.
+**ID:** `DATA-04`
+**Title:** Themes routes
+**Depends on:** DATA-01, DATA-02, ING-07
+**Read:** `BUILD.md` → the `DATA-04` block.
 
-**Branch state:** BOOT-01..BOOT-08 + DATA-01..DATA-02 stacked on `856d503`. The DB layer has all five product tables from Phase 1; Pydantic schemas cover portfolios, positions, themes, and preferences. DATA-03 wires the HTTP surface on top: FastAPI routes under `backend/app/routes/portfolios.py` + `backend/app/routes/positions.py` that read the Supabase-authed user via `Depends(require_auth)`, scope every query to `owner_id == user.user_id`, and return the schemas from DATA-02.
+**Important dependency wrinkle:** DATA-04 depends on ING-07 (Chroma vector store + local embeddings) — on create/update, DATA-04 stores a `themes` collection doc in Chroma and persists the doc id in `themes.embedding_id`. ING-07 hasn't been built yet (Phase 2). The next session should either (a) advance to Phase 2 modules that unblock ING-07, or (b) implement DATA-04 with a stub `EmbeddingClient` call (already exists in `app.utils.llm.EmbeddingClient` — raises NotImplementedError until ING-07). Recommend the user pick before starting.
+
+**Branch state:** BOOT-01..BOOT-08 + DATA-01..DATA-03 stacked on `856d503`. Portfolios + positions have a live HTTP surface, ownership scoping (cross-user → 404), the activate-swap semantic, and validation-error responses at status 400 with the `validation_error` envelope code.
 
 Before starting, verify:
 - `git branch --show-current` shows `v2/intelligence-agent`.
-- `git log --oneline -12` shows DATA-02..HP-01 on top of `856d503` / `f7e479a`.
+- `git log --oneline -13` shows DATA-03..HP-01 on top of `856d503` / `f7e479a`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -v` reports **61 passed, 1 deselected**.
+- `cd backend && python -m pytest tests -q` reports **65 passed, 1 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute DATA-02 — Pydantic v2 request/response models for the four Phase 1 entities, plus the acceptance test suite covering valid and invalid cases per field.
+- **Session goal:** Execute DATA-03 — implement the 10 portfolio + position endpoints, enforce owner scoping (cross-user access returns 404), enforce the "one active portfolio per user" semantic in the `/activate` endpoint, and route ticker-validation failures to a 400 + `validation_error` envelope response.
 - **Completed:**
-  - `DATA-02` ✅ — Pydantic schemas.
-  - `backend/app/schemas/__init__.py` (empty package marker).
-  - `backend/app/schemas/portfolio.py` — `PositionBase / PositionCreate / PositionUpdate / PositionRead`, `PortfolioBase / PortfolioCreate / PortfolioUpdate / PortfolioRead`. `PortfolioRead` embeds `positions: list[PositionRead]` per DATA-02's Action item. Ticker validated via regex `^[A-Z0-9.\-:]{1,20}$`; currency via `^[A-Z]{3}$`. `asset_type` restricted via `Literal["equity","etf","crypto","bond","other"]`. Every `*Update` model has all fields optional.
-  - `backend/app/schemas/theme.py` — `ThemeBase / ThemeCreate / ThemeUpdate / ThemeRead`. Description 3–200 chars via `Field(min_length=..., max_length=...)`. Weight in `[0.0, 1.0]` via `Field(ge=..., le=...)`. Default weight is `Decimal("1.0")` to match the DB column.
-  - `backend/app/schemas/preferences.py` — `UserPreferencesBase / UserPreferencesUpdate / UserPreferencesRead`. `model_tier: Literal["fast","thorough"]`. `briefing_hour: int` in `[0, 23]`. Currency validated the same way as positions. `model_config = ConfigDict(from_attributes=True, protected_namespaces=())` — the `protected_namespaces=()` silences Pydantic's warning about `model_tier` colliding with its reserved `model_` prefix. Applied via `replace_all` across the base + update + read models.
-  - `backend/tests/schemas/__init__.py`.
-  - `backend/tests/schemas/test_portfolio.py` — 53 tests (mostly parametrized). Covers: valid + invalid tickers, valid + invalid currencies, position defaults, invalid asset_type, position partial update, portfolio min/max name length, portfolio empty-update valid, portfolio read embeds positions, theme description bounds, theme weight bounds, theme default weight, theme partial update, theme read shape, preferences valid/invalid updates, preferences briefing_hour bounds, preferences invalid model_tier / currency, preferences read defaults.
+  - `DATA-03` ✅ — portfolios + positions routes.
+  - `backend/app/db/models/portfolio.py` — added `positions` relationship (`selectinload` lazy loading, `cascade="all, delete-orphan", passive_deletes=True` so ORM cascades line up with the DB's ON DELETE CASCADE).
+  - `backend/app/db/models/position.py` — added the reverse `portfolio` relationship.
+  - `backend/app/routes/__init__.py` (empty package marker).
+  - `backend/app/routes/portfolios.py` — router at prefix `/api/portfolios`:
+    - `POST` → `create_portfolio` (201). When `is_active=True`, deactivates any pre-existing active portfolio for the same user before insert.
+    - `GET` → `list_portfolios` ordered by `created_at`.
+    - `GET /{portfolio_id}` → `get_portfolio` (404 if not owned).
+    - `PUT /{portfolio_id}` → `update_portfolio` (200). Applies `body.model_dump(exclude_unset=True)`; if the change activates the portfolio, first deactivates any other active portfolio for the user.
+    - `DELETE /{portfolio_id}` → `delete_portfolio` (204, `response_class=Response` to satisfy FastAPI 0.115's "204 must not have a response body" assertion).
+    - `POST /{portfolio_id}/activate` → `activate_portfolio` (200). Explicitly deactivates the current active portfolio, then sets target active.
+    - `POST /{portfolio_id}/positions` → `create_position` (201).
+    - `GET /{portfolio_id}/positions` → `list_positions` ordered by `created_at`.
+  - `backend/app/routes/positions.py` — router at prefix `/api/positions`:
+    - `PUT /{position_id}` → `update_position` (200). Resolves the position by id and joins to Portfolio to enforce owner scoping.
+    - `DELETE /{position_id}` → `delete_position` (204, `response_class=Response`).
+  - `backend/app/main.py` — imports the two routers and `include_router`s them. Also changed the `RequestValidationError` handler to return **HTTP 400** (was 422) so DATA-03's acceptance criterion "Ticker validation errors return 400 with `validation_error` code" is literal. The `validation_error` envelope code was already correct.
+  - `backend/tests/routes/__init__.py`.
+  - `backend/tests/routes/test_portfolios.py` — 4 test functions covering the DATA-03 acceptance list:
+    - `test_owner_crud_and_activate` — full round-trip on portfolios (create, list, get, put, add position, list positions, put position, delete position, delete portfolio) plus the activate switch across two portfolios.
+    - `test_cross_user_access_returns_404` — Bob sees Alice's portfolio as 404 across every verb (GET, LIST, PUT, DELETE, activate, POST positions).
+    - `test_cross_user_position_returns_404` — Bob can't touch Alice's positions.
+    - `test_ticker_validation_error_returns_400_with_envelope` — a bad ticker returns 400 with `{"data": null, "error": {"code": "validation_error", ...}}`.
+  - Uses a fresh sqlite scratch DB per test, `PRAGMA foreign_keys=ON`, `Base.metadata.create_all()`, and FastAPI `app.dependency_overrides` to inject a fake `UserContext` per test (Alice by default, swapped to Bob mid-test for the cross-user checks).
 - **Acceptance verified locally:**
-  - `python -m pytest tests -v` → **61 passed, 1 deselected**. (53 new DATA-02 tests + 7 LLM tests + 1 Phase 1 schema test; live-provider test still opt-in via `free_tier_live` marker.)
+  - `python -m pytest tests -q` → **65 passed, 1 deselected** (4 new DATA-03 tests + 53 DATA-02 tests + 7 LLM tests + 1 Phase 1 schema test).
   - `ruff check .` clean.
-  - No Pydantic warnings.
-- **Files touched:** created `backend/app/schemas/{__init__,portfolio,theme,preferences}.py`, `backend/tests/schemas/{__init__,test_portfolio}.py`. Modified `BUILD.md` (tick), `HANDOFF.md` (this file).
-- **Migrations added:** none.
-- **Tests added:** 53 (`tests/schemas/test_portfolio.py`).
+- **Files touched:** created `backend/app/routes/{__init__,portfolios,positions}.py`, `backend/tests/routes/{__init__,test_portfolios}.py`. Modified `backend/app/db/models/portfolio.py` (added positions relationship), `backend/app/db/models/position.py` (added portfolio relationship), `backend/app/main.py` (wired routers, validation → 400), `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Migrations added:** none. Relationship additions are metadata-only; the DB schema is unchanged.
+- **Tests added:** 4 in `backend/tests/routes/test_portfolios.py`.
 - **In-flight work:** none.
-- **Deviations from BUILD.md:** none. DATA-02's Files scope was strictly `backend/app/schemas/*.py`; the test file lives at `backend/tests/schemas/test_portfolio.py` per DATA-02's Acceptance criterion — that's spec-mandated, not a deviation.
+- **Deviations from BUILD.md:**
+  - **Changed `RequestValidationError` status from 422 → 400.** DATA-03's Acceptance explicitly says "400". FastAPI's convention is 422; BUILD.md's own error envelope only enumerates codes, not statuses. This resolves the ambiguity in DATA-03's favour and is called out in the main.py handler comment. Any earlier client that assumed 422 for validation errors will need updating (none exist yet).
+  - **Added ORM `relationship()` on Portfolio and Position.** Not in DATA-01's spec (that was a schema-only migration module); DATA-03 needs them so `PortfolioRead` can embed `positions: list[PositionRead]` via `from_attributes=True`. Same-DB `ForeignKey("portfolios.id", ondelete="CASCADE")` was already declared in DATA-01; adding the ORM relationship on top is purely a Python-level convenience.
+  - **204 endpoints use `response_class=Response`.** FastAPI 0.115 fails to register a route with `status_code=204` that has any inferred response body. Setting `response_class=Response` and returning `Response(status_code=204)` is the idiomatic fix.
 
 ---
 
 ## Environment state
 
-- Backend: FastAPI app + auth + LLM wrapper + five product tables + Pydantic schemas for four Phase 1 entities. DATA-03 will now add the HTTP surface.
+- Backend: 10 route endpoints live under `/api/portfolios/*` and `/api/positions/*`, all owner-scoped, all validated by DATA-02 schemas. `GET /health`, `GET /api/me` still work.
 - Frontend: unchanged.
-- Database: unchanged.
+- Database: unchanged (all five product tables from DATA-01 + BOOT-06 still current).
 - Vectors: unchanged (none).
-- Tests: **61 hermetic, 1 opt-in.**
-- CI: passing.
+- Tests: 65 hermetic, 1 opt-in. Route tests use per-test sqlite via dependency overrides — no CI dependency changes.
+- CI: passing on last push.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** DATA-03 is the first route-heavy module — enumerates 9 endpoints across portfolios and positions. Depends on `require_auth` (BOOT-03), the ORM models (DATA-01), and the schemas above (DATA-02).
+- **DATA-04's ING-07 dependency.** ING-07 (Chroma + sentence-transformers) is Phase 2. DATA-04 wants to store embedding-ids in `themes.embedding_id` and manage docs in Chroma. Two clean paths:
+  1. **Skip ahead to Phase 2 (ING-01..ING-07) then come back to DATA-04.** Matches BUILD.md's stated dependency chain.
+  2. **Ship DATA-04 with a stub embedding path** — the model already has `embedding_id: str | None`; on create/update, log-and-skip the Chroma write; on delete, log-and-skip the Chroma delete. Then DATA-04 is fully wired at the HTTP layer, waiting for ING-07 to fill in the Chroma calls.
+  Recommend the user pick before the next session starts.
 
 ---
 

@@ -9,11 +9,16 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, Index, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, IdMixin, TimestampsMixin
+
+if TYPE_CHECKING:
+    from app.db.models.position import Position
 
 
 class Portfolio(IdMixin, TimestampsMixin, Base):
@@ -41,4 +46,12 @@ class Portfolio(IdMixin, TimestampsMixin, Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
+    )
+
+    positions: Mapped[list["Position"]] = relationship(
+        "Position",
+        back_populates="portfolio",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="selectin",
     )

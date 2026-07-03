@@ -8,6 +8,8 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import UUID
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
@@ -16,9 +18,12 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, CreatedAtMixin, IdMixin
+
+if TYPE_CHECKING:
+    from app.db.models.portfolio import Portfolio
 
 
 class Position(IdMixin, CreatedAtMixin, Base):
@@ -53,3 +58,7 @@ class Position(IdMixin, CreatedAtMixin, Base):
     )
     exchange: Mapped[str | None] = mapped_column(String, nullable=True)
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    portfolio: Mapped["Portfolio"] = relationship(
+        "Portfolio", back_populates="positions"
+    )
