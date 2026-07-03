@@ -1,0 +1,91 @@
+# Render blueprint for Lumen (web + Postgres).
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: lumen-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 app:app
+    healthCheckPath: /health
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_AUD
+        value: authenticated
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lumen-db
+          property: connectionString
+      - key: LLM_TEXT_MODEL
+        value: openrouter/free
+      - key: ENABLE_CHROMA
+        value: "false"
+
+  - type: worker
+    name: lumen-email-worker
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python worker.py
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: SECRET_KEY
+        fromService:
+          name: lumen-api
+          type: web
+          envVarKey: SECRET_KEY
+      - key: OPENROUTER_API_KEY
+        fromService:
+          name: lumen-api
+          type: web
+          envVarKey: OPENROUTER_API_KEY
+      - key: SUPABASE_URL
+        fromService:
+          name: lumen-api
+          type: web
+          envVarKey: SUPABASE_URL
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lumen-db
+          property: connectionString
+      - key: EMAIL_POLL_INTERVAL_SECONDS
+        value: "300"
+
+  - type: web
+    name: lumen-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NEXT_PUBLIC_BACKEND_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+
+databases:
+  - name: lumen-db
+    plan: free
+    databaseName: lumen
+    user: lumen

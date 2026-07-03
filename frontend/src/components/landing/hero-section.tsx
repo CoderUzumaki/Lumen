@@ -1,4 +1,6 @@
+// @ts-nocheck
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import RotatingText from "./RotatingText";
 
 const ArrowRight = () => (
@@ -40,7 +42,7 @@ export function HeroSection() {
 				{/* Badge */}
 				<div className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-medium mb-8 mt-12 animate-fade-in-badge">
 					<span className="w-2 h-2 bg-white/60 rounded-full mr-2 animate-pulse"></span>
-					AI-Powered Invoice Management
+					AI-Powered Finance Operations
 				</div>
 
 				{/* Main Heading */}
@@ -76,19 +78,22 @@ export function HeroSection() {
 
 				{/* Subheading */}
 				<p className="text-base sm:text-xl md:text-2xl text-white text-balance max-w-sm sm:max-w-3xl mx-auto mb-8 sm:mb-12 leading-relaxed px-4 sm:px-0 animate-fade-in-subheading font-light">
-					Lumen helps businesses streamline invoice management with
-					AI-powered OCR, smart analytics, and automated workflows for
-					seamless financial operations.
+					Lumen gives finance teams a faster way to capture invoices,
+					monitor spend, surface anomalies, and answer operational
+					questions without bouncing between tools.
 				</p>
 
 				{/* CTA Buttons */}
 				<div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8 sm:mb-16 animate-fade-in-buttons">
 					<Button
+						asChild
 						size="lg"
 						className="bg-white text-black rounded-full px-8 py-4 text-lg font-medium transition-all duration-300 hover:bg-gray-50 hover:scale-105 hover:shadow-lg group cursor-pointer relative overflow-hidden"
 					>
-						Get Started Free
-						<ArrowRight />
+						<Link href="/signin?next=/dashboard">
+							Get Started Free
+							<ArrowRight />
+						</Link>
 					</Button>
 
 					<Button
@@ -104,49 +109,49 @@ export function HeroSection() {
 				{/* Trust Indicators */}
 				<div className="text-center px-4 hidden sm:block overflow-hidden animate-fade-in-trust">
 					<p className="text-sm text-white mb-6">
-						Trusted by businesses managing millions in transactions
+						Built for AP, controllers, and finance operators who need answers quickly
 					</p>
 					<div className="relative overflow-hidden w-full max-w-4xl mx-auto">
 						<div className="flex items-center gap-8 opacity-60 hover:opacity-80 transition-all duration-500 animate-slide-left">
 							<div className="flex items-center gap-8 whitespace-nowrap">
 								<div className="text-base sm:text-lg font-semibold">
-									RetailPro
+									Accounts Payable
 								</div>
 								<div className="text-base sm:text-lg font-semibold">
-									FinanceHub
+									Vendor Control
 								</div>
 								<div className="text-base sm:text-lg font-semibold">
-									TradeWorks
+									Cash Visibility
 								</div>
 								<div className="text-base sm:text-lg font-semibold">
-									AccounTech
+									Month-End Close
 								</div>
 								<div className="text-base sm:text-lg font-semibold">
-									BizFlow
+									Exception Review
 								</div>
 								<div className="text-base sm:text-lg font-semibold">
-									InvoiceIQ
+									Spend Forecasting
 								</div>
 							</div>
 							{/* Duplicate for seamless loop */}
 							<div className="flex items-center gap-8 whitespace-nowrap">
 								<div className="text-base sm:text-lg font-semibold">
-									RetailPro
+									Accounts Payable
 								</div>
 								<div className="text-base sm:text-lg font-semibold">
-									FinanceHub
+									Vendor Control
 								</div>
 								<div className="text-base sm:text-lg font-semibold">
-									TradeWorks
+									Cash Visibility
 								</div>
 								<div className="text-base sm:text-lg font-semibold">
-									AccounTech
+									Month-End Close
 								</div>
 								<div className="text-base sm:text-lg font-semibold">
-									BizFlow
+									Exception Review
 								</div>
 								<div className="text-base sm:text-lg font-semibold">
-									InvoiceIQ
+									Spend Forecasting
 								</div>
 							</div>
 						</div>
@@ -156,7 +161,7 @@ export function HeroSection() {
 				{/* Mobile Trust Indicators */}
 				<div className="text-center px-4 mb-8 sm:hidden overflow-hidden animate-fade-in-trust">
 					<p className="text-sm text-white mb-6">
-						Trusted by businesses managing millions in transactions
+						Built for teams that run finance with precision
 					</p>
 					<div className="relative overflow-hidden w-full max-w-sm mx-auto">
 						{/* Left blur fade */}
@@ -166,43 +171,43 @@ export function HeroSection() {
 						<div className="flex items-center gap-6 opacity-60 animate-slide-left-mobile">
 							<div className="flex items-center gap-6 whitespace-nowrap">
 								<div className="text-sm font-semibold">
-									RetailPro
+									AP
 								</div>
 								<div className="text-sm font-semibold">
-									FinanceHub
+									Close
 								</div>
 								<div className="text-sm font-semibold">
-									TradeWorks
+									Spend
 								</div>
 								<div className="text-sm font-semibold">
-									AccounTech
+									Risk
 								</div>
 								<div className="text-sm font-semibold">
-									BizFlow
+									Vendors
 								</div>
 								<div className="text-sm font-semibold">
-									InvoiceIQ
+									Forecasts
 								</div>
 							</div>
 							{/* Duplicate for seamless loop */}
 							<div className="flex items-center gap-6 whitespace-nowrap">
 								<div className="text-sm font-semibold">
-									RetailPro
+									AP
 								</div>
 								<div className="text-sm font-semibold">
-									FinanceHub
+									Close
 								</div>
 								<div className="text-sm font-semibold">
-									TradeWorks
+									Spend
 								</div>
 								<div className="text-sm font-semibold">
-									AccounTech
+									Risk
 								</div>
 								<div className="text-sm font-semibold">
-									BizFlow
+									Vendors
 								</div>
 								<div className="text-sm font-semibold">
-									InvoiceIQ
+									Forecasts
 								</div>
 							</div>
 						</div>

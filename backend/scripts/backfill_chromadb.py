@@ -2,16 +2,18 @@
 import sys
 import os
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask
+
+from config import Config
 from models.database import db
 from models import Transaction, TransactionItem
 from ai.rag_system import RAGSystem
 
-# Initialize Flask app
+# Initialize Flask app pointing at the same DB the running app uses.
 app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///lumen.db"
+app.config["SQLALCHEMY_DATABASE_URI"] = Config.DATABASE_URI
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)

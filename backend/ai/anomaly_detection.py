@@ -7,6 +7,10 @@ import json
 import requests
 import os
 from models.database import db
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 
 try:
@@ -16,13 +20,15 @@ try:
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
-    print("⚠️  scikit-learn not installed. ML models disabled.")
+    logger.warning("⚠️  scikit-learn not installed. ML models disabled.")
 
 class FraudDetectionAgent:
     """Multi-layer anomaly detection system"""
-    
-    OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
-    OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'anthropic/claude-3.5-sonnet')
+
+    from config import Config as _Config  # local import to avoid module-level cycles
+    OPENROUTER_API_KEY = _Config.OPENROUTER_API_KEY
+    OPENROUTER_MODEL = _Config.LLM_TEXT_MODEL
+    OPENROUTER_CHAT_URL = _Config.OPENROUTER_CHAT_URL
     
     def __init__(self):
         """
@@ -273,13 +279,13 @@ Respond in JSON format:
         
         try:
             response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                self.OPENROUTER_CHAT_URL,
                 headers={
                     "Authorization": f"Bearer {self.OPENROUTER_API_KEY}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": self.OPENROUTER_MODEL,
+                    "model": _Config.get_llm_text_model(),
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.3,
                     "max_tokens": 300
@@ -305,7 +311,7 @@ Respond in JSON format:
                 anomaly['risk_score'] *= 0.5  # Reduce if LLM thinks it's false positive
         
         except Exception as e:
-            print(f"LLM reasoning failed: {str(e)}")
+            logger.info(f"LLM reasoning failed: {str(e)}")
             anomaly['llm_explanation'] = anomaly['explanation']
             anomaly['risk_level'] = self._calculate_risk_level(anomaly['risk_score'])
         
@@ -331,11 +337,11 @@ Respond in JSON format:
         Returns:
             Anomaly detection results
         """
-        print(f"🔍 Detecting anomalies for user {user_id}...")
+        logger.info(f"🔍 Detecting anomalies for user {user_id}...")
         
         # Get transactions
         transactions = self.get_user_transactions(user_id, days_back=90)
-        print(f"   Analyzing {len(transactions)} transactions")
+        logger.info(f"   Analyzing {len(transactions)} transactions")
         
         if len(transactions) < 5:
             return {
@@ -347,17 +353,17 @@ Respond in JSON format:
         
         # Layer 1: Statistical
         stat_anomalies = self.statistical_anomaly_detection(transactions)
-        print(f"   Statistical: {len(stat_anomalies)} anomalies")
+        logger.info(f"   Statistical: {len(stat_anomalies)} anomalies")
         
         # Layer 2: Rule-based
         rule_anomalies = self.rule_based_detection(transactions)
-        print(f"   Rule-based: {len(rule_anomalies)} anomalies")
+        logger.info(f"   Rule-based: {len(rule_anomalies)} anomalies")
         
         # Layer 3: ML (if available)
         ml_anomalies = []
         if SKLEARN_AVAILABLE:
             ml_anomalies = self.ml_anomaly_detection(transactions)
-            print(f"   ML: {len(ml_anomalies)} anomalies")
+            logger.info(f"   ML: {len(ml_anomalies)} anomalies")
         
         # Combine and deduplicate anomalies
         all_anomalies = {}
@@ -381,7 +387,7 @@ Respond in JSON format:
         
         # Layer 4: LLM reasoning on top anomalies (limit to save time/cost)
         if use_llm:
-            print(f"   Applying LLM reasoning to top {min(len(final_anomalies), 5)} anomalies...")
+            logger.info(f"   Applying LLM reasoning to top {min(len(final_anomalies), 5)} anomalies...")
             for anomaly in final_anomalies[:5]:
                 self.llm_reasoning(anomaly)
         else:
@@ -401,71 +407,48 @@ Respond in JSON format:
             'anomalies': final_anomalies
         }
     
-    def save_anomalies_to_db(self, user_id: int, anomalies: List[Dict]):
-        """Save anomalies to database"""
-        # Create anomalies table
-        db.session.execute(db.text("""
-            CREATE TABLE IF NOT EXISTS anomalies (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                transaction_id TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                anomaly_type VARCHAR(50),
-                detection_method VARCHAR(50),
-                risk_score REAL,
-                risk_level VARCHAR(20),
-                explanation TEXT,
-                flags TEXT,
-                llm_explanation TEXT,
-                recommendation VARCHAR(20),
-                is_false_positive BOOLEAN,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (transaction_id) REFERENCES transactions(id)
-            )
-        """))
-        
-        # Insert anomalies
+    def save_anomalies_to_db(self, user_id, anomalies: List[Dict]):
+        """Save anomalies to database via SQLAlchemy."""
+        from models import FraudAnomaly
         import uuid
+
         for anomaly in anomalies:
-            db.session.execute(db.text("""
-                INSERT INTO anomalies 
-                (id, transaction_id, user_id, anomaly_type, detection_method,
-                 risk_score, risk_level, explanation, flags, llm_explanation, recommendation)
-                VALUES (:id, :transaction_id, :user_id, :anomaly_type, :detection_method,
-                        :risk_score, :risk_level, :explanation, :flags, :llm_explanation, :recommendation)
-            """), {
-                'id': str(uuid.uuid4()),
-                'transaction_id': anomaly['transaction_id'],
-                'user_id': str(user_id),
-                'anomaly_type': anomaly['anomaly_type'],
-                'detection_method': anomaly['detection_method'],
-                'risk_score': int(anomaly['risk_score'] * 100),  # Convert to 0-100 scale
-                'risk_level': anomaly.get('risk_level', 'LOW'),
-                'explanation': anomaly['explanation'],
-                'flags': json.dumps(anomaly['flags']),
-                'llm_explanation': anomaly.get('llm_explanation'),
-                'recommendation': anomaly.get('recommendation')
-            })
-        
+            db.session.add(
+                FraudAnomaly(
+                    id=str(uuid.uuid4()),
+                    transaction_id=anomaly["transaction_id"],
+                    user_id=str(user_id),
+                    anomaly_type=anomaly.get("anomaly_type"),
+                    detection_method=anomaly.get("detection_method"),
+                    risk_score=int(anomaly["risk_score"] * 100),
+                    risk_level=anomaly.get("risk_level", "LOW"),
+                    explanation=anomaly.get("explanation"),
+                    flags=json.dumps(anomaly.get("flags", [])),
+                    llm_explanation=anomaly.get("llm_explanation"),
+                    recommendation=anomaly.get("recommendation"),
+                )
+            )
+
         db.session.commit()
 
 
 # Test/Example Usage
 if __name__ == "__main__":
-    print("="*60)
-    print("Fraud Detection Agent Module")
-    print("="*60)
-    print("\n⚠️  This module should be imported and used within the Flask app context.")
-    print("\n📘 Example usage:")
-    print("""
+    logger.info("="*60)
+    logger.info("Fraud Detection Agent Module")
+    logger.info("="*60)
+    logger.info("\n⚠️  This module should be imported and used within the Flask app context.")
+    logger.info("\n📘 Example usage:")
+    logger.info("""
     from flask import Flask
     from models.database import init_db
     from ai.anomaly_detection import FraudDetectionAgent
-    
+
     # Use the existing Flask app from app.py
     with app.app_context():
         agent = FraudDetectionAgent()
         results = agent.detect_anomalies(user_id=123, use_llm=True)
-        print(f"Detected {results['anomalies_detected']} anomalies")
+        >>> results['anomalies_detected']
     """)
-    print("\n✅ See app.py for proper Flask application initialization.")
-    print("="*60)
+    logger.info("\n✅ See app.py for proper Flask application initialization.")
+    logger.info("="*60)

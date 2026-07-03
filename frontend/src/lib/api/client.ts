@@ -1,35 +1,57 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
-// Backend API base URL
-const API_BASE_URL =
-	process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+if (!API_BASE_URL) {
+	throw new Error(
+		"NEXT_PUBLIC_BACKEND_URL is not set. See frontend/.env.example."
+	);
+}
 
-// Token storage keys
-const TOKEN_KEY = "invox_access_token";
-const USER_KEY = "invox_user";
+const TOKEN_KEY = "lumen_access_token";
+const USER_KEY = "lumen_user";
+const TOKEN_KEY_LEGACY = "invox_access_token";
+const USER_KEY_LEGACY = "invox_user";
 
-/**
- * Token management utilities
- */
+function migrateLegacyStorage(): void {
+	if (typeof window === "undefined") return;
+	const legacyToken = localStorage.getItem(TOKEN_KEY_LEGACY);
+	if (legacyToken && !localStorage.getItem(TOKEN_KEY)) {
+		localStorage.setItem(TOKEN_KEY, legacyToken);
+		localStorage.removeItem(TOKEN_KEY_LEGACY);
+	}
+	const legacyUser = localStorage.getItem(USER_KEY_LEGACY);
+	if (legacyUser && !localStorage.getItem(USER_KEY)) {
+		localStorage.setItem(USER_KEY, legacyUser);
+		localStorage.removeItem(USER_KEY_LEGACY);
+	}
+}
+
 export const tokenManager = {
 	getToken: (): string | null => {
 		if (typeof window === "undefined") return null;
+		migrateLegacyStorage();
 		return localStorage.getItem(TOKEN_KEY);
 	},
 
 	setToken: (token: string): void => {
 		if (typeof window === "undefined") return;
 		localStorage.setItem(TOKEN_KEY, token);
+		document.cookie = "lumen_session=1; path=/; max-age=604800; samesite=lax";
 	},
 
 	removeToken: (): void => {
 		if (typeof window === "undefined") return;
 		localStorage.removeItem(TOKEN_KEY);
 		localStorage.removeItem(USER_KEY);
+		localStorage.removeItem(TOKEN_KEY_LEGACY);
+		localStorage.removeItem(USER_KEY_LEGACY);
+		document.cookie = "lumen_session=; path=/; max-age=0; samesite=lax";
 	},
 
 	getUser: (): Record<string, unknown> | null => {
 		if (typeof window === "undefined") return null;
+		migrateLegacyStorage();
 		const userStr = localStorage.getItem(USER_KEY);
 		return userStr ? JSON.parse(userStr) : null;
 	},
@@ -40,19 +62,13 @@ export const tokenManager = {
 	},
 };
 
-/**
- * Create axios instance with authentication
- */
 const createApiClient = (): AxiosInstance => {
 	const client = axios.create({
 		baseURL: API_BASE_URL,
-		headers: {
-			"Content-Type": "application/json",
-		},
-		withCredentials: false, // Disabled for simplified OCR-only backend
+		headers: { "Content-Type": "application/json" },
+		withCredentials: false,
 	});
 
-	// Request interceptor to add auth token
 	client.interceptors.request.use(
 		(config) => {
 			const token = tokenManager.getToken();
@@ -64,15 +80,17 @@ const createApiClient = (): AxiosInstance => {
 		(error) => Promise.reject(error)
 	);
 
-	// Response interceptor to handle errors
 	client.interceptors.response.use(
 		(response) => response,
 		(error: AxiosError) => {
 			if (error.response?.status === 401) {
-				// Unauthorized - clear token and redirect to signin
 				tokenManager.removeToken();
 				if (typeof window !== "undefined") {
-					window.location.href = "/signin";
+					const next =
+						window.location.pathname + window.location.search;
+					window.location.href = `/signin?reason=expired&next=${encodeURIComponent(
+						next
+					)}`;
 				}
 			}
 			return Promise.reject(error);
@@ -82,32 +100,17 @@ const createApiClient = (): AxiosInstance => {
 	return client;
 };
 
-// Export singleton instance
 export const apiClient = createApiClient();
 
-/**
- * Auth API endpoints
- */
 export const authApi = {
-	/**
-	 * Get Google OAuth URL to redirect user for login
-	 */
-	getGoogleAuthUrl: (): string => {
-		return `${API_BASE_URL}/api/v1/auth/google`;
-	},
-
-	/**
-	 * Get current user information
-	 */
 	getCurrentUser: async () => {
 		const response = await apiClient.get("/api/v1/auth/me");
 		return response.data;
 	},
 
-	/**
-	 * Logout user - clear local storage
-	 */
-	logout: (): void => {
+	logout: async (): Promise<void> => {
+		const supabase = getSupabaseBrowserClient();
+		await supabase.auth.signOut();
 		tokenManager.removeToken();
 		if (typeof window !== "undefined") {
 			window.location.href = "/";
@@ -115,13 +118,7 @@ export const authApi = {
 	},
 };
 
-/**
- * Invoice API endpoints
- */
 export const invoiceApi = {
-	/**
-	 * Get all invoices for the current user (paginated)
-	 */
 	getMyInvoices: async (page = 1, pageSize = 100) => {
 		const response = await apiClient.get("/api/v1/invoices/", {
 			params: { page, page_size: pageSize },
@@ -129,40 +126,25 @@ export const invoiceApi = {
 		return response.data;
 	},
 
-	/**
-	 * Upload a PDF/image invoice
-	 */
 	uploadInvoice: async (file: File) => {
 		const formData = new FormData();
 		formData.append("file", file);
-
 		const response = await apiClient.post("/extract", formData, {
-			headers: {
-				"Content-Type": "multipart/form-data",
-			},
+			headers: { "Content-Type": "multipart/form-data" },
 		});
 		return response.data;
 	},
 
-	/**
-	 * Get invoice statistics
-	 */
 	getInvoiceStats: async () => {
 		const response = await apiClient.get("/api/v1/invoices/stats");
 		return response.data;
 	},
 
-	/**
-	 * Get a specific invoice by ID
-	 */
 	getInvoice: async (invoiceId: string) => {
 		const response = await apiClient.get(`/api/v1/invoices/${invoiceId}`);
 		return response.data;
 	},
 
-	/**
-	 * Update an invoice
-	 */
 	updateInvoice: async (
 		invoiceId: string,
 		data: { status?: string; [key: string]: unknown }
@@ -174,16 +156,10 @@ export const invoiceApi = {
 		return response.data;
 	},
 
-	/**
-	 * Delete an invoice
-	 */
 	deleteInvoice: async (invoiceId: string) => {
 		await apiClient.delete(`/api/v1/invoices/${invoiceId}`);
 	},
 
-	/**
-	 * Export invoices with optional filters
-	 */
 	exportInvoices: async (params: {
 		format: "csv" | "json";
 		status?: string;
@@ -195,7 +171,6 @@ export const invoiceApi = {
 	}) => {
 		const queryParams = new URLSearchParams();
 		queryParams.append("format", params.format);
-
 		if (params.status) queryParams.append("status", params.status);
 		if (params.start_date)
 			queryParams.append("start_date", params.start_date);
@@ -209,27 +184,19 @@ export const invoiceApi = {
 
 		const response = await apiClient.get(
 			`/api/v1/invoices/export?${queryParams.toString()}`,
-			{
-				responseType: "blob",
-			}
+			{ responseType: "blob" }
 		);
 
-		// Create download link
 		const url = window.URL.createObjectURL(new Blob([response.data]));
 		const link = document.createElement("a");
 		link.href = url;
-
-		// Extract filename from content-disposition header or create default
-		const contentDisposition = response.headers["content-disposition"];
 		let filename = `invoices_export.${params.format}`;
+		const contentDisposition = response.headers["content-disposition"];
 		if (contentDisposition) {
 			const filenameMatch =
 				contentDisposition.match(/filename="?(.+)"?/i);
-			if (filenameMatch) {
-				filename = filenameMatch[1];
-			}
+			if (filenameMatch) filename = filenameMatch[1];
 		}
-
 		link.setAttribute("download", filename);
 		document.body.appendChild(link);
 		link.click();
@@ -237,40 +204,24 @@ export const invoiceApi = {
 		window.URL.revokeObjectURL(url);
 	},
 
-	/**
-	 * Manually poll emails for new invoices (DEPRECATED - use emailConfigApi.pollNow)
-	 */
 	pollEmails: async () => {
 		const response = await apiClient.post("/api/v1/invoices/poll-emails");
 		return response.data;
 	},
 };
 
-/**
- * Email Configuration API endpoints
- */
+/** Email config — identity from JWT; never send user_id from the client. */
 export const emailConfigApi = {
-	/**
-	 * Get email polling status
-	 */
 	getStatus: async () => {
-		const response = await apiClient.get("/api/v1/email-config/status", {
-			params: { user_id: "123" },
-		});
+		const response = await apiClient.get("/api/v1/email-config/status");
 		return response.data;
 	},
 
-	/**
-	 * Get email configuration
-	 */
 	getConfig: async () => {
 		const response = await apiClient.get("/api/v1/email-config");
 		return response.data;
 	},
 
-	/**
-	 * Create email configuration
-	 */
 	createConfig: async (data: {
 		email_address: string;
 		provider?: string;
@@ -284,16 +235,10 @@ export const emailConfigApi = {
 		folder_to_watch?: string;
 		mark_as_read?: boolean;
 	}) => {
-		const response = await apiClient.post("/api/v1/email-config", {
-			...data,
-			user_id: "123",
-		});
+		const response = await apiClient.post("/api/v1/email-config", data);
 		return response.data;
 	},
 
-	/**
-	 * Update email configuration
-	 */
 	updateConfig: async (data: {
 		polling_enabled?: boolean;
 		polling_interval_minutes?: number;
@@ -301,63 +246,34 @@ export const emailConfigApi = {
 		mark_as_read?: boolean;
 		imap_password?: string;
 	}) => {
-		const response = await apiClient.put("/api/v1/email-config", {
-			...data,
-			user_id: "123",
-		});
+		const response = await apiClient.put("/api/v1/email-config", data);
 		return response.data;
 	},
 
-	/**
-	 * Delete email configuration
-	 */
 	deleteConfig: async () => {
 		await apiClient.delete("/api/v1/email-config");
 	},
 
-	/**
-	 * Test IMAP connection
-	 */
 	testConnection: async () => {
-		const response = await apiClient.post("/api/v1/email-config/test", {
-			user_id: "123",
-		});
+		const response = await apiClient.post("/api/v1/email-config/test");
 		return response.data;
 	},
 
-	/**
-	 * Manually trigger email polling
-	 */
 	pollNow: async () => {
-		const response = await apiClient.post("/api/v1/email-config/poll-now", {
-			user_id: "123",
-		});
+		const response = await apiClient.post("/api/v1/email-config/poll-now");
 		return response.data;
 	},
 
-	/**
-	 * Pause automatic email polling
-	 */
 	pausePolling: async () => {
-		const response = await apiClient.post("/api/v1/email-config/pause", {
-			user_id: "123",
-		});
+		const response = await apiClient.post("/api/v1/email-config/pause");
 		return response.data;
 	},
 
-	/**
-	 * Resume automatic email polling
-	 */
 	resumePolling: async () => {
-		const response = await apiClient.post("/api/v1/email-config/resume", {
-			user_id: "123",
-		});
+		const response = await apiClient.post("/api/v1/email-config/resume");
 		return response.data;
 	},
 
-	/**
-	 * Get processing logs
-	 */
 	getLogs: async (limit = 50) => {
 		const response = await apiClient.get(
 			`/api/v1/email-config/logs?limit=${limit}`
@@ -365,9 +281,6 @@ export const emailConfigApi = {
 		return response.data;
 	},
 
-	/**
-	 * Gmail OAuth: Get authorization URL
-	 */
 	getGmailAuthUrl: async () => {
 		const response = await apiClient.get(
 			"/api/v1/email-config/gmail/auth-url"
@@ -375,23 +288,14 @@ export const emailConfigApi = {
 		return response.data;
 	},
 
-	/**
-	 * Gmail OAuth: Handle callback
-	 */
 	gmailCallback: async (code: string, state: string) => {
 		const response = await apiClient.post(
 			"/api/v1/email-config/gmail/callback",
-			{
-				code,
-				state,
-			}
+			{ code, state }
 		);
 		return response.data;
 	},
 
-	/**
-	 * Gmail OAuth: Disconnect
-	 */
 	disconnectGmail: async () => {
 		const response = await apiClient.post(
 			"/api/v1/email-config/gmail/disconnect"
@@ -400,123 +304,88 @@ export const emailConfigApi = {
 	},
 };
 
-/**
- * OCR API endpoints
- */
 export const ocrApi = {
-	/**
-	 * Extract invoice data from a single file (PDF or image)
-	 */
-	extractInvoice: async (file: File, userId: string) => {
+	extractInvoice: async (file: File) => {
 		const formData = new FormData();
 		formData.append("file", file);
-		formData.append("user_id", userId);
-
 		const response = await apiClient.post("/extract", formData, {
-			headers: {
-				"Content-Type": "multipart/form-data",
-			},
+			headers: { "Content-Type": "multipart/form-data" },
 		});
 		return response.data;
 	},
 
-	/**
-	 * Extract invoice data from multi-page PDF (batch processing)
-	 */
 	extractBatch: async (file: File) => {
 		const formData = new FormData();
 		formData.append("file", file);
-
 		const response = await apiClient.post("/extract-batch", formData, {
-			headers: {
-				"Content-Type": "multipart/form-data",
-			},
+			headers: { "Content-Type": "multipart/form-data" },
 		});
 		return response.data;
 	},
 };
 
-/**
- * Chat API endpoints
- */
 export const chatApi = {
-	/**
-	 * Send a chat message and get AI response
-	 */
-	sendMessage: async (query: string, userId: string = "1") => {
-		const response = await apiClient.post("/chat", {
-			query,
-			user_id: userId,
-		});
+	sendMessage: async (query: string) => {
+		const response = await apiClient.post("/chat", { query });
 		return response.data;
 	},
 
-	/**
-	 * Get suggested questions
-	 */
 	getSuggestions: async () => {
 		const response = await apiClient.get("/chat/suggestions");
 		return response.data;
 	},
+
+	getHistory: async (limit = 50) => {
+		const response = await apiClient.get("/chat/history", {
+			params: { limit },
+		});
+		return response.data;
+	},
+
+	clearHistory: async () => {
+		const response = await apiClient.delete("/chat/history");
+		return response.data;
+	},
 };
 
-/**
- * Transaction API endpoints (database-backed)
- */
+/** Analytics — backend derives user from JWT. */
 export const analyticsApi = {
-	/**
-	 * Get time-range based analytics with comparison to previous period
-	 */
 	getTimeRangeAnalytics: async (
-		userId: string,
 		timeRange: "weekly" | "monthly" | "yearly",
 		year: number,
 		month?: number,
 		week?: number
 	) => {
 		const queryParams = new URLSearchParams();
-		queryParams.append("user_id", userId);
 		queryParams.append("time_range", timeRange);
 		queryParams.append("year", year.toString());
 		if (month !== undefined) queryParams.append("month", month.toString());
 		if (week !== undefined) queryParams.append("week", week.toString());
-
 		const response = await apiClient.get(
 			`/analytics/summary?${queryParams.toString()}`
 		);
 		return response.data;
 	},
 
-	/**
-	 * Get all-time analytics summary
-	 */
-	getAllTimeSummary: async (userId: string) => {
-		const response = await apiClient.get(
-			`/analytics/summary?user_id=${userId}`
-		);
+	getAllTimeSummary: async () => {
+		const response = await apiClient.get("/analytics/summary");
 		return response.data;
 	},
 };
 
 export const transactionApi = {
-	/**
-	 * Get all transactions for a user with filters and pagination
-	 */
-	getTransactions: async (
-		userId: string,
-		params?: {
-			page?: number;
-			page_size?: number;
-			date_from?: string;
-			date_to?: string;
-			category?: string;
-			vendor?: string;
-			min_amount?: number;
-			max_amount?: number;
-			sort_by?: string;
-			sort_order?: "asc" | "desc";
-		}
-	) => {
+	getTransactions: async (params?: {
+		page?: number;
+		page_size?: number;
+		date_from?: string;
+		date_to?: string;
+		category?: string;
+		vendor?: string;
+		min_amount?: number;
+		max_amount?: number;
+		sort_by?: string;
+		sort_order?: "asc" | "desc";
+	}) => {
 		const queryParams = new URLSearchParams();
 		if (params?.page) queryParams.append("page", params.page.toString());
 		if (params?.page_size)
@@ -535,14 +404,11 @@ export const transactionApi = {
 			queryParams.append("sort_order", params.sort_order);
 
 		const response = await apiClient.get(
-			`/transactions/${userId}?${queryParams.toString()}`
+			`/transactions?${queryParams.toString()}`
 		);
 		return response.data;
 	},
 
-	/**
-	 * Update a transaction
-	 */
 	updateTransaction: async (
 		transactionId: string,
 		data: {
@@ -569,11 +435,7 @@ export const transactionApi = {
 		return response.data;
 	},
 
-	/**
-	 * Create a new transaction
-	 */
 	createTransaction: async (data: {
-		user_id: string;
 		vendor_name: string;
 		invoice_number?: string;
 		date?: string;
@@ -592,28 +454,23 @@ export const transactionApi = {
 		const response = await apiClient.post("/transactions", data);
 		return response.data;
 	},
+
+	deleteTransaction: async (transactionId: string) => {
+		const response = await apiClient.delete(
+			`/transactions/${transactionId}`
+		);
+		return response.data;
+	},
 };
 
-/**
- * AI Analytics API endpoints
- */
 export const aiAnalyticsApi = {
-	/**
-	 * Get quick dashboard summary
-	 */
-	getDashboard: async (userId: string = "123") => {
-		const response = await apiClient.get("/api/analytics/dashboard", {
-			params: { user_id: userId },
-		});
+	getDashboard: async () => {
+		const response = await apiClient.get("/api/analytics/dashboard");
 		return response.data;
 	},
 
-	/**
-	 * Run comprehensive analysis
-	 */
 	runAnalysis: async (
 		options: {
-			userId?: string;
 			includeFraud?: boolean;
 			includeForecast?: boolean;
 			includeRisk?: boolean;
@@ -621,7 +478,6 @@ export const aiAnalyticsApi = {
 		} = {}
 	) => {
 		const response = await apiClient.post("/api/analytics/analyze", {
-			user_id: options.userId || "123",
 			include_fraud: options.includeFraud ?? true,
 			include_forecast: options.includeForecast ?? true,
 			include_risk: options.includeRisk ?? true,
@@ -630,69 +486,39 @@ export const aiAnalyticsApi = {
 		return response.data;
 	},
 
-	/**
-	 * Get smart reminders
-	 */
-	getReminders: async (userId: string = "123", daysAhead: number = 7) => {
+	getReminders: async (daysAhead: number = 7) => {
 		const response = await apiClient.get("/api/analytics/reminders", {
-			params: {
-				user_id: userId,
-				days_ahead: daysAhead,
-			},
+			params: { days_ahead: daysAhead },
 		});
 		return response.data;
 	},
 
-	/**
-	 * Get detected anomalies
-	 */
-	getAnomalies: async (userId: string = "123", riskLevel?: string) => {
+	getAnomalies: async (riskLevel?: string) => {
 		const response = await apiClient.get("/api/analytics/anomalies", {
-			params: {
-				user_id: userId,
-				...(riskLevel && { risk_level: riskLevel }),
-			},
+			params: riskLevel ? { risk_level: riskLevel } : {},
 		});
 		return response.data;
 	},
 
-	/**
-	 * Get spending forecast
-	 */
-	getForecast: async (userId: string = "123", daysAhead: number = 30) => {
+	getForecast: async (daysAhead: number = 30) => {
 		const response = await apiClient.get("/api/analytics/forecast", {
-			params: {
-				user_id: userId,
-				days_ahead: daysAhead,
-			},
+			params: { days_ahead: daysAhead },
 		});
 		return response.data;
 	},
 
-	/**
-	 * Get financial health risk score
-	 */
-	getRiskScore: async (userId: string = "123") => {
-		const response = await apiClient.get("/api/analytics/risk-score", {
-			params: { user_id: userId },
-		});
+	getRiskScore: async () => {
+		const response = await apiClient.get("/api/analytics/risk-score");
 		return response.data;
 	},
 
-	/**
-	 * Get all insights
-	 */
-	getInsights: async (
-		options: {
-			userId?: string;
-			type?: string;
-			severity?: string;
-			limit?: number;
-		} = {}
-	) => {
+	getInsights: async (options: {
+		type?: string;
+		severity?: string;
+		limit?: number;
+	} = {}) => {
 		const response = await apiClient.get("/api/analytics/insights", {
 			params: {
-				user_id: options.userId || "123",
 				...(options.type && { type: options.type }),
 				...(options.severity && { severity: options.severity }),
 				limit: options.limit || 20,
@@ -701,9 +527,6 @@ export const aiAnalyticsApi = {
 		return response.data;
 	},
 
-	/**
-	 * Mark an insight as read
-	 */
 	markInsightRead: async (insightId: number) => {
 		const response = await apiClient.post(
 			`/api/analytics/insights/${insightId}/read`
@@ -711,31 +534,19 @@ export const aiAnalyticsApi = {
 		return response.data;
 	},
 
-	/**
-	 * Get detected spending patterns
-	 */
-	getPatterns: async (userId: string = "123", patternType?: string) => {
+	getPatterns: async (patternType?: string) => {
 		const response = await apiClient.get("/api/analytics/patterns", {
-			params: {
-				user_id: userId,
-				...(patternType && { pattern_type: patternType }),
-			},
+			params: patternType ? { pattern_type: patternType } : {},
 		});
 		return response.data;
 	},
 
-	/**
-	 * Health check for analytics service
-	 */
 	healthCheck: async () => {
 		const response = await apiClient.get("/api/analytics/health");
 		return response.data;
 	},
 };
 
-/**
- * Check if user is authenticated
- */
 export const isAuthenticated = (): boolean => {
 	return tokenManager.getToken() !== null;
 };

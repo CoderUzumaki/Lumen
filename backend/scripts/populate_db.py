@@ -1,17 +1,21 @@
 """
 Script to populate the database with sample transaction data
 """
+import argparse
 import sys
 import os
 from datetime import datetime, timedelta
 import random
 
-# Add the backend directory to the path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add the backend directory (parent of scripts/) to the path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app
+from config import Config
 from models.database import db
 from models import Transaction, User, Anomaly
+
+SEED_USER_ID = Config.DEV_USER_ID
 
 # Sample data for realistic transactions
 VENDORS = [
@@ -77,19 +81,19 @@ def clear_database():
         raise
 
 def create_user_if_not_exists():
-    """Create user with id='123' if it doesn't exist"""
-    user = User.query.filter_by(id="123").first()
+    """Create seed user if it doesn't exist."""
+    user = User.query.filter_by(id=SEED_USER_ID).first()
     if not user:
         user = User(
-            id="123",
-            email="test@lumen.com",
-            created_at=datetime.utcnow()
+            id=SEED_USER_ID,
+            email="dev@lumen.local",
+            created_at=datetime.utcnow(),
         )
         db.session.add(user)
         db.session.commit()
-        print("✅ Created user with id='123'")
+        print(f"✅ Created user with id={SEED_USER_ID}")
     else:
-        print("✅ User with id='123' already exists")
+        print(f"✅ User {SEED_USER_ID} already exists")
     return user
 
 def add_recurring_transactions():
@@ -138,7 +142,7 @@ def add_recurring_transactions():
                 date = f"{year}-{month:02d}-{actual_day:02d}"
                 
                 transaction = Transaction(
-                    user_id="123",
+                    user_id=SEED_USER_ID,
                     vendor_name=vendor,
                     invoice_number=f"INV-REC-{year}-{month:02d}-{vendor[:4].upper()}",
                     date=date,
@@ -167,7 +171,7 @@ def add_recurring_transactions():
                 amount = round(random.uniform(4.50, 7.50), 2)
                 
                 transaction = Transaction(
-                    user_id="123",
+                    user_id=SEED_USER_ID,
                     vendor_name="Starbucks",
                     invoice_number=f"INV-REC-{year}-{month:02d}-{day:02d}-STAR",
                     date=date,
@@ -200,7 +204,7 @@ def populate_transactions():
         date = generate_date(2024)
         
         transaction = Transaction(
-            user_id="123",
+            user_id=SEED_USER_ID,
             vendor_name=vendor,
             invoice_number=f"INV-2024-{random.randint(1000, 9999)}",
             date=date,
@@ -227,7 +231,7 @@ def populate_transactions():
         date = generate_date(2025, month_range=(1, 11))  # Up to November 2025
         
         transaction = Transaction(
-            user_id="123",
+            user_id=SEED_USER_ID,
             vendor_name=vendor,
             invoice_number=f"INV-2025-{random.randint(1000, 9999)}",
             date=date,
@@ -264,7 +268,7 @@ def populate_transactions():
     
     for vendor, category, amount, date, description in anomalous_txns:
         transaction = Transaction(
-            user_id="123",
+            user_id=SEED_USER_ID,
             vendor_name=vendor,
             invoice_number=f"INV-ANOM-{random.randint(1000, 9999)}",
             date=date,
@@ -292,11 +296,11 @@ def verify_data():
     """Verify the data was created correctly"""
     print("\n🔍 Verifying data...")
     
-    total_count = Transaction.query.filter_by(user_id="123").count()
-    count_2024 = Transaction.query.filter_by(user_id="123").filter(
+    total_count = Transaction.query.filter_by(user_id=SEED_USER_ID).count()
+    count_2024 = Transaction.query.filter_by(user_id=SEED_USER_ID).filter(
         Transaction.date.like("2024%")
     ).count()
-    count_2025 = Transaction.query.filter_by(user_id="123").filter(
+    count_2025 = Transaction.query.filter_by(user_id=SEED_USER_ID).filter(
         Transaction.date.like("2025%")
     ).count()
     
@@ -307,14 +311,25 @@ def verify_data():
     
     # Show sample transactions
     print("\n📋 Sample transactions:")
-    samples = Transaction.query.filter_by(user_id="123").order_by(Transaction.date.desc()).limit(5).all()
+    samples = Transaction.query.filter_by(user_id=SEED_USER_ID).order_by(Transaction.date.desc()).limit(5).all()
     for txn in samples:
         print(f"   • {txn.date} - {txn.vendor_name} - €{txn.total_amount} - {txn.category}")
 
 def main():
     """Main execution function"""
+    global SEED_USER_ID
+    parser = argparse.ArgumentParser(description="Seed sample transactions")
+    parser.add_argument(
+        "--user-id",
+        default=Config.DEV_USER_ID,
+        help="Supabase user UUID to own seeded rows",
+    )
+    args = parser.parse_args()
+    SEED_USER_ID = args.user_id
+
     print("=" * 60)
     print("🚀 Database Population Script")
+    print(f"   Seeding for user_id={SEED_USER_ID}")
     print("=" * 60)
     
     with app.app_context():

@@ -1,24 +1,31 @@
-"""OpenRouter API integration for OCR and data extraction"""
-import os
+"""OpenRouter API integration for OCR and data extraction.
+
+This module talks to OpenRouter's vision model for invoice OCR. The text-only
+LLM call sites (chat synthesis, classification, anomaly explanation) live in
+`ai/*` and use `Config.LLM_TEXT_MODEL`.
+"""
 import json
+import logging
+
 import requests
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+from config import Config
 
-# OpenRouter API configuration
-OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
-OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'nvidia/nemotron-nano-12b-v2-vl:free')
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+logger = logging.getLogger(__name__)
+
+
+# Backwards-compatible module-level aliases. New code should read from `Config`.
+OPENROUTER_API_KEY = Config.OPENROUTER_API_KEY
+OPENROUTER_MODEL = Config.LLM_VISION_MODEL
+OPENROUTER_URL = Config.OPENROUTER_CHAT_URL
 
 
 def get_api_config():
     """Get OpenRouter API configuration"""
     return {
-        'api_key': OPENROUTER_API_KEY,
-        'model': OPENROUTER_MODEL,
-        'url': OPENROUTER_URL
+        'api_key': Config.OPENROUTER_API_KEY,
+        'model': Config.LLM_VISION_MODEL,
+        'url': Config.OPENROUTER_CHAT_URL
     }
 
 
@@ -81,15 +88,14 @@ def extract_and_structure_with_openrouter(image_base64, media_type="image/jpeg")
     }
     
     try:
-        print(f"🔑 Using API Key: {OPENROUTER_API_KEY[:15] if OPENROUTER_API_KEY else 'None'}... (from config)")
-        print(f"📡 Calling OpenRouter with model: {OPENROUTER_MODEL}")
-        
+        from utils.logging_config import mask_secret
+        logger.debug("Calling OpenRouter (model=%s, key=%s)", OPENROUTER_MODEL, mask_secret(OPENROUTER_API_KEY))
+
         response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=60)
-        
+
         if response.status_code == 401:
-            print(f"❌ 401 Unauthorized - API Key might be invalid")
-            print(f"   API Key being used: {OPENROUTER_API_KEY[:20] if OPENROUTER_API_KEY else 'None'}...")
-            raise Exception(f"OpenRouter API authentication failed. Please check your API key. Status: {response.status_code}, Response: {response.text}")
+            logger.error("OpenRouter returned 401 Unauthorized (key=%s)", mask_secret(OPENROUTER_API_KEY))
+            raise Exception(f"OpenRouter API authentication failed. Please check your API key. Status: {response.status_code}")
         
         response.raise_for_status()
         result = response.json()

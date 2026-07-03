@@ -8,6 +8,10 @@ from collections import defaultdict
 from typing import List, Dict, Any
 import json
 import statistics
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class PatternDetectionAgent:
     """Detects recurring patterns in transaction data"""
@@ -198,68 +202,33 @@ class PatternDetectionAgent:
         
         return patterns
     
-    def save_patterns_to_db(self, user_id: int, patterns: List[Dict]):
-        """
-        Save detected patterns to database
-        
-        Args:
-            user_id: User ID
-            patterns: List of detected patterns
-        """
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        # Create patterns table if not exists
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS spending_patterns (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                pattern_type VARCHAR(50),
-                vendor_name VARCHAR(255),
-                category VARCHAR(100),
-                frequency_days INTEGER,
-                average_amount REAL,
-                amount_variance REAL,
-                last_occurrence DATE,
-                next_predicted_date DATE,
-                confidence_score REAL,
-                occurrence_count INTEGER,
-                is_active BOOLEAN DEFAULT 1,
-                metadata TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        # Clear old patterns for this user
-        cursor.execute("DELETE FROM spending_patterns WHERE user_id = ?", (user_id,))
-        
-        # Insert new patterns
+    def save_patterns_to_db(self, user_id, patterns: List[Dict]):
+        """Save detected patterns to database via SQLAlchemy."""
+        from models import SpendingPattern
+        from models.database import db
+
+        SpendingPattern.query.filter_by(user_id=str(user_id)).delete()
+
         for pattern in patterns:
-            cursor.execute("""
-                INSERT INTO spending_patterns 
-                (user_id, pattern_type, vendor_name, category, frequency_days,
-                 average_amount, amount_variance, last_occurrence, next_predicted_date,
-                 confidence_score, occurrence_count, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                user_id,
-                pattern['pattern_type'],
-                pattern.get('vendor_name'),
-                pattern.get('category'),
-                pattern.get('frequency_days'),
-                pattern.get('average_amount'),
-                pattern.get('amount_variance'),
-                pattern.get('last_occurrence'),
-                pattern['next_predicted_date'],
-                pattern['confidence_score'],
-                pattern.get('occurrence_count', 0),
-                json.dumps(pattern)
-            ))
-        
-        conn.commit()
-        conn.close()
-        
+            db.session.add(
+                SpendingPattern(
+                    user_id=str(user_id),
+                    pattern_type=pattern.get("pattern_type"),
+                    vendor_name=pattern.get("vendor_name"),
+                    category=pattern.get("category"),
+                    frequency_days=pattern.get("frequency_days"),
+                    average_amount=pattern.get("average_amount"),
+                    amount_variance=pattern.get("amount_variance"),
+                    last_occurrence=pattern.get("last_occurrence"),
+                    next_predicted_date=pattern.get("next_predicted_date"),
+                    confidence_score=pattern.get("confidence_score"),
+                    occurrence_count=pattern.get("occurrence_count", 0),
+                    is_active=True,
+                    meta=json.dumps(pattern),
+                )
+            )
+
+        db.session.commit()
         return len(patterns)
     
     def generate_reminders(self, user_id: int, days_ahead: int = 7) -> List[Dict]:
@@ -342,26 +311,26 @@ class PatternDetectionAgent:
         Returns:
             Analysis results with patterns and reminders
         """
-        print(f"🔍 Analyzing patterns for user {user_id}...")
+        logger.info(f"🔍 Analyzing patterns for user {user_id}...")
         
         # Detect recurring transactions
         recurring = self.detect_recurring_transactions(user_id)
-        print(f"   Found {len(recurring)} recurring patterns")
+        logger.info(f"   Found {len(recurring)} recurring patterns")
         
         # Detect day-of-month patterns
         dom_patterns = self.detect_day_of_month_patterns(user_id)
-        print(f"   Found {len(dom_patterns)} day-of-month patterns")
+        logger.info(f"   Found {len(dom_patterns)} day-of-month patterns")
         
         # Combine all patterns
         all_patterns = recurring + dom_patterns
         
         # Save to database
         saved = self.save_patterns_to_db(user_id, all_patterns)
-        print(f"   Saved {saved} patterns to database")
+        logger.info(f"   Saved {saved} patterns to database")
         
         # Generate reminders
         reminders = self.generate_reminders(user_id, days_ahead=7)
-        print(f"   Generated {len(reminders)} reminders")
+        logger.info(f"   Generated {len(reminders)} reminders")
         
         return {
             'user_id': user_id,
@@ -379,7 +348,7 @@ if __name__ == "__main__":
     import sys
     
     if len(sys.argv) < 2:
-        print("Usage: python pattern_detection_agent.py <db_path> [user_id]")
+        logger.info("Usage: python pattern_detection_agent.py <db_path> [user_id]")
         sys.exit(1)
     
     db_path = sys.argv[1]
@@ -387,37 +356,37 @@ if __name__ == "__main__":
     
     agent = PatternDetectionAgent(db_path)
     
-    print("="*60)
-    print("Pattern Detection Agent Test")
-    print("="*60)
+    logger.info("="*60)
+    logger.info("Pattern Detection Agent Test")
+    logger.info("="*60)
     
     results = agent.analyze_user(user_id)
     
-    print("\n" + "="*60)
-    print("RESULTS")
-    print("="*60)
+    logger.info("\n" + "="*60)
+    logger.info("RESULTS")
+    logger.info("="*60)
     
-    print(f"\nTotal Patterns: {results['patterns_detected']}")
-    print(f"Recurring: {results['recurring_patterns']}")
-    print(f"Day-of-Month: {results['day_of_month_patterns']}")
-    print(f"Active Reminders: {results['active_reminders']}")
+    logger.info(f"\nTotal Patterns: {results['patterns_detected']}")
+    logger.info(f"Recurring: {results['recurring_patterns']}")
+    logger.info(f"Day-of-Month: {results['day_of_month_patterns']}")
+    logger.info(f"Active Reminders: {results['active_reminders']}")
     
-    print("\n" + "-"*60)
-    print("RECURRING PATTERNS:")
-    print("-"*60)
+    logger.info("\n" + "-"*60)
+    logger.info("RECURRING PATTERNS:")
+    logger.info("-"*60)
     for pattern in results['patterns'][:5]:
         if pattern['pattern_type'] == 'recurring':
-            print(f"\n✓ {pattern['vendor_name']}")
-            print(f"  Frequency: Every {pattern['frequency_days']} days")
-            print(f"  Average Amount: ₹{pattern['average_amount']}")
-            print(f"  Confidence: {pattern['confidence_score']:.1%}")
-            print(f"  Next Predicted: {pattern['next_predicted_date']}")
+            logger.info(f"\n✓ {pattern['vendor_name']}")
+            logger.info(f"  Frequency: Every {pattern['frequency_days']} days")
+            logger.info(f"  Average Amount: ₹{pattern['average_amount']}")
+            logger.info(f"  Confidence: {pattern['confidence_score']:.1%}")
+            logger.info(f"  Next Predicted: {pattern['next_predicted_date']}")
     
-    print("\n" + "-"*60)
-    print("REMINDERS:")
-    print("-"*60)
+    logger.info("\n" + "-"*60)
+    logger.info("REMINDERS:")
+    logger.info("-"*60)
     for reminder in results['reminders'][:5]:
-        print(f"\n📅 {reminder['title']}")
-        print(f"   {reminder['description']}")
-        print(f"   In {reminder['days_until']} days ({reminder['predicted_date']})")
-        print(f"   Confidence: {reminder['confidence_score']:.1%}")
+        logger.info(f"\n📅 {reminder['title']}")
+        logger.info(f"   {reminder['description']}")
+        logger.info(f"   In {reminder['days_until']} days ({reminder['predicted_date']})")
+        logger.info(f"   Confidence: {reminder['confidence_score']:.1%}")

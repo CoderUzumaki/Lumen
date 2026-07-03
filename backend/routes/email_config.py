@@ -1,10 +1,18 @@
-"""Email configuration endpoints"""
-from flask import Blueprint, request, jsonify
-from models import EmailConfig, User
-from models.database import db
-from utils.email_service import EmailService
+"""Email configuration endpoints.
+
+All routes here are scoped to the authenticated user (`g.user_id`).
+No `user_id` is read from query strings, form bodies, or JSON bodies.
+"""
 from datetime import datetime
 import logging
+
+from flask import Blueprint, g, request, jsonify
+
+from models import EmailConfig, User
+from models.database import db
+from utils.auth import require_auth
+from utils.crypto import encrypt_secret
+from utils.email_service import EmailService
 
 logger = logging.getLogger(__name__)
 
@@ -12,11 +20,11 @@ email_config_bp = Blueprint('email_config', __name__, url_prefix='/api/v1/email-
 
 
 @email_config_bp.route('/status', methods=['GET'])
+@require_auth
 def get_status():
-    """Get email polling status"""
-    # TODO: In production, get user_id from JWT auth token
-    user_id = request.args.get('user_id', 'default-user')
-    
+    """Get email polling status for the authenticated user."""
+    user_id = g.user_id
+
     config = EmailConfig.query.filter_by(user_id=user_id).first()
     
     if not config:
@@ -37,10 +45,11 @@ def get_status():
 
 
 @email_config_bp.route('', methods=['GET'])
+@require_auth
 def get_config():
-    """Get email configuration"""
-    user_id = request.args.get('user_id', 'default-user')
-    
+    """Get email configuration for the authenticated user."""
+    user_id = g.user_id
+
     config = EmailConfig.query.filter_by(user_id=user_id).first()
     
     if not config:
@@ -61,26 +70,24 @@ def get_config():
 
 
 @email_config_bp.route('', methods=['POST'])
+@require_auth
 def create_config():
-    """Create email configuration"""
-    data = request.json
-    user_id = data.get('user_id', 'default-user')
-    
+    """Create email configuration for the authenticated user."""
+    data = request.json or {}
+    user_id = g.user_id
+
     # Check if config already exists
     existing = EmailConfig.query.filter_by(user_id=user_id).first()
     if existing:
         return jsonify({'error': 'Configuration already exists. Use PUT to update.'}), 400
-    
-    # Ensure user exists (check by ID or email to avoid duplicates)
+
+    # Lazy-create the local User row keyed on the Supabase user id. Supabase
+    # owns the canonical user record; this is a thin local mirror so the
+    # EmailConfig foreign key resolves.
     user = User.query.get(user_id)
     if not user:
-        # Check if user with same email exists
-        existing_user = User.query.filter_by(email=data['email_address']).first()
-        if existing_user:
-            user = existing_user
-        else:
-            user = User(id=user_id, email=data['email_address'])
-            db.session.add(user)
+        user = User(id=user_id, email=g.user_email or data.get('email_address'))
+        db.session.add(user)
     
     config = EmailConfig(
         user_id=user_id,
@@ -89,7 +96,7 @@ def create_config():
         imap_server=data['imap_server'],
         imap_port=data.get('imap_port', 993),
         imap_username=data.get('imap_username'),
-        imap_password=data.get('imap_password'),
+        imap_password=encrypt_secret(data.get("imap_password", "")),
         use_ssl=data.get('use_ssl', True),
         polling_enabled=data.get('polling_enabled', False),
         polling_interval_minutes=data.get('polling_interval_minutes', 5),
@@ -109,11 +116,12 @@ def create_config():
 
 
 @email_config_bp.route('', methods=['PUT'])
+@require_auth
 def update_config():
-    """Update email configuration"""
-    data = request.json
-    user_id = data.get('user_id', 'default-user')
-    
+    """Update email configuration for the authenticated user."""
+    data = request.json or {}
+    user_id = g.user_id
+
     config = EmailConfig.query.filter_by(user_id=user_id).first()
     if not config:
         return jsonify({'error': 'Configuration not found'}), 404
@@ -128,7 +136,7 @@ def update_config():
     if 'mark_as_read' in data:
         config.mark_as_read = data['mark_as_read']
     if 'imap_password' in data:
-        config.imap_password = data['imap_password']
+        config.imap_password = encrypt_secret(data['imap_password'])
     if 'imap_server' in data:
         config.imap_server = data['imap_server']
     if 'imap_port' in data:
@@ -145,10 +153,11 @@ def update_config():
 
 
 @email_config_bp.route('', methods=['DELETE'])
+@require_auth
 def delete_config():
-    """Delete email configuration"""
-    user_id = request.args.get('user_id', 'default-user')
-    
+    """Delete email configuration for the authenticated user."""
+    user_id = g.user_id
+
     config = EmailConfig.query.filter_by(user_id=user_id).first()
     if config:
         db.session.delete(config)
@@ -159,14 +168,11 @@ def delete_config():
 
 
 @email_config_bp.route('/test', methods=['POST'])
+@require_auth
 def test_connection():
-    """Test IMAP connection"""
-    # Handle both JSON and form data, and query parameters
-    if request.is_json:
-        user_id = request.json.get('user_id', 'default-user')
-    else:
-        user_id = request.form.get('user_id') or request.args.get('user_id', 'default-user')
-    
+    """Test IMAP connection using the authenticated user's stored config."""
+    user_id = g.user_id
+
     config = EmailConfig.query.filter_by(user_id=user_id).first()
     if not config:
         return jsonify({'error': 'Configuration not found'}), 404
@@ -191,14 +197,11 @@ def test_connection():
 
 
 @email_config_bp.route('/poll-now', methods=['POST'])
+@require_auth
 def poll_now():
-    """Manually trigger email polling"""
-    # Handle both JSON and form data, and query parameters
-    if request.is_json:
-        user_id = request.json.get('user_id', 'default-user')
-    else:
-        user_id = request.form.get('user_id') or request.args.get('user_id', 'default-user')
-    
+    """Manually trigger email polling for the authenticated user."""
+    user_id = g.user_id
+
     config = EmailConfig.query.filter_by(user_id=user_id).first()
     if not config:
         return jsonify({'error': 'Configuration not found'}), 404
@@ -214,14 +217,11 @@ def poll_now():
 
 
 @email_config_bp.route('/pause', methods=['POST'])
+@require_auth
 def pause_polling():
-    """Pause email polling"""
-    # Handle both JSON and form data, and query parameters
-    if request.is_json:
-        user_id = request.json.get('user_id', 'default-user')
-    else:
-        user_id = request.form.get('user_id') or request.args.get('user_id', 'default-user')
-    
+    """Pause email polling for the authenticated user."""
+    user_id = g.user_id
+
     config = EmailConfig.query.filter_by(user_id=user_id).first()
     if not config:
         return jsonify({'error': 'Configuration not found'}), 404
@@ -236,14 +236,11 @@ def pause_polling():
 
 
 @email_config_bp.route('/resume', methods=['POST'])
+@require_auth
 def resume_polling():
-    """Resume email polling"""
-    # Handle both JSON and form data, and query parameters
-    if request.is_json:
-        user_id = request.json.get('user_id', 'default-user')
-    else:
-        user_id = request.form.get('user_id') or request.args.get('user_id', 'default-user')
-    
+    """Resume email polling for the authenticated user."""
+    user_id = g.user_id
+
     config = EmailConfig.query.filter_by(user_id=user_id).first()
     if not config:
         return jsonify({'error': 'Configuration not found'}), 404
@@ -257,16 +254,23 @@ def resume_polling():
     return jsonify({'message': 'Polling resumed'})
 
 
+@email_config_bp.route('/gmail/auth-url', methods=['GET'])
 @email_config_bp.route('/gmail/auth', methods=['GET'])
+@require_auth
 def gmail_auth():
-    """Get Gmail OAuth authorization URL"""
-    # TODO: Implement OAuth flow
+    """Gmail OAuth is not implemented — use IMAP with an app password."""
     return jsonify({
-        'error': 'Gmail OAuth not yet implemented. Use IMAP with App Password instead.'
+        'error': 'gmail_oauth_unavailable',
+        'message': (
+            'Gmail OAuth is not available yet. Configure email polling with '
+            'IMAP: use an app-specific password from your Google Account '
+            'security settings and enter it in the email configuration dialog.'
+        ),
     }), 501
 
 
 @email_config_bp.route('/gmail/callback', methods=['POST'])
+@require_auth
 def gmail_callback():
     """Handle Gmail OAuth callback"""
     # TODO: Implement OAuth callback
@@ -276,6 +280,7 @@ def gmail_callback():
 
 
 @email_config_bp.route('/gmail/disconnect', methods=['POST'])
+@require_auth
 def gmail_disconnect():
     """Disconnect Gmail OAuth"""
     # TODO: Implement OAuth disconnect

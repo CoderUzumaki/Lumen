@@ -15,6 +15,7 @@ import { EmailStatusCard } from "./emailStatusCard";
 import { eventBus, EVENTS } from "@/lib/events";
 import { transactionApi, tokenManager } from "@/lib/api/client";
 
+import { logger } from "@/lib/logger";
 interface Invoice {
 	id: number;
 	status: string;
@@ -31,17 +32,17 @@ export function SectionCards() {
 		const fetchInvoices = async () => {
 			setLoading(true);
 			try {
-				console.log("📊 SectionCards: Fetching invoices from API...");
+				logger.debug("📊 SectionCards: Fetching invoices from API...");
 
 				// Always fetch from API with hardcoded user ID
-				const response = await transactionApi.getTransactions("123", {
+				const response = await transactionApi.getTransactions({
 					page: 1,
 					page_size: 1000,
 					sort_by: "created_at",
 					sort_order: "desc",
 				});
 				if (response.success && response.data) {
-					console.log(
+					logger.debug(
 						`📊 SectionCards: Fetched ${response.data.length} transactions`
 					);
 					// Map transaction data to invoice format for cards
@@ -77,7 +78,7 @@ export function SectionCards() {
 
 		// Listen for invoice updates and refresh
 		const unsubscribe = eventBus.on(EVENTS.INVOICE_UPDATED, () => {
-			console.log("📊 SectionCards: Refreshing due to invoice update");
+			logger.debug("📊 SectionCards: Refreshing due to invoice update");
 			fetchInvoices();
 		});
 
@@ -119,18 +120,18 @@ export function SectionCards() {
 			<EmailStatusCard />
 
 			{/* Total Invoices Card */}
-			<Card className="@container/card bg-white border border-gray-200 shadow-sm">
+			<Card className="@container/card border-border/70 bg-card/80 shadow-lg shadow-black/10">
 				<CardHeader>
-					<CardDescription className="text-gray-600">
+					<CardDescription>
 						Total Invoices
 					</CardDescription>
-					<CardTitle className="text-3xl font-semibold tabular-nums text-gray-900">
+					<CardTitle className="text-3xl font-semibold tabular-nums">
 						{totalInvoices}
 					</CardTitle>
 					<CardAction>
 						<Badge
 							variant="outline"
-							className="bg-gray-50 border-gray-300 text-gray-700"
+							className="border-border/70 bg-background/60 text-muted-foreground"
 						>
 							<IconTrendingUp className="w-3 h-3" />
 							All time
@@ -138,26 +139,28 @@ export function SectionCards() {
 					</CardAction>
 				</CardHeader>
 				<CardFooter className="flex-col items-start gap-1.5 text-sm">
-					<div className="line-clamp-1 flex gap-2 font-medium text-gray-900">
+					<div className="line-clamp-1 flex gap-2 font-medium text-foreground">
 						Total invoices processed
 					</div>
-					<div className="text-gray-600">Invoices in your system</div>
+					<div className="text-muted-foreground">
+						Invoices in your system
+					</div>
 				</CardFooter>
 			</Card>
 
 			{/* Approved Invoices Card */}
-			<Card className="@container/card bg-white border border-blue-200 shadow-sm">
+			<Card className="@container/card border-primary/20 bg-primary/8 shadow-lg shadow-black/10">
 				<CardHeader>
-					<CardDescription className="text-gray-600">
+					<CardDescription>
 						Approved Invoices
 					</CardDescription>
-					<CardTitle className="text-3xl font-semibold tabular-nums text-blue-700">
+					<CardTitle className="text-3xl font-semibold tabular-nums text-primary">
 						{approvedInvoices}
 					</CardTitle>
 					<CardAction>
 						<Badge
 							variant="outline"
-							className="bg-blue-50 border-blue-300 text-blue-700"
+							className="border-primary/30 bg-primary/10 text-primary"
 						>
 							<IconTrendingUp className="w-3 h-3" />
 							{totalInvoices > 0
@@ -170,26 +173,28 @@ export function SectionCards() {
 					</CardAction>
 				</CardHeader>
 				<CardFooter className="flex-col items-start gap-1.5 text-sm">
-					<div className="line-clamp-1 flex gap-2 font-medium text-blue-700">
+					<div className="line-clamp-1 flex gap-2 font-medium text-primary">
 						Ready for payment
 					</div>
-					<div className="text-gray-600">Verified and approved</div>
+					<div className="text-muted-foreground">
+						Verified and approved
+					</div>
 				</CardFooter>
 			</Card>
 
 			{/* Pending Review Card */}
-			<Card className="@container/card bg-white border border-orange-200 shadow-sm">
+			<Card className="@container/card border-amber-500/20 bg-amber-500/8 shadow-lg shadow-black/10">
 				<CardHeader>
-					<CardDescription className="text-gray-600">
+					<CardDescription>
 						Needs Review
 					</CardDescription>
-					<CardTitle className="text-3xl font-semibold tabular-nums text-orange-700">
+					<CardTitle className="text-3xl font-semibold tabular-nums text-amber-300">
 						{pendingInvoices}
 					</CardTitle>
 					<CardAction>
 						<Badge
 							variant="outline"
-							className="bg-orange-50 border-orange-300 text-orange-700"
+							className="border-amber-500/30 bg-amber-500/10 text-amber-300"
 						>
 							<IconTrendingUp className="w-3 h-3" />
 							{totalInvoices > 0
@@ -202,10 +207,12 @@ export function SectionCards() {
 					</CardAction>
 				</CardHeader>
 				<CardFooter className="flex-col items-start gap-1.5 text-sm">
-					<div className="line-clamp-1 flex gap-2 font-medium text-orange-700">
+					<div className="line-clamp-1 flex gap-2 font-medium text-amber-300">
 						Requires attention
 					</div>
-					<div className="text-gray-600">Pending verification</div>
+					<div className="text-muted-foreground">
+						Pending verification
+					</div>
 				</CardFooter>
 			</Card>
 		</>
@@ -214,14 +221,14 @@ export function SectionCards() {
 
 function SkeletonCard() {
 	return (
-		<Card className="@container/card bg-white border border-gray-200">
+		<Card className="@container/card border-border/70 bg-card/80">
 			<CardHeader>
-				<div className="h-4 w-24 bg-gray-200 rounded animate-pulse mb-2"></div>
-				<div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
+				<div className="mb-2 h-4 w-24 animate-pulse rounded bg-muted"></div>
+				<div className="h-8 w-16 animate-pulse rounded bg-muted"></div>
 			</CardHeader>
 			<CardFooter className="flex-col items-start gap-1.5">
-				<div className="h-4 w-32 bg-gray-200 rounded animate-pulse"></div>
-				<div className="h-3 w-40 bg-gray-200 rounded animate-pulse"></div>
+				<div className="h-4 w-32 animate-pulse rounded bg-muted"></div>
+				<div className="h-3 w-40 animate-pulse rounded bg-muted"></div>
 			</CardFooter>
 		</Card>
 	);

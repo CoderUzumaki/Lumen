@@ -1,33 +1,29 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, request, jsonify
+
 from utils.analytics_service import AnalyticsService
+from utils.auth import require_auth
 
 analytics_bp = Blueprint("analytics_bp", __name__)
 
+
 @analytics_bp.route("/analytics/summary", methods=["GET", "OPTIONS"])
+@require_auth
 def analytics_summary():
     """
-    Get analytics summary with time-range based filtering
-    
+    Get analytics summary with time-range based filtering. Identity comes
+    from the JWT (g.user_id); no user_id query param is read.
+
     Query Parameters:
-    - user_id: string (required)
-    - time_range: "weekly" | "monthly" | "yearly" (optional, if provided triggers new behavior)
+    - time_range: "weekly" | "monthly" | "yearly" (optional)
     - year: number (required if time_range is provided)
     - month: number (optional, 0-11 for monthly time_range)
     - week: number (optional, 1-52 for weekly time_range)
-    
-    Examples:
-    - GET /analytics/summary?user_id=123  (old behavior - all-time summary)
-    - GET /analytics/summary?user_id=123&time_range=yearly&year=2025
-    - GET /analytics/summary?user_id=123&time_range=monthly&year=2025&month=10
-    - GET /analytics/summary?user_id=123&time_range=weekly&year=2025&week=45
     """
     # Handle CORS preflight
     if request.method == "OPTIONS":
         return jsonify({}), 200
-    
-    user_id = request.args.get("user_id")
-    if not user_id:
-        return jsonify({"error": "user_id required"}), 400
+
+    user_id = g.user_id
 
     # Check if time_range parameter is provided (new behavior)
     time_range = request.args.get("time_range")

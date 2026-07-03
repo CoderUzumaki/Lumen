@@ -145,9 +145,7 @@ LUMEN transforms invoice management through three core pillars:
 -   **Database**: SQLite (dev) / PostgreSQL (production)
 -   **ORM**: SQLAlchemy with Alembic migrations
 -   **AI/ML**:
-    -   OpenRouter API (LLM integration)
-    -   Google Cloud Vision API (OCR)
-    -   Sentence Transformers (embeddings)
+    -   OpenRouter API (LLM integration — vision model for OCR, text model for chat/analytics)
     -   ChromaDB (vector database)
     -   Scikit-learn (ML models)
 

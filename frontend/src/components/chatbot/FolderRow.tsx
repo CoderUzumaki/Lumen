@@ -55,7 +55,10 @@ export default function FolderRow({
 
 	useEffect(() => {
 		const handleClickOutside = (event: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(event.target)) {
+			if (
+				menuRef.current &&
+				!menuRef.current.contains(event.target as Node)
+			) {
 				setShowMenu(false);
 			}
 		};

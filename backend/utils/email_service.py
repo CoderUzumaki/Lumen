@@ -8,16 +8,18 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import logging
 
+from utils.crypto import decrypt_secret
+
 logger = logging.getLogger(__name__)
 
 
 class EmailService:
     """Service for connecting to and reading emails via IMAP"""
-    
+
     def __init__(self, config):
         self.config = config
         self.imap = None
-    
+
     def connect(self):
         """Connect to IMAP server"""
         try:
@@ -25,9 +27,10 @@ class EmailService:
                 self.imap = imaplib.IMAP4_SSL(self.config.imap_server, self.config.imap_port)
             else:
                 self.imap = imaplib.IMAP4(self.config.imap_server, self.config.imap_port)
-            
+
             username = self.config.imap_username or self.config.email_address
-            self.imap.login(username, self.config.imap_password)
+            password = decrypt_secret(self.config.imap_password)
+            self.imap.login(username, password)
             logger.info(f"Successfully connected to {self.config.imap_server}")
             return True
         except Exception as e:

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Mail, RefreshCw, Pause, Play, Settings } from "lucide-react";
 import { emailConfigApi } from "@/lib/api/client";
+import { toast } from "@/lib/toast";
 import { EmailConfigDialog } from "./emailConfigDialog";
 
 export function EmailStatusCard() {
@@ -47,12 +48,10 @@ export function EmailStatusCard() {
         await emailConfigApi.resumePolling();
       }
       await fetchStatus();
-    } catch (error: any) {
-      alert(
-        `Failed to toggle polling: ${
-          error.response?.data?.detail || error.message
-        }`
-      );
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to toggle polling: ${message}`);
     } finally {
       setActionLoading(false);
     }
@@ -62,16 +61,14 @@ export function EmailStatusCard() {
     setActionLoading(true);
     try {
       const result = await emailConfigApi.pollNow();
-      alert(
+      toast.success(
         `Polling complete! Checked ${result.emails_checked} emails, created ${result.invoices_created} invoices.`
       );
       await fetchStatus();
-    } catch (error: any) {
-      alert(
-        `Failed to poll emails: ${
-          error.response?.data?.detail || error.message
-        }`
-      );
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to poll emails: ${message}`);
     } finally {
       setActionLoading(false);
     }
@@ -79,7 +76,7 @@ export function EmailStatusCard() {
 
   if (loading) {
     return (
-      <Card className="@container/card">
+      <Card className="@container/card border-border/70 bg-card/80">
         <CardHeader>
           <div className="h-4 w-24 bg-muted rounded animate-pulse mb-2"></div>
           <div className="h-8 w-16 bg-muted rounded animate-pulse"></div>
@@ -90,10 +87,10 @@ export function EmailStatusCard() {
 
   if (!status || !status.configured) {
     return (
-      <Card className="@container/card bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-card shadow-sm border-blue-500/20 overflow-hidden">
+      <Card className="@container/card overflow-hidden border-primary/20 bg-gradient-to-br from-primary/14 via-primary/8 to-card shadow-lg shadow-black/10">
         <CardHeader>
           <CardDescription>Email Polling</CardDescription>
-          <CardTitle className="text-2xl font-semibold text-blue-700 dark:text-blue-400">
+          <CardTitle className="text-2xl font-semibold text-primary">
             Not Configured
           </CardTitle>
         </CardHeader>
@@ -105,19 +102,19 @@ export function EmailStatusCard() {
   }
 
   return (
-    <Card className="@container/card bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-card shadow-sm border-purple-500/20 overflow-hidden">
+    <Card className="@container/card overflow-hidden border-border/70 bg-card/80 shadow-lg shadow-black/10">
       <CardHeader className="max-w-full">
         <div className="flex items-center justify-between">
           <CardDescription>Email Polling</CardDescription>
           <Badge
             variant={status.polling_enabled ? "default" : "secondary"}
-            className={status.polling_enabled ? "bg-green-500" : "bg-gray-500"}
+            className={status.polling_enabled ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}
           >
             {status.polling_enabled ? "Active" : "Paused"}
           </Badge>
         </div>
-        <CardTitle className="text-base md:text-lg font-semibold text-purple-700 dark:text-purple-400 flex items-center gap-2 w-full min-w-0">
-          <Mail className="h-4 w-4 md:h-5 md:w-5 shrink-0" />
+        <CardTitle className="flex w-full min-w-0 items-center gap-2 text-base font-semibold md:text-lg">
+          <Mail className="h-4 w-4 shrink-0 text-primary md:h-5 md:w-5" />
           <span className="truncate overflow-hidden text-ellipsis">
             {status.email_address}
           </span>
@@ -168,7 +165,6 @@ export function EmailStatusCard() {
           </Button>
           <Button
             size="sm"
-            variant="outline"
             onClick={handlePollNow}
             disabled={actionLoading}
             className="flex-1 min-w-[80px]"

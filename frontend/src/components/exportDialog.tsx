@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { FileDown, Filter } from "lucide-react";
 import { invoiceApi } from "@/lib/api/client";
+import { toast } from "@/lib/toast";
 
 interface ExportDialogProps {
   variant?: "default" | "secondary";
@@ -68,9 +69,10 @@ export function ExportDialog({
 
       // Reset filters
       resetFilters();
+      toast.success("Export downloaded.");
     } catch (error) {
       console.error("Export failed:", error);
-      alert("Export failed. Please try again.");
+      toast.error("Export failed. Please try again.");
     } finally {
       setExporting(false);
     }

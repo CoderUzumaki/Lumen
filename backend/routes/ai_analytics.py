@@ -2,12 +2,15 @@
 Flask API Routes for AI Analytics System
 """
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, request, jsonify
 from ai.analytics_orchestrator import AnalyticsOrchestrator
 from models.database import db
+from utils.auth import require_auth
+from utils.errors import api_error
+from utils.limiter import limiter
 
 # Create blueprint
-analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
+ai_analytics_bp = Blueprint('ai_analytics', __name__, url_prefix='/api/analytics')
 
 # Initialize orchestrator (will be initialized within app context)
 orchestrator = None
@@ -18,37 +21,26 @@ def init_analytics():
     if orchestrator is None:
         orchestrator = AnalyticsOrchestrator()
 
-@analytics_bp.route('/analyze', methods=['POST'])
+@ai_analytics_bp.route('/analyze', methods=['POST'])
+@limiter.limit("5 per minute")
+@require_auth
 def run_analysis():
     """
-    Trigger comprehensive analysis for user
-    
+    Trigger comprehensive analysis for the authenticated user.
+
     Request Body:
     {
-        "user_id": 1,
         "include_fraud": true,
         "include_forecast": true,
         "include_risk": true,
         "use_llm": true
     }
-    
-    Response:
-    {
-        "success": true,
-        "results": {
-            "patterns": {...},
-            "fraud_detection": {...},
-            "forecast": {...},
-            "risk_assessment": {...}
-        },
-        "insights": [...]
-    }
     """
     try:
         init_analytics()  # Ensure orchestrator is initialized
-        
+
         data = request.json or {}
-        user_id = data.get('user_id', 1)  # Get from auth in production
+        user_id = g.user_id
         
         # Run analysis
         results = orchestrator.run_complete_analysis(
@@ -73,37 +65,18 @@ def run_analysis():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return api_error("Analysis failed", code="analysis_failed", log=e)
 
 
-@analytics_bp.route('/dashboard', methods=['GET'])
+@ai_analytics_bp.route('/dashboard', methods=['GET'])
+@require_auth
 def get_dashboard():
-    """
-    Get quick dashboard summary
-    
-    Query Params:
-    - user_id: User ID (default: 1)
-    
-    Response:
-    {
-        "risk_score": 45,
-        "risk_level": "MEDIUM",
-        "health_status": "NEEDS ATTENTION",
-        "active_reminders": 3,
-        "reminders": [...],
-        "high_risk_anomalies": 1,
-        "patterns_detected": 5,
-        "top_recommendations": [...]
-    }
-    """
+    """Get quick dashboard summary for the authenticated user."""
     try:
         init_analytics()  # Ensure orchestrator is initialized
-        
-        user_id = request.args.get('user_id', 1, type=int)
-        
+
+        user_id = g.user_id
+
         summary = orchestrator.get_dashboard_summary(user_id)
         
         return jsonify({
@@ -112,41 +85,20 @@ def get_dashboard():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@analytics_bp.route('/reminders', methods=['GET'])
+        return api_error("Could not load dashboard", code="dashboard_failed", log=e)
+@require_auth
 def get_reminders():
-    """
-    Get smart reminders
-    
+    """Get smart reminders for the authenticated user.
+
     Query Params:
-    - user_id: User ID (default: 1)
     - days_ahead: Look ahead days (default: 7)
-    
-    Response:
-    {
-        "success": true,
-        "reminders": [
-            {
-                "title": "Upcoming: Netflix",
-                "description": "Your Netflix payment is typically due in 2 days...",
-                "predicted_date": "2024-11-16",
-                "days_until": 2,
-                "confidence_score": 0.95
-            }
-        ]
-    }
     """
     try:
         init_analytics()  # Ensure orchestrator is initialized
-        
-        user_id = request.args.get('user_id', 1, type=int)
+
+        user_id = g.user_id
         days_ahead = request.args.get('days_ahead', 7, type=int)
-        
+
         reminders = orchestrator.get_reminders(user_id, days_ahead)
         
         return jsonify({
@@ -156,41 +108,20 @@ def get_reminders():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@analytics_bp.route('/anomalies', methods=['GET'])
+        return api_error("Could not load reminders", code="reminders_failed", log=e)
+@require_auth
 def get_anomalies():
-    """
-    Get detected anomalies
-    
+    """Get detected anomalies for the authenticated user.
+
     Query Params:
-    - user_id: User ID (default: 1)
     - risk_level: Filter by risk level (optional: HIGH, MEDIUM, LOW)
-    
-    Response:
-    {
-        "success": true,
-        "anomalies": [
-            {
-                "transaction_id": 123,
-                "vendor_name": "XYZ Store",
-                "amount": 5000,
-                "risk_level": "HIGH",
-                "explanation": "Amount is 5x your average transaction..."
-            }
-        ]
-    }
     """
     try:
         init_analytics()  # Ensure orchestrator is initialized
-        
-        user_id = request.args.get('user_id', 1, type=int)
+
+        user_id = g.user_id
         risk_level = request.args.get('risk_level', None)
-        
+
         anomalies = orchestrator.get_anomalies(user_id, risk_level)
         
         return jsonify({
@@ -200,39 +131,20 @@ def get_anomalies():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@analytics_bp.route('/forecast', methods=['GET'])
+        return api_error("Could not load anomalies", code="anomalies_failed", log=e)
+@require_auth
 def get_forecast():
-    """
-    Get spending forecast
-    
+    """Get spending forecast for the authenticated user.
+
     Query Params:
-    - user_id: User ID (default: 1)
     - days_ahead: Forecast period (default: 30)
-    
-    Response:
-    {
-        "success": true,
-        "forecast": {
-            "total_predicted": 15000,
-            "trend": "increasing",
-            "dates": [...],
-            "values": [...],
-            "category_forecast": [...]
-        }
-    }
     """
     try:
         init_analytics()  # Ensure orchestrator is initialized
-        
-        user_id = request.args.get('user_id', 1, type=int)
+
+        user_id = g.user_id
         days_ahead = request.args.get('days_ahead', 30, type=int)
-        
+
         forecast = orchestrator.get_forecast(user_id, days_ahead)
         
         return jsonify({
@@ -241,37 +153,15 @@ def get_forecast():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@analytics_bp.route('/risk-score', methods=['GET'])
+        return api_error("Could not load forecast", code="forecast_failed", log=e)
+@require_auth
 def get_risk_score():
-    """
-    Get financial health risk score
-    
-    Query Params:
-    - user_id: User ID (default: 1)
-    
-    Response:
-    {
-        "success": true,
-        "risk_score": {
-            "overall_score": 45,
-            "risk_level": "MEDIUM",
-            "health_status": "NEEDS ATTENTION",
-            "factors": [...],
-            "recommendations": [...]
-        }
-    }
-    """
+    """Get financial health risk score for the authenticated user."""
     try:
         init_analytics()  # Ensure orchestrator is initialized
-        
-        user_id = request.args.get('user_id', 1, type=int)
-        
+
+        user_id = g.user_id
+
         risk_score = orchestrator.get_risk_score(user_id)
         
         return jsonify({
@@ -280,31 +170,18 @@ def get_risk_score():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@analytics_bp.route('/insights', methods=['GET'])
+        return api_error("Could not load risk score", code="risk_score_failed", log=e)
+@require_auth
 def get_insights():
-    """
-    Get all insights for user
-    
+    """Get all insights for the authenticated user.
+
     Query Params:
-    - user_id: User ID (default: 1)
     - type: Filter by type (optional: reminder, anomaly, forecast, risk)
     - severity: Filter by severity (optional: info, low, medium, high, critical)
     - limit: Number of results (default: 20)
-    
-    Response:
-    {
-        "success": true,
-        "insights": [...]
-    }
     """
     try:
-        user_id = request.args.get('user_id', 1, type=int)
+        user_id = g.user_id
         insight_type = request.args.get('type', None)
         severity = request.args.get('severity', None)
         limit = request.args.get('limit', 20, type=int)
@@ -333,22 +210,23 @@ def get_insights():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@analytics_bp.route('/insights/<int:insight_id>/read', methods=['POST'])
+        return api_error("Could not load insights", code="insights_failed", log=e)
+@require_auth
 def mark_insight_read(insight_id):
-    """Mark an insight as read"""
+    """Mark an insight as read. Only succeeds if the insight belongs to the
+    authenticated user — otherwise the UPDATE no-ops (0 rows affected) and we
+    return 404 so a malicious caller can't probe for other users' insight ids."""
     try:
-        db.session.execute(db.text("""
+        result = db.session.execute(db.text("""
             UPDATE insights
             SET is_read = 1
-            WHERE id = :insight_id
-        """), {'insight_id': insight_id})
-        
+            WHERE id = :insight_id AND user_id = :user_id
+        """), {'insight_id': insight_id, 'user_id': g.user_id})
+
+        if result.rowcount == 0:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': 'not_found'}), 404
+
         db.session.commit()
         
         return jsonify({
@@ -357,29 +235,16 @@ def mark_insight_read(insight_id):
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@analytics_bp.route('/patterns', methods=['GET'])
+        return api_error("Could not update insight", code="insight_update_failed", log=e)
+@require_auth
 def get_patterns():
-    """
-    Get detected spending patterns
-    
+    """Get detected spending patterns for the authenticated user.
+
     Query Params:
-    - user_id: User ID (default: 1)
     - pattern_type: Filter by type (optional: recurring, day_of_month)
-    
-    Response:
-    {
-        "success": true,
-        "patterns": [...]
-    }
     """
     try:
-        user_id = request.args.get('user_id', 1, type=int)
+        user_id = g.user_id
         pattern_type = request.args.get('pattern_type', None)
         
         query_text = "SELECT * FROM spending_patterns WHERE user_id = :user_id AND is_active = 1"
@@ -401,22 +266,7 @@ def get_patterns():
         }), 200
     
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@analytics_bp.route('/health', methods=['GET'])
+        return api_error("Could not load patterns", code="patterns_failed", log=e)
 def health_check():
     """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'service': 'analytics',
-        'agents': {
-            'pattern_detection': 'ready',
-            'fraud_detection': 'ready',
-            'forecasting': 'ready',
-            'risk_assessment': 'ready'
-        }
-    }), 200
+    return jsonify({'status': 'healthy'}), 200

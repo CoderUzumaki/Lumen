@@ -23,13 +23,13 @@ const cardVariants = {
 const getSeverityColor = (severity: string) => {
 	switch (severity) {
 		case "high":
-			return "bg-red-100 text-red-700 border-red-300";
+			return "border-rose-400/30 bg-rose-500/15 text-rose-300";
 		case "medium":
-			return "bg-yellow-100 text-yellow-700 border-yellow-300";
+			return "border-amber-400/30 bg-amber-500/15 text-amber-300";
 		case "low":
-			return "bg-blue-100 text-blue-700 border-blue-300";
+			return "border-primary/30 bg-primary/15 text-primary";
 		default:
-			return "bg-gray-100 text-gray-700 border-gray-300";
+			return "border-border bg-muted text-muted-foreground";
 	}
 };
 
@@ -49,16 +49,21 @@ const getSeverityIcon = (severity: string) => {
 export default function AnomalyDetectionCard() {
 	const [anomalies, setAnomalies] = useState<any[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		const fetchAnomalies = async () => {
 			try {
-				const response = await aiAnalyticsApi.getAnomalies("123");
+				setError(null);
+				const response = await aiAnalyticsApi.getAnomalies();
 				if (response.success) {
 					setAnomalies(response.anomalies || []);
+				} else {
+					setError("Could not load anomalies.");
 				}
-			} catch (error) {
-				console.error("Failed to fetch anomalies:", error);
+			} catch (err) {
+				console.error("Failed to fetch anomalies:", err);
+				setError("Could not load anomalies.");
 			} finally {
 				setIsLoading(false);
 			}
@@ -78,16 +83,16 @@ export default function AnomalyDetectionCard() {
 			animate="visible"
 			className="h-full"
 		>
-			<Card className="border-slate-800 shadow-lg hover:shadow-xl transition-all duration-300 bg-slate-900/50 backdrop-blur-sm h-full flex flex-col">
+			<Card className="flex h-full flex-col border-border/70 bg-card/80 shadow-lg shadow-black/10 transition-all duration-300 hover:shadow-xl hover:shadow-black/10">
 				<CardHeader className="pb-3">
-					<CardTitle className="text-lg font-semibold text-white flex items-center justify-between">
+					<CardTitle className="flex items-center justify-between text-lg font-semibold text-foreground">
 						<div className="flex items-center gap-2">
-							<AlertTriangle className="w-5 h-5 text-red-400" />
+							<AlertTriangle className="h-5 w-5 text-rose-300" />
 							Anomaly Detection
 						</div>
 						<Badge
 							variant="outline"
-							className="bg-red-900/30 text-red-300 border-red-700"
+							className="border-rose-400/30 bg-rose-500/10 text-rose-300"
 						>
 							{highRiskCount} High
 						</Badge>
@@ -96,11 +101,15 @@ export default function AnomalyDetectionCard() {
 				<CardContent className="flex-1 overflow-hidden">
 					{isLoading ? (
 						<div className="animate-pulse space-y-3">
-							<div className="h-20 bg-slate-700 rounded"></div>
-							<div className="h-20 bg-slate-700 rounded"></div>
+							<div className="h-20 rounded bg-muted"></div>
+							<div className="h-20 rounded bg-muted"></div>
+						</div>
+					) : error ? (
+						<div className="py-8 text-center text-muted-foreground">
+							{error}
 						</div>
 					) : anomalies.length === 0 ? (
-						<div className="text-center py-8 text-slate-400">
+						<div className="py-8 text-center text-muted-foreground">
 							No anomalies detected
 						</div>
 					) : (
@@ -114,7 +123,7 @@ export default function AnomalyDetectionCard() {
 										duration: 0.3,
 										delay: anomaly.id * 0.1,
 									}}
-									className="p-4 rounded-lg border-l-4 bg-gray-50 border-gray-300 hover:bg-gray-100 transition-all duration-200 hover:shadow-md cursor-pointer"
+									className="cursor-pointer rounded-xl border-l-4 bg-background/60 p-4 transition-all duration-200 hover:bg-accent/60 hover:shadow-md"
 									style={{
 										borderLeftColor:
 											anomaly.risk_level === "HIGH"
@@ -128,7 +137,7 @@ export default function AnomalyDetectionCard() {
 									<div className="flex items-start justify-between mb-2">
 										<div className="flex-1">
 											<div className="flex items-center gap-2 mb-1">
-												<h4 className="font-semibold text-gray-900 text-sm">
+												<h4 className="text-sm font-semibold text-foreground">
 													{anomaly.vendor_name}
 												</h4>
 												<Badge
@@ -146,22 +155,22 @@ export default function AnomalyDetectionCard() {
 														"LOW"}
 												</Badge>
 											</div>
-											<p className="text-xs text-gray-600">
+											<p className="text-xs text-muted-foreground">
 												{anomaly.date}
 											</p>
 										</div>
 										<div className="text-right">
-											<p className="font-bold text-gray-900">
+											<p className="font-bold text-foreground">
 												₹{anomaly.amount.toFixed(2)}
 											</p>
 										</div>
 									</div>
-									<p className="text-sm text-gray-700 mb-2">
+									<p className="mb-2 text-sm text-muted-foreground">
 										{anomaly.description}
 									</p>
-									<div className="flex items-center gap-1 mt-2 p-2 bg-gray-100 rounded border border-gray-200">
-										<Shield className="w-3 h-3 text-gray-600" />
-										<p className="text-xs text-gray-600 italic">
+									<div className="mt-2 flex items-center gap-1 rounded-lg border border-border/70 bg-card/70 p-2">
+										<Shield className="h-3 w-3 text-muted-foreground" />
+										<p className="text-xs italic text-muted-foreground">
 											{anomaly.explanation ||
 												"Anomaly detected"}
 										</p>

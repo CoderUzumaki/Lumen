@@ -1,20 +1,18 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, LayoutGrid, MoreHorizontal } from "lucide-react";
-import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { PanelLeft } from "lucide-react";
 import Sidebar from "@/components/chatbot/Sidebar";
-import Header from "@/components/chatbot/Header";
 import ChatPane from "@/components/chatbot/ChatPane";
-import GhostIconButton from "@/components/chatbot/GhostIconButton";
-import ThemeToggle from "@/components/chatbot/ThemeToggle";
 import {
   INITIAL_CONVERSATIONS,
   INITIAL_TEMPLATES,
   INITIAL_FOLDERS,
 } from "@/components/chatbot/mockData";
 import { chatApi } from "@/lib/api/client";
+import { toast } from "@/lib/toast";
+import { DashboardShell } from "@/components/dashboard-shell";
+import { Button } from "@/components/ui/button";
 
 interface MessageType {
   id: string;
@@ -61,43 +59,6 @@ interface ChatPaneHandle {
 }
 
 export default function AIAssistantUI() {
-  const [theme, setTheme] = useState(() => {
-    const saved =
-      typeof window !== "undefined" && localStorage.getItem("theme");
-    if (saved) return saved;
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches
-    )
-      return "dark";
-    return "light";
-  });
-
-  useEffect(() => {
-    try {
-      if (theme === "dark") document.documentElement.classList.add("dark");
-      else document.documentElement.classList.remove("dark");
-      document.documentElement.setAttribute("data-theme", theme);
-      document.documentElement.style.colorScheme = theme;
-      localStorage.setItem("theme", theme);
-    } catch {}
-  }, [theme]);
-
-  useEffect(() => {
-    try {
-      const media =
-        window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
-      if (!media) return;
-      const listener = (e: MediaQueryListEvent) => {
-        const saved = localStorage.getItem("theme");
-        if (!saved) setTheme(e.matches ? "dark" : "light");
-      };
-      media.addEventListener("change", listener);
-      return () => media.removeEventListener("change", listener);
-    } catch {}
-  }, []);
-
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<CollapsedState>(() => {
     try {
@@ -157,7 +118,7 @@ export default function AIAssistantUI() {
   const [thinkingConvId, setThinkingConvId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
-  // Fetch suggestions on mount
+  // Fetch suggestions and restore chat history on mount
   useEffect(() => {
     chatApi
       .getSuggestions()
@@ -168,6 +129,38 @@ export default function AIAssistantUI() {
       })
       .catch((error) => {
         console.error("Failed to fetch suggestions:", error);
+      });
+
+    chatApi
+      .getHistory(100)
+      .then((response) => {
+        if (!response.success || !response.messages?.length) return;
+        const historyMessages: MessageType[] = response.messages.map(
+          (m: { id: string; role: string; content: string; created_at: string }) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            createdAt: m.created_at,
+          })
+        );
+        const id = "server-history";
+        const last = historyMessages[historyMessages.length - 1];
+        setConversations([
+          {
+            id,
+            title: "Recent conversation",
+            updatedAt: last?.createdAt || new Date().toISOString(),
+            messageCount: historyMessages.length,
+            preview: last?.content?.slice(0, 80) || "Chat history",
+            pinned: false,
+            folder: null,
+            messages: historyMessages,
+          },
+        ]);
+        setSelectedId(id);
+      })
+      .catch((error) => {
+        console.error("Failed to load chat history:", error);
       });
   }, []);
 
@@ -192,10 +185,10 @@ export default function AIAssistantUI() {
 
   useEffect(() => {
     if (!selectedId && conversations.length > 0) {
-      createNewChat();
+      setSelectedId(conversations[0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [conversations.length]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return conversations;
@@ -248,14 +241,16 @@ export default function AIAssistantUI() {
     setSidebarOpen(false);
   }
 
-  function createFolder() {
-    const name = prompt("Folder name");
-    if (!name) return;
-    if (folders.some((f) => f.name.toLowerCase() === name.toLowerCase()))
-      return alert("Folder already exists.");
+  function createFolder(name?: string) {
+    const folderName = name ?? prompt("Folder name");
+    if (!folderName) return;
+    if (folders.some((f) => f.name.toLowerCase() === folderName.toLowerCase())) {
+      toast.error("Folder already exists.");
+      return;
+    }
     setFolders((prev) => [
       ...prev,
-      { id: Math.random().toString(36).slice(2), name },
+      { id: Math.random().toString(36).slice(2), name: folderName },
     ]);
   }
 
@@ -291,7 +286,7 @@ export default function AIAssistantUI() {
     // Call the actual API
     const currentConvId = convId;
     chatApi
-      .sendMessage(content, "123") // Using user_id "123" - should come from auth in production
+      .sendMessage(content)
       .then((response) => {
         setIsThinking(false);
         setThinkingConvId(null);
@@ -399,87 +394,72 @@ export default function AIAssistantUI() {
   const selected = conversations.find((c) => c.id === selectedId) || null;
 
   return (
-    <>
-      <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset>
-          <div className="h-screen w-full bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-            <div className="md:hidden sticky top-0 z-40 flex items-center gap-2 border-b border-zinc-200/60 bg-white/80 px-3 py-2 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/70">
-              <div className="ml-1 flex items-center gap-2 text-sm font-semibold tracking-tight">
-                <span className="inline-flex h-4 w-4 items-center justify-center">
-                  ✱
-                </span>{" "}
-                AI Assistant
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-                <GhostIconButton label="Schedule">
-                  <Calendar className="h-4 w-4" />
-                </GhostIconButton>
-                <GhostIconButton label="Apps">
-                  <LayoutGrid className="h-4 w-4" />
-                </GhostIconButton>
-                <GhostIconButton label="More">
-                  <MoreHorizontal className="h-4 w-4" />
-                </GhostIconButton>
-                <ThemeToggle theme={theme} setTheme={setTheme} />
-              </div>
-            </div>
+    <DashboardShell
+      title="Ask Lumen"
+      description="Query invoices, vendors, anomalies, and spending patterns from the same workspace as the rest of your finance operations."
+      eyebrow="Finance Copilot"
+      contentClassName="gap-4"
+      actions={
+        <>
+          <Button
+            variant="outline"
+            className="md:hidden"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <PanelLeft className="h-4 w-4" />
+            Open threads
+          </Button>
+          <Button onClick={createNewChat}>New thread</Button>
+        </>
+      }
+    >
+      <div className="overflow-hidden rounded-3xl border border-border/70 bg-card/70 shadow-lg shadow-black/10">
+        <div className="flex min-h-[720px]">
+          <Sidebar
+            open={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            collapsed={collapsed}
+            setCollapsed={setCollapsed}
+            sidebarCollapsed={sidebarCollapsed}
+            setSidebarCollapsed={setSidebarCollapsed}
+            conversations={conversations}
+            pinned={pinned}
+            recent={recent}
+            folders={folders}
+            folderCounts={folderCounts}
+            selectedId={selectedId}
+            onSelect={(id) => setSelectedId(id)}
+            togglePin={togglePin}
+            query={query}
+            setQuery={setQuery}
+            searchRef={searchRef}
+            createFolder={createFolder}
+            createNewChat={createNewChat}
+            templates={templates}
+            setTemplates={setTemplates}
+            onUseTemplate={handleUseTemplate}
+          />
 
-            <div className="mx-auto flex h-[calc(100vh-0px)] max-w-[1400px]">
-              <Sidebar
-                open={sidebarOpen}
-                onClose={() => setSidebarOpen(false)}
-                theme={theme}
-                setTheme={setTheme}
-                collapsed={collapsed}
-                setCollapsed={setCollapsed}
-                sidebarCollapsed={sidebarCollapsed}
-                setSidebarCollapsed={setSidebarCollapsed}
-                conversations={conversations}
-                pinned={pinned}
-                recent={recent}
-                folders={folders}
-                folderCounts={folderCounts}
-                selectedId={selectedId}
-                onSelect={(id) => setSelectedId(id)}
-                togglePin={togglePin}
-                query={query}
-                setQuery={setQuery}
-                searchRef={searchRef}
-                createFolder={createFolder}
-                createNewChat={createNewChat}
-                templates={templates}
-                setTemplates={setTemplates}
-                onUseTemplate={handleUseTemplate}
-              />
-
-              <main className="relative flex min-w-0 flex-1 flex-col">
-                <Header
-                  createNewChat={createNewChat}
-                  sidebarCollapsed={sidebarCollapsed}
-                  setSidebarOpen={setSidebarOpen}
-                />
-                <ChatPane
-                  ref={composerRef}
-                  conversation={selected}
-                  onSend={(content) => {
-                    if (selected) sendMessage(selected.id, content);
-                  }}
-                  onEditMessage={(messageId, newContent) =>
-                    selected && editMessage(selected.id, messageId, newContent)
-                  }
-                  onResendMessage={(messageId) =>
-                    selected && resendMessage(selected.id, messageId)
-                  }
-                  isThinking={isThinking && thinkingConvId === selected?.id}
-                  onPauseThinking={pauseThinking}
-                  suggestions={suggestions}
-                />
-              </main>
-            </div>
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
-    </>
+          <main className="relative flex min-w-0 flex-1 flex-col bg-background/40">
+            <ChatPane
+              ref={composerRef}
+              conversation={selected}
+              onSend={(content) => {
+                if (selected) sendMessage(selected.id, content);
+              }}
+              onEditMessage={(messageId, newContent) =>
+                selected && editMessage(selected.id, messageId, newContent)
+              }
+              onResendMessage={(messageId) =>
+                selected && resendMessage(selected.id, messageId)
+              }
+              isThinking={isThinking && thinkingConvId === selected?.id}
+              onPauseThinking={pauseThinking}
+              suggestions={suggestions}
+            />
+          </main>
+        </div>
+      </div>
+    </DashboardShell>
   );
 }

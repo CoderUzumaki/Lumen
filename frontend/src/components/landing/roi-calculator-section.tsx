@@ -10,21 +10,21 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { TrendingUp, Users, DollarSign, Clock } from "lucide-react";
+import { TrendingUp, ReceiptText, DollarSign, Clock } from "lucide-react";
 
 interface CalculatorInputs {
-	monthlyVisitors: number;
-	currentConversionRate: number;
-	averageOrderValue: number;
-	businessType: string;
+	monthlyInvoices: number;
+	minutesPerInvoice: number;
+	hourlyCost: number;
+	workflowProfile: string;
 }
 
 export function ROICalculatorSection() {
 	const [inputs, setInputs] = useState<CalculatorInputs>({
-		monthlyVisitors: 10000,
-		currentConversionRate: 2,
-		averageOrderValue: 150,
-		businessType: "ecommerce",
+		monthlyInvoices: 480,
+		minutesPerInvoice: 14,
+		hourlyCost: 38,
+		workflowProfile: "growing-finance-team",
 	});
 
 	const [isVisible, setIsVisible] = useState(false);
@@ -49,107 +49,43 @@ export function ROICalculatorSection() {
 		return () => observer.disconnect();
 	}, []);
 
-	const getBusinessDefaults = () => {
-		const businessDefaults = {
-			ecommerce: {
-				avgOrder: 85,
-				maxOrder: 500,
-				timeSaved: 75,
-				accuracy: 95,
-				costReduction: 60,
-			},
-			retail: {
-				avgOrder: 65,
-				maxOrder: 300,
-				timeSaved: 70,
+	const getWorkflowProfile = () => {
+		const profiles = {
+			"lean-ap": {
+				timeSaved: 58,
 				accuracy: 94,
-				costReduction: 55,
+				fasterClose: 2,
+				exceptionsReduced: 18,
 			},
-			realestate: {
-				avgOrder: 5000,
-				maxOrder: 50000,
-				timeSaved: 80,
+			"growing-finance-team": {
+				timeSaved: 67,
 				accuracy: 96,
-				costReduction: 70,
+				fasterClose: 3,
+				exceptionsReduced: 24,
 			},
-			hospitality: {
-				avgOrder: 180,
-				maxOrder: 1000,
-				timeSaved: 65,
-				accuracy: 93,
-				costReduction: 50,
-			},
-			healthcare: {
-				avgOrder: 250,
-				maxOrder: 2000,
-				timeSaved: 85,
+			"multi-entity-ops": {
+				timeSaved: 74,
 				accuracy: 97,
-				costReduction: 75,
+				fasterClose: 5,
+				exceptionsReduced: 31,
 			},
-			finance: {
-				avgOrder: 1200,
-				maxOrder: 10000,
-				timeSaved: 80,
-				accuracy: 96,
-				costReduction: 70,
-			},
-			automotive: {
-				avgOrder: 25000,
-				maxOrder: 100000,
-				timeSaved: 70,
-				accuracy: 95,
-				costReduction: 60,
-			},
-			default: {
-				avgOrder: 150,
-				maxOrder: 2000,
-				timeSaved: 75,
-				accuracy: 95,
-				costReduction: 60,
-			},
-		};
+		} as const;
 
-		return (
-			businessDefaults[
-				inputs.businessType as keyof typeof businessDefaults
-			] || businessDefaults.default
-		);
+		return profiles[
+			inputs.workflowProfile as keyof typeof profiles
+		];
 	};
 
-	useEffect(() => {
-		const defaults = getBusinessDefaults();
-		setInputs((prev) => ({
-			...prev,
-			averageOrderValue: defaults.avgOrder,
-		}));
-	}, [inputs.businessType]);
-
-	const businessConfig = getBusinessDefaults();
-	const improvements = {
-		timeSaved: businessConfig.timeSaved,
-		accuracy: businessConfig.accuracy,
-		costReduction: businessConfig.costReduction,
-	};
-
-	// Current metrics
-	const currentLeads = Math.round(
-		(inputs.monthlyVisitors * inputs.currentConversionRate) / 100
-	);
-	const currentRevenue = currentLeads * inputs.averageOrderValue;
-
-	// Improved metrics with AI chatbot
-	const newConversionRate =
-		inputs.currentConversionRate * (1 + improvements.conversion / 100);
-	const newLeads = Math.round(
-		(inputs.monthlyVisitors * newConversionRate) / 100
-	);
-	const newRevenue = newLeads * inputs.averageOrderValue;
-
-	// Gains
-	const additionalLeads = newLeads - currentLeads;
-	const additionalRevenue = newRevenue - currentRevenue;
-	const revenueIncrease =
-		((newRevenue - currentRevenue) / currentRevenue) * 100;
+	const profile = getWorkflowProfile();
+	const currentHours =
+		(inputs.monthlyInvoices * inputs.minutesPerInvoice) / 60;
+	const automatedHours =
+		currentHours * (1 - profile.timeSaved / 100);
+	const hoursSaved = currentHours - automatedHours;
+	const monthlySavings = hoursSaved * inputs.hourlyCost;
+	const annualSavings = monthlySavings * 12;
+	const invoicesPerDay = Math.round(inputs.monthlyInvoices / 22);
+	const hoursRecoveredPerWeek = hoursSaved / 4.3;
 
 	return (
 		<section id="roi-calculator" className="py-16 md:py-20 px-4 relative">
@@ -165,20 +101,21 @@ export function ROICalculatorSection() {
 					<div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm mb-6">
 						<TrendingUp className="w-4 h-4 text-primary" />
 						<span className="text-sm font-medium text-white/80">
-							ROI Calculator
+							Operations Calculator
 						</span>
 					</div>
 
 					<h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4 md:mb-6 text-balance">
-						See your potential{" "}
+						Estimate your potential{" "}
 						<span className="bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-							time & cost savings
+							AP time savings
 						</span>
 					</h2>
 
 					<p className="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto text-balance">
-						Calculate how much time and money your business could
-						save with AI-powered invoice processing
+						Model how much manual invoice handling your team can
+						remove each month with automated capture, validation,
+						and guided review.
 					</p>
 				</div>
 
@@ -193,21 +130,21 @@ export function ROICalculatorSection() {
 					>
 						<Card className="p-6 md:p-8 bg-[radial-gradient(35%_128px_at_50%_0%,theme(backgroundColor.white/15%),theme(backgroundColor.white/5%))] border-white/20 backdrop-blur-sm shadow-2xl h-full flex flex-col">
 							<h3 className="text-xl md:text-2xl font-semibold text-white mb-6 md:mb-8">
-								Your Business Metrics
+								Your Current Workflow
 							</h3>
 
 							<div className="space-y-8 flex-1">
 								{/* Business Type */}
 								<div>
 									<label className="block text-sm font-medium text-gray-300 mb-3">
-										Business Type
+										Workflow Profile
 									</label>
 									<Select
-										value={inputs.businessType}
+										value={inputs.workflowProfile}
 										onValueChange={(value) =>
 											setInputs((prev) => ({
 												...prev,
-												businessType: value,
+												workflowProfile: value,
 											}))
 										}
 									>
@@ -215,26 +152,14 @@ export function ROICalculatorSection() {
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent className="bg-gray-800 border-gray-700">
-											<SelectItem value="ecommerce">
-												E-commerce
+											<SelectItem value="lean-ap">
+												Lean AP team
 											</SelectItem>
-											<SelectItem value="retail">
-												Retail
+											<SelectItem value="growing-finance-team">
+												Growing finance team
 											</SelectItem>
-											<SelectItem value="realestate">
-												Real Estate
-											</SelectItem>
-											<SelectItem value="hospitality">
-												Hospitality
-											</SelectItem>
-											<SelectItem value="healthcare">
-												Healthcare
-											</SelectItem>
-											<SelectItem value="finance">
-												Finance
-											</SelectItem>
-											<SelectItem value="automotive">
-												Automotive
+											<SelectItem value="multi-entity-ops">
+												Multi-entity operations
 											</SelectItem>
 										</SelectContent>
 									</Select>
@@ -243,22 +168,22 @@ export function ROICalculatorSection() {
 								{/* Monthly Invoices */}
 								<div>
 									<label className="block text-sm font-medium text-gray-300 mb-3">
-										Monthly Invoices Processed:{" "}
+										Monthly Invoices Reviewed:{" "}
 										<span className="text-white font-semibold">
-											{inputs.monthlyVisitors.toLocaleString()}
+											{inputs.monthlyInvoices.toLocaleString()}
 										</span>
 									</label>
 									<Slider
-										value={[inputs.monthlyVisitors]}
+										value={[inputs.monthlyInvoices]}
 										onValueChange={([value]) =>
 											setInputs((prev) => ({
 												...prev,
-												monthlyVisitors: value,
+												monthlyInvoices: value,
 											}))
 										}
 										max={5000}
 										min={50}
-										step={50}
+										step={10}
 										className="w-full"
 									/>
 									<div className="flex justify-between text-xs text-gray-400 mt-1">
@@ -272,19 +197,19 @@ export function ROICalculatorSection() {
 									<label className="block text-sm font-medium text-gray-300 mb-3">
 										Minutes per Invoice (Manual):{" "}
 										<span className="text-white font-semibold">
-											{inputs.currentConversionRate}
+											{inputs.minutesPerInvoice}
 										</span>
 									</label>
 									<Slider
-										value={[inputs.currentConversionRate]}
+										value={[inputs.minutesPerInvoice]}
 										onValueChange={([value]) =>
 											setInputs((prev) => ({
 												...prev,
-												currentConversionRate: value,
+												minutesPerInvoice: value,
 											}))
 										}
 										max={30}
-										min={5}
+										min={4}
 										step={1}
 										className="w-full"
 									/>
@@ -297,28 +222,28 @@ export function ROICalculatorSection() {
 								{/* Hourly Labor Cost */}
 								<div>
 									<label className="block text-sm font-medium text-gray-300 mb-3">
-										Hourly Labor Cost:{" "}
+										Blended Hourly Review Cost:{" "}
 										<span className="text-white font-semibold">
-											€
-											{inputs.averageOrderValue.toLocaleString()}
+											₹
+											{inputs.hourlyCost.toLocaleString()}
 										</span>
 									</label>
 									<Slider
-										value={[inputs.averageOrderValue]}
+										value={[inputs.hourlyCost]}
 										onValueChange={([value]) =>
 											setInputs((prev) => ({
 												...prev,
-												averageOrderValue: value,
+												hourlyCost: value,
 											}))
 										}
-										max={100}
+										max={150}
 										min={15}
 										step={5}
 										className="w-full"
 									/>
 									<div className="flex justify-between text-xs text-gray-400 mt-1">
-										<span>€15</span>
-										<span>€100</span>
+										<span>₹15</span>
+										<span>₹150</span>
 									</div>
 								</div>
 
@@ -351,7 +276,7 @@ export function ROICalculatorSection() {
 							<div className="mt-8 pt-6 border-t border-gray-700/50">
 								<div className="space-y-4">
 									<h4 className="text-sm font-semibold text-gray-300 mb-3">
-										💡 Industry Insights
+										Benchmark assumptions
 									</h4>
 									<div className="space-y-3">
 										<div className="flex items-start gap-3 p-3 rounded-lg bg-white/5">
@@ -359,12 +284,12 @@ export function ROICalculatorSection() {
 											<div>
 												<p className="text-sm text-gray-300">
 													<span className="font-medium text-white">
-														Time savings:
+														Automation lift:
 													</span>{" "}
-													Businesses save{" "}
-													{businessConfig.timeSaved}%
-													of processing time within 30
-													days
+													Teams like yours typically
+													reduce manual handling by{" "}
+													{profile.timeSaved}% after
+													adoption
 												</p>
 											</div>
 										</div>
@@ -373,11 +298,10 @@ export function ROICalculatorSection() {
 											<div>
 												<p className="text-sm text-gray-300">
 													<span className="font-medium text-white">
-														OCR accuracy:
+														Data quality:
 													</span>{" "}
-													Achieves{" "}
-													{businessConfig.accuracy}%
-													accuracy in data extraction
+													Expected extraction accuracy
+													is around {profile.accuracy}%
 												</p>
 											</div>
 										</div>
@@ -386,13 +310,11 @@ export function ROICalculatorSection() {
 											<div>
 												<p className="text-sm text-gray-300">
 													<span className="font-medium text-white">
-														Cost reduction:
+														Close acceleration:
 													</span>{" "}
-													Reduces processing costs by{" "}
-													{
-														businessConfig.costReduction
-													}
-													% on average
+													Month-end close often moves{" "}
+													{profile.fasterClose} days
+													faster with cleaner intake
 												</p>
 											</div>
 										</div>
@@ -412,7 +334,7 @@ export function ROICalculatorSection() {
 					>
 						<Card className="p-6 md:p-8 bg-[radial-gradient(35%_128px_at_50%_0%,theme(backgroundColor.white/15%),theme(backgroundColor.white/5%))] border-white/20 backdrop-blur-sm shadow-2xl h-full flex flex-col">
 							<h3 className="text-xl md:text-2xl font-semibold text-white mb-6 md:mb-8">
-								Your Potential with Lumen AI
+								Projected Impact with Lumen
 							</h3>
 
 							<div className="space-y-6 flex-1">
@@ -423,7 +345,7 @@ export function ROICalculatorSection() {
 											Current
 										</div>
 										<div className="text-xl md:text-2xl font-bold text-white">
-											{currentLeads}
+											{currentHours.toFixed(0)}
 										</div>
 										<div className="text-xs text-gray-400">
 											hours/month
@@ -434,7 +356,7 @@ export function ROICalculatorSection() {
 											With Lumen
 										</div>
 										<div className="text-xl md:text-2xl font-bold text-white">
-											{newLeads}
+											{automatedHours.toFixed(0)}
 										</div>
 										<div className="text-xs text-gray-300">
 											hours/month
@@ -447,11 +369,11 @@ export function ROICalculatorSection() {
 										<div className="flex items-center gap-3">
 											<Clock className="w-4 h-4 md:w-5 md:h-5 text-gray-300" />
 											<span className="text-sm md:text-base text-white">
-												Time Saved
+											Time Saved
 											</span>
 										</div>
 										<span className="text-lg md:text-xl font-bold text-white">
-											{additionalLeads} hours
+										{hoursRecoveredPerWeek.toFixed(1)} hrs/week
 										</span>
 									</div>
 
@@ -459,12 +381,11 @@ export function ROICalculatorSection() {
 										<div className="flex items-center gap-3">
 											<DollarSign className="w-4 h-4 md:w-5 md:h-5 text-gray-300" />
 											<span className="text-sm md:text-base text-white">
-												Cost Savings
+											Labor Savings
 											</span>
 										</div>
 										<span className="text-lg md:text-xl font-bold text-white">
-											€
-											{additionalRevenue.toLocaleString()}
+										₹{monthlySavings.toLocaleString()}
 										</span>
 									</div>
 
@@ -472,23 +393,23 @@ export function ROICalculatorSection() {
 										<div className="flex items-center gap-3">
 											<TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-gray-300" />
 											<span className="text-sm md:text-base text-white">
-												Efficiency Gain
+											Exceptions Reduced
 											</span>
 										</div>
 										<span className="text-lg md:text-xl font-bold text-white">
-											{revenueIncrease.toFixed(1)}%
+										{profile.exceptionsReduced}%
 										</span>
 									</div>
 
 									<div className="flex items-center justify-between p-3 md:p-4 rounded-lg bg-white/5 border border-white/10">
 										<div className="flex items-center gap-3">
-											<Users className="w-4 h-4 md:w-5 md:h-5 text-gray-300" />
+										<ReceiptText className="w-4 h-4 md:w-5 md:h-5 text-gray-300" />
 											<span className="text-sm md:text-base text-white">
-												Accuracy Rate
+											Daily Volume
 											</span>
 										</div>
 										<span className="text-lg md:text-xl font-bold text-white">
-											{improvements.accuracy}%
+										~{invoicesPerDay} invoices/day
 										</span>
 									</div>
 								</div>
@@ -497,17 +418,14 @@ export function ROICalculatorSection() {
 								<div className="mt-6 md:mt-8 p-4 md:p-6 rounded-lg bg-white/5 border border-white/10">
 									<div className="text-center">
 										<div className="text-xs md:text-sm text-gray-300 mb-2">
-											Projected Annual Cost Savings
+											Projected Annual Labor Savings
 										</div>
 										<div className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-2">
-											€
-											{(
-												additionalRevenue * 12
-											).toLocaleString()}
+											₹{annualSavings.toLocaleString()}
 										</div>
 										<div className="text-xs md:text-sm text-gray-400">
-											Based on your processing volume and
-											industry benchmarks
+											Based on your current invoice load,
+											review time, and workflow benchmark
 										</div>
 									</div>
 								</div>
@@ -525,8 +443,8 @@ export function ROICalculatorSection() {
 					}`}
 				>
 					<p className="text-sm text-gray-400 mt-4">
-						* Results based on industry averages and may vary by
-						business
+						* Estimates use conservative workflow benchmarks and
+						should be validated against your internal process data.
 					</p>
 				</div>
 			</div>
