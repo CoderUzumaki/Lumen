@@ -2,8 +2,8 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-03 (session 14 — ING-02 NewsAPI adapter)
-**Progress:** 16/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01, DATA-02, DATA-03, DATA-05, ING-01, ING-02).
+**Last updated:** 2026-07-03 (session 15 — ING-03 Marketaux adapter)
+**Progress:** 17/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01, DATA-02, DATA-03, DATA-05, ING-01, ING-02, ING-03).
 
 DATA-04 postponed (needs ING-07).
 
@@ -11,58 +11,56 @@ DATA-04 postponed (needs ING-07).
 
 ## Next module
 
-**ID:** `ING-03`
-**Title:** Marketaux adapter
+**ID:** `ING-04`
+**Title:** GDELT adapter
 **Depends on:** ING-01
-**Read:** `BUILD.md` → the `ING-03` block. Notable: ING-03 asks for a NEW optional `hints: dict = {}` (or `hints_tickers: list[str]`) field on `NewsItemIn` for Marketaux's `entities[].symbol` payload. `NewsItemIn` in `backend/app/schemas/news.py` doesn't yet have that field — ING-03 adds it.
+**Read:** `BUILD.md` → the `ING-04` block. GDELT's DOC 2.0 API has no API key (unlimited free), soft rate-limit ~1 req/sec. Adapter needs a semaphore to serialize calls.
 
-**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/05 + ING-01/02 stacked on `856d503`. `NewsAPISource` is the first live adapter and the pattern for the other four; base class `BaseSource` in `app/pipelines/sources/base.py` defines the interface.
+**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/05 + ING-01/02/03 stacked on `856d503`. `NewsItemIn` now has an optional `hints: dict[str, Any] = {}` field. `NewsAPISource` + `MarketauxSource` share the same never-raise contract via `BaseSource`.
 
 Before starting, verify:
 - `git branch --show-current` shows `v2/intelligence-agent`.
-- `git log --oneline -16` shows ING-02..HP-01 on top of `856d503` / `f7e479a`.
+- `git log --oneline -17` shows ING-03..HP-01 on top of `856d503` / `f7e479a`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **80 passed, 1 deselected**.
+- `cd backend && python -m pytest tests -q` reports **86 passed, 1 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute ING-02 — NewsAPI adapter that returns `list[NewsItemIn]`, handles missing keys gracefully, and retries on 429 / 5xx / transport errors.
+- **Session goal:** Execute ING-03 — Marketaux adapter matching the NewsAPI adapter's shape, plus extension of `NewsItemIn` to carry Marketaux's structured entity hints.
 - **Completed:**
-  - `ING-02` ✅ — NewsAPI adapter.
-  - `backend/app/pipelines/__init__.py` + `backend/app/pipelines/sources/__init__.py` (empty package markers).
-  - `backend/app/pipelines/sources/base.py` — `BaseSource` ABC with `source_name: str` class attribute and `async def fetch(self, since: datetime) -> list[NewsItemIn]`. Contract: never raise on transient failures, never raise on missing credentials, retry internally.
-  - `backend/app/pipelines/sources/newsapi.py` — `NewsAPISource(BaseSource)`. Query params match BUILD.md exactly (`q="finance OR markets OR stocks OR fed OR earnings"`, `language=en`, `sortBy=publishedAt`, `pageSize=100`, `from=<since ISO>`). Missing API key → warning + `[]`. Tenacity retry (3 attempts, exponential backoff) on 429 / 5xx / transport errors; on retry-exhaustion returns `[]`. Non-retryable 4xx → warning + `[]`. Individual malformed article → skipped, not fatal. `source_id` maps from `article["source"]["id"]` (may be null); `body` falls back to `description` when `content` is absent.
-  - `backend/tests/pipelines/__init__.py` + `backend/tests/pipelines/sources/__init__.py` package markers.
-  - `backend/tests/pipelines/sources/test_newsapi.py` — 6 tests: mapping of 3 items with mixed shapes (missing id, missing content), missing-API-key returns empty without hitting network, 429 retried then succeeds, retry exhaustion returns empty (not raises), non-retryable 4xx returns empty, malformed article is skipped.
+  - `ING-03` ✅ — Marketaux adapter.
+  - `backend/app/schemas/news.py` — added `hints: dict[str, Any] = Field(default_factory=dict)` to `NewsItemIn`. BUILD.md interpretation: "add it to the schema as `hints: dict = {}`" is the field; adapters populate keys like `hints["tickers"]` for extensibility.
+  - `backend/app/pipelines/sources/marketaux.py` — `MarketauxSource(BaseSource)`. Endpoint `https://api.marketaux.com/v1/news/all` with the exact query params from BUILD.md (`filter_entities=true`, `language=en`, `limit=50`, `published_after=<since ISO>`, `api_token=<key>`). Extracts `entities[].symbol` values from each row (deduping while preserving order) into `NewsItemIn.hints["tickers"]`; omits the key entirely when no entities are present so `hints == {}`. Body falls back from `description` → `snippet`. Same never-raise contract: missing key logs and returns `[]`; retries on 429 / 5xx / transport; exhausted retries return `[]`; malformed row is skipped.
+  - `backend/tests/pipelines/sources/test_marketaux.py` — 6 tests: hints_tickers populated + deduped + order-preserved, missing API key → empty, 429 retried then succeeds, exhausted retries → empty, non-retryable 4xx → empty, malformed row is skipped.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **80 passed, 1 deselected**.
+  - `python -m pytest tests -q` → **86 passed, 1 deselected**.
   - `ruff check .` clean.
-- **Files touched:** created `backend/app/pipelines/{__init__.py,sources/{__init__.py,base.py,newsapi.py}}`, `backend/tests/pipelines/{__init__.py,sources/{__init__.py,test_newsapi.py}}`. Modified `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Files touched:** created `backend/app/pipelines/sources/marketaux.py`, `backend/tests/pipelines/sources/test_marketaux.py`. Modified `backend/app/schemas/news.py` (added `hints` field), `BUILD.md` (tick), `HANDOFF.md` (this file).
 - **Migrations added:** none.
 - **Tests added:** 6.
 - **In-flight work:** none.
-- **Deviations from BUILD.md:** none. ING-02's spec is small and the implementation follows it literally. The exhaust-retries-returns-empty behaviour is broader than "log a warning" (BUILD.md's `on empty API key` wording) but consistent with the BaseSource contract ("never raise on transient failures"). Test file lives at `tests/pipelines/sources/test_newsapi.py`.
+- **Deviations from BUILD.md:** none. The one interpretive call was "`hints_tickers: list[str]` field on the NewsItemIn (a new optional field — add it to the schema as `hints: dict = {}` for extensibility)" — read as: schema stores `hints: dict`, Marketaux populates `hints["tickers"]`. That preserves extensibility (future adapters can add `hints["topics"]`, `hints["sentiment"]`, …) without a schema change per source.
 
 ---
 
 ## Environment state
 
-- Backend: two adapters exist — one abstract (`BaseSource`), one concrete (`NewsAPISource`). `NewsAPISource` is not yet called by anything; ING-10 wires the orchestrator that fans out across all enabled sources.
+- Backend: three adapters now — `BaseSource` (abstract), `NewsAPISource`, `MarketauxSource`. None wired into an orchestrator yet — ING-10 owns that.
 - Frontend: unchanged.
 - Database: unchanged.
 - Vectors: unchanged (none).
-- Tests: **80 hermetic, 1 opt-in.**
-- CI: green on ING-01 push.
+- Tests: **86 hermetic, 1 opt-in.**
+- CI: green on ING-02 push.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** ING-03 is the next adapter (Marketaux). Its addition of `hints_tickers` / `hints: dict` will need an update to `NewsItemIn` in `backend/app/schemas/news.py` — BUILD.md flags this explicitly in ING-03's Action.
+- **None.** ING-04 (GDELT) is next — no API key needed, soft rate limit ~1 req/sec via semaphore, ArtList JSON format.
 
 ---
 

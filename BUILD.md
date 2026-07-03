@@ -644,7 +644,7 @@ Continuous background pipeline. Five sources, one normalized schema, deduped int
   - 429 response is retried with backoff.
 - **Depends on:** ING-01, BOOT-06.
 
-### ING-03 — Marketaux adapter
+### ING-03 — Marketaux adapter ✅
 
 - **Files:** `backend/app/pipelines/sources/marketaux.py`.
 - **Action:** `MarketauxSource` — same shape as NewsAPI. Endpoint: `https://api.marketaux.com/v1/news/all?filter_entities=true&language=en&limit=50&published_after=<since>`. Extract `entities[].symbol` into a `hints_tickers: list[str]` field on the `NewsItemIn` (a new optional field — add it to the schema in ING-01 as `hints: dict = {}` for extensibility).

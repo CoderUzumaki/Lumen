@@ -30,6 +30,10 @@ class NewsItemIn(BaseModel):
     body: str | None = None
     published_at: datetime
     raw_payload: dict[str, Any] = Field(default_factory=dict)
+    # Extensibility slot for source-specific hints (tickers, entities, topics,
+    # …). Populated by adapters that produce structured entity data (e.g.
+    # Marketaux's `entities[].symbol`); left `{}` by adapters that don't.
+    hints: dict[str, Any] = Field(default_factory=dict)
 
 
 class NewsItemRead(BaseModel):
