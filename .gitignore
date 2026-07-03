@@ -23,6 +23,8 @@ __pycache__/
 !tsconfig.json
 !components.json
 !next.config.js
+!backend/app/pipelines/sources/data/*.json
+!backend/alembic/versions/*.json
 google-credentials.json
 *-credentials.json
 
