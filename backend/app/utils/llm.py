@@ -284,19 +284,7 @@ class LLMClient:
             log.exception("failed to record llm_call")
 
 
-class EmbeddingClient:
-    """Local embeddings placeholder.
-
-    ING-07 lands the real `sentence-transformers` wiring. Kept here for
-    import ergonomics so agent code can `from app.utils.llm import
-    EmbeddingClient` today without breaking when ING-07 arrives.
-    """
-
-    def __init__(self) -> None:
-        self._model = None
-
-    async def embed(self, texts: list[str]) -> list[list[float]]:  # noqa: ARG002
-        raise NotImplementedError(
-            "EmbeddingClient is a placeholder until ING-07 lands "
-            "sentence-transformers."
-        )
+# ING-07 lands the real `EmbeddingClient` in `app.utils.embeddings`. Re-export
+# it here so existing `from app.utils.llm import EmbeddingClient` imports keep
+# working. Behavior is now backed by local sentence-transformers.
+from app.utils.embeddings import EmbeddingClient  # noqa: E402, F401

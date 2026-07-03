@@ -2,67 +2,72 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-03 (session 18 — ING-06 RSS adapter)
-**Progress:** 20/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-03, DATA-05, ING-01..ING-06). One-third of BUILD.md done.
-
-DATA-04 still postponed (needs ING-07).
+**Last updated:** 2026-07-03 (session 19 — ING-07 Chroma + local embeddings)
+**Progress:** 21/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-03, DATA-05, ING-01..ING-07). **DATA-04 now unblocked.**
 
 ---
 
 ## Next module
 
-**ID:** `ING-07`
-**Title:** Chroma vector store + local embeddings (free)
-**Depends on:** BOOT-06
-**Read:** `BUILD.md` → the `ING-07` block. Two files: `backend/app/db/vectorstore.py`, `backend/app/utils/embeddings.py`. Uses `sentence-transformers/all-MiniLM-L6-v2` locally (already pinned in `requirements.txt`) and `chromadb==0.5.11` (also pinned). This is the module that finally unblocks DATA-04.
+**ID:** `DATA-04`
+**Title:** Themes routes
+**Depends on:** DATA-01, DATA-02, ING-07 — **all now met**.
+**Read:** `BUILD.md` → the `DATA-04` block.
 
-**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/05 + ING-01..ING-06 stacked on `856d503`. Six adapters live (`Base`, NewsAPI, Marketaux, GDELT, EDGAR, RSS). All fetch surface is done — ING-07 shifts to the vector-store side.
+DATA-04 is the CRUD surface for `themes`. On create/update it generates an embedding via `EmbeddingClient` and writes a doc into the `themes` Chroma collection, persisting the doc id in `themes.embedding_id`. On delete it removes the Chroma doc too.
+
+**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/05 + ING-01..ING-07 stacked on `856d503`. All ingest adapters (`NewsAPI`, `Marketaux`, `GDELT`, `EDGAR`, `RSS`) live. Chroma + `EmbeddingClient` live. `main.py` lifespan calls `init_collections()` best-effort at startup.
 
 Before starting, verify:
 - `git branch --show-current` shows `v2/intelligence-agent`.
-- `git log --oneline -20` shows ING-06..HP-01 on top of `856d503` / `f7e479a`.
+- `git log --oneline -21` shows ING-07..HP-01 on top of `856d503` / `f7e479a`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **103 passed, 3 deselected**.
+- `cd backend && python -m pytest tests -q` reports **111 passed, 4 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute ING-06 — RSS adapter that pulls a caller-supplied list of feed URLs, parses each with `feedparser`, filters by `since`, and deduplicates by URL hash before yielding `NewsItemIn`s.
+- **Session goal:** Execute ING-07 — Chroma vector store wrapper + local embeddings client using `sentence-transformers/all-MiniLM-L6-v2`. Startup hook creates the three canonical collections. This unblocks DATA-04.
 - **Completed:**
-  - `ING-06` ✅ — RSS adapter.
-  - `backend/app/pipelines/sources/rss.py` — `RSSSource(BaseSource)`. httpx.AsyncClient fetches each feed's raw bytes, then `asyncio.to_thread(feedparser.parse, resp.content)` runs the sync parser off the event loop. `_url_hash(url)` = SHA-256 hex; per-fetch dedup keeps the stream tidy independent of the DB-layer `news_items.url_hash` UNIQUE constraint. `_parse_time` converts feedparser's `struct_time` tuples to `datetime` in UTC. Missing link → skip. Missing title → skip. Missing published date → skip. Constructor: `feeds=None` reads from `Config.RSS_FEEDS`; explicit `feeds=[]` is honored. Never raises — feed-level errors are logged and skipped.
-  - `backend/tests/pipelines/sources/test_rss.py` — 6 tests using two RSS fixture strings (bytes). Cover: happy path (`fixture yields correct news items` incl. body/source_id/published_at mapping), cross-feed URL-hash dedup, empty feeds list, one-feed error is contained, malformed entry dropped while good entries survive, non-200 response yields empty.
+  - `ING-07` ✅ — vector store + embeddings.
+  - `backend/app/utils/embeddings.py` — `EmbeddingClient` wraps `sentence-transformers` with async ergonomics. Module-level `_model` singleton loaded lazily by `_load_model()`. `embed(texts)` runs the sync `.encode()` in `loop.run_in_executor(None, ...)` so the async event loop is never blocked. Batch size 64 per BUILD.md; `normalize_embeddings=True` for cosine-similarity readiness. Empty input short-circuits (never triggers the model load).
+  - `backend/app/db/vectorstore.py` — `COLLECTIONS = ("news_items", "themes", "historical_analogs")`. `get_client(path=None)` returns a process-global `chromadb.PersistentClient` at `Config.CHROMA_PATH` (path override honored only on first construction; tests inject explicit clients). `init_collections(client=None)` provisions all three collections idempotently. `VectorStore(collection, *, client=None)` wraps a single collection with `upsert() / query() / delete() / count()`. Unknown collection name raises `ValueError`.
+  - `backend/app/utils/llm.py` — replaced the BOOT-06 placeholder `EmbeddingClient` with `from app.utils.embeddings import EmbeddingClient  # noqa: F401` so existing imports keep working, now backed by the real module.
+  - `backend/app/main.py` — lifespan now calls `init_collections()` inside a try/except so a Chroma outage at boot never kills the app (downstream retrieval will fail loudly at call sites instead).
+  - `backend/tests/utils/test_embeddings.py` — 4 tests. Hermetic set uses a monkey-patched `_FakeModel` returning deterministic 3-dim vectors keyed on substring presence ("fed" / "oil" / "nvda") so the plumbing is verified without downloading real weights: `test_embed_returns_row_per_input`, `test_empty_input_short_circuits`, `test_batching_returns_expected_count`. Plus `@pytest.mark.integration test_real_sentence_transformers_fed_retrieves_fed` — enable with `pytest -m integration` to exercise the real 90 MB model; verifies cosine ordering pushes the two Fed items to the top-2 for a "Federal Reserve rate decision" query.
+  - `backend/tests/db/test_vectorstore.py` — 5 tests. Per-test tempdir Chroma client via a `fresh_chroma_client` fixture that resets the module singleton. Covers: `init_collections` creates all three, idempotent second call, upsert/query round-trip with metadata filter, upsert overwrites existing id, unknown collection raises.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **103 passed, 3 deselected**.
+  - `python -m pytest tests -q` → **111 passed, 4 deselected** (4 hermetic vectorstore + 3 hermetic embedding + 1 opt-in embedding integration test + everything from prior sessions).
   - `ruff check .` clean.
-  - `feedparser==6.0.11` installed locally (already pinned in requirements.txt — CI's fresh install covers it).
-- **Files touched:** created `backend/app/pipelines/sources/rss.py`, `backend/tests/pipelines/sources/test_rss.py`. Modified `BUILD.md` (tick), `HANDOFF.md` (this file).
+  - `chromadb==0.5.11` and `sentence-transformers==3.2.1` are both in `requirements.txt` (BOOT-02); the fresh CI install covers them.
+- **Files touched:** created `backend/app/db/vectorstore.py`, `backend/app/utils/embeddings.py`, `backend/tests/db/test_vectorstore.py`, `backend/tests/utils/test_embeddings.py`. Modified `backend/app/utils/llm.py` (EmbeddingClient re-export), `backend/app/main.py` (lifespan init_collections), `BUILD.md` (tick), `HANDOFF.md` (this file).
 - **Migrations added:** none.
-- **Tests added:** 6.
+- **Tests added:** 9 (4 embedding + 5 vectorstore).
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **No bundled default feed list.** BUILD.md's Action lists Reuters Business / WSJ Markets / Bloomberg Politics / FT / Livemint / Moneycontrol / arxiv-econ as the default. `Config.RSS_FEEDS` is documented in `backend/.env.example` (BOOT-07) but ships empty by default — operators fill in whichever feed URLs suit their portfolio. Hardcoding the seven above would (a) freeze operator choice and (b) risk shipping stale/gone feed URLs. Empty default + `.env.example` guidance is the more portable posture.
-  - **Feed HTTP fetch is via httpx.** BUILD.md just says "Parse with `feedparser`." feedparser can accept a URL directly and do its own fetch (blocking), but going through httpx keeps testability + timeout + UA-header uniform with the other adapters and lets `asyncio.to_thread` isolate the parser CPU work.
+  - **`init_collections()` is wrapped in try/except at startup.** BUILD.md just says "App startup creates all three collections if missing." Wrapping the call keeps a broken CHROMA_PATH from killing the entire FastAPI process — downstream retrieval fails at call sites instead. Recovery path is clearer and the health endpoint stays live.
+  - **The real semantic-retrieval test is marked `@pytest.mark.integration` instead of running in the hermetic suite.** BUILD.md ING-07's Acceptance calls for embedding 5 titles and verifying that Fed queries retrieve Fed items. That requires the actual 90 MB `all-MiniLM-L6-v2` weights, which we don't ship in CI. Marking it opt-in keeps the default suite fast; the assertion still exists for anyone running `pytest -m integration` locally.
+  - **`EMBEDDING_DEVICE` respected.** Config exposes it; the loader passes it straight through to `SentenceTransformer(device=...)`. No test currently covers the GPU path.
 
 ---
 
 ## Environment state
 
-- Backend: six source adapters live. Fetch surface complete. The five product tables + three news tables + `llm_calls` are on disk. Every `/api/*` route (portfolios / positions / me) authenticated + owner-scoped.
+- Backend: all six ingest adapters live. Chroma + EmbeddingClient live. `main.py` lifespan provisions the three collections. 10 route endpoints across `/api/portfolios`, `/api/positions`, `/api/me`.
 - Frontend: unchanged.
-- Database: unchanged (Alembic head `d2a235b04a85`).
-- Vectors: unchanged — ING-07 provisions Chroma next.
-- Tests: **103 hermetic, 3 opt-in.**
-- CI: passing on ING-05 fix.
+- Database: Alembic head `d2a235b04a85`. All product tables from DATA-01 + BOOT-06 + ING-01 present.
+- Vectors: `news_items`, `themes`, `historical_analogs` collections provisioned on startup.
+- Tests: **111 hermetic, 4 opt-in.**
+- CI: green on ING-06 push. This push (ING-07) will trigger a fresh run.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** ING-07 is the last blocker for DATA-04. After ING-07 lands, the sensible order is: ING-08 (normalizer + idempotent insertion) → ING-09 (semantic dedup + clustering) → ING-10 (orchestrator + APScheduler). DATA-04 can slot in whenever — its scope is small once `EmbeddingClient` (ING-07) is real.
+- **`sentence-transformers` first-run download.** In CI, the first pytest that touches `_load_model()` would download ~90MB of weights (Hugging Face hub). Our hermetic tests don't hit that path (they monkey-patch `_load_model`), so CI stays fast. The `integration` marker test is opt-in only. If we want a warm CI cache, that's a separate optimization module.
 
 ---
 

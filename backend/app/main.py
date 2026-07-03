@@ -55,6 +55,14 @@ _HTTP_CODE_MAP: dict[int, str] = {
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     Config.validate()
+    # Best-effort provision of the three canonical Chroma collections (ING-07).
+    # Never fatal at boot — if the vector store can't come up, downstream
+    # ingestion + retrieval will fail loudly at their call sites instead.
+    try:
+        from app.db.vectorstore import init_collections
+        init_collections()
+    except Exception:
+        log.exception("vectorstore init_collections failed; continuing without")
     log.info("lumen_startup", extra={"version": app.version})
     yield
     log.info("lumen_shutdown")

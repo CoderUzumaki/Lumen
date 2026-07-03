@@ -685,7 +685,7 @@ Continuous background pipeline. Five sources, one normalized schema, deduped int
 - **Acceptance:** Given a fixture RSS XML, adapter yields correct `NewsItemIn` objects.
 - **Depends on:** ING-01.
 
-### ING-07 — Chroma vector store + local embeddings (free)
+### ING-07 — Chroma vector store + local embeddings (free) ✅
 
 - **Files:** `backend/app/db/vectorstore.py`, `backend/app/utils/embeddings.py`.
 - **Action:**
