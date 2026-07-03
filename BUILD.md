@@ -452,7 +452,7 @@ Everything a user configures about themselves. Nothing agentic yet.
   - `pytest backend/tests/db/test_models.py::test_phase1_schema` inserts rows, hits every CHECK constraint, verifies cascade delete.
 - **Depends on:** BOOT-05.
 
-### DATA-02 — Pydantic schemas for portfolio/positions/themes
+### DATA-02 — Pydantic schemas for portfolio/positions/themes ✅
 
 - **Files:** `backend/app/schemas/portfolio.py`, `backend/app/schemas/theme.py`, `backend/app/schemas/preferences.py`.
 - **Action:** Define request and response Pydantic v2 models. Naming: `PortfolioCreate`, `PortfolioUpdate`, `PortfolioRead`, and so on. `PortfolioRead` embeds `positions: list[PositionRead]`. Validation:
