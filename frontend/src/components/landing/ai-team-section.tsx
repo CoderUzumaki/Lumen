@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { MessageCircle, Clock, Zap } from "lucide-react";
+import Image from "next/image";
 
 import { logger } from "@/lib/logger";
 const conversations = [
@@ -346,10 +347,12 @@ export function AITeamSection() {
 
 												<div className="bg-slate-900 px-6 py-4 text-white">
 													<div className="flex items-center gap-3">
-														<img
+														<Image
 															src="/images/michael-ai-agent.jpg"
 															alt="Michael - AI Agent"
-															className="w-8 h-8 rounded-full object-cover mr-2 mt-1 flex-shrink-0"
+															width={32}
+															height={32}
+															className="mr-2 mt-1 h-8 w-8 flex-shrink-0 rounded-full object-cover"
 														/>
 														<div className="flex-1">
 															<h3 className="font-semibold text-sm">
@@ -392,10 +395,12 @@ export function AITeamSection() {
 															>
 																{message.sender ===
 																	"ai" && (
-																	<img
+																	<Image
 																		src="/images/michael-ai-agent.jpg"
 																		alt="Michael"
-																		className="w-6 h-6 rounded-full object-cover mr-2 mt-1 flex-shrink-0"
+																		width={24}
+																		height={24}
+																		className="mr-2 mt-1 h-6 w-6 flex-shrink-0 rounded-full object-cover"
 																	/>
 																)}
 																<div
@@ -440,10 +445,12 @@ export function AITeamSection() {
 													{/* Typing indicator */}
 													{isTyping && (
 														<div className="flex justify-start items-start">
-															<img
+															<Image
 																src="/images/michael-ai-agent.jpg"
 																alt="Michael"
-																className="w-6 h-6 rounded-full object-cover mr-2 mt-1 flex-shrink-0"
+																width={24}
+																height={24}
+																className="mr-2 mt-1 h-6 w-6 flex-shrink-0 rounded-full object-cover"
 															/>
 															<div className="bg-white p-3 rounded-2xl rounded-bl-md shadow-sm border border-slate-200">
 																<div className="flex space-x-1">

@@ -113,7 +113,7 @@ export function GlassmorphismNav() {
       >
         {/* Main Navigation */}
         <div className="w-[90vw] max-w-xs md:max-w-4xl mx-auto">
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-full px-4 py-3 md:px-6 md:py-2">
+          <div className="rounded-full border border-white/12 bg-slate-950/72 px-4 py-3 shadow-[0_12px_40px_rgba(15,23,42,0.32)] backdrop-blur-xl md:px-6 md:py-2">
             <div className="flex items-center justify-between">
               {/* Logo */}
               <Link
@@ -138,7 +138,7 @@ export function GlassmorphismNav() {
                     <Link
                       key={item.name}
                       href={item.href}
-                      className="text-white/80 hover:text-white hover:scale-105 transition-all duration-200 font-medium cursor-pointer"
+                      className="rounded-full px-2 py-1 text-sm font-medium text-white/88 transition-all duration-200 hover:scale-105 hover:bg-white/8 hover:text-white"
                     >
                       {item.name}
                     </Link>
@@ -146,7 +146,7 @@ export function GlassmorphismNav() {
                     <button
                       key={item.name}
                       onClick={() => scrollToSection(item.href)}
-                      className="text-white/80 hover:text-white hover:scale-105 transition-all duration-200 font-medium cursor-pointer"
+                      className="rounded-full px-2 py-1 text-sm font-medium text-white/88 transition-all duration-200 hover:scale-105 hover:bg-white/8 hover:text-white"
                     >
                       {item.name}
                     </button>
@@ -168,7 +168,7 @@ export function GlassmorphismNav() {
               {/* Mobile Menu Button */}
               <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="md:hidden text-white hover:scale-110 transition-transform duration-200 cursor-pointer"
+                className="cursor-pointer text-white hover:scale-110 transition-transform duration-200 md:hidden"
               >
                 <div className="relative w-6 h-6">
                   <Menu
@@ -205,14 +205,14 @@ export function GlassmorphismNav() {
               isOpen ? "opacity-100 translate-y-0 scale-100" : "opacity-0 -translate-y-8 scale-95 pointer-events-none"
             }`}
           >
-            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 shadow-2xl">
+            <div className="rounded-2xl border border-white/12 bg-slate-950/88 p-4 shadow-2xl backdrop-blur-xl">
               <div className="flex flex-col space-y-1">
                 {navigation.map((item, index) =>
                   item.href.startsWith("/") ? (
                     <Link
                       key={item.name}
                       href={item.href}
-                      className={`text-white/80 hover:text-white hover:bg-white/10 rounded-lg px-3 py-3 text-left transition-all duration-300 font-medium cursor-pointer transform hover:scale-[1.02] hover:translate-x-1 ${
+                      className={`rounded-lg px-3 py-3 text-left font-medium text-white/88 transition-all duration-300 hover:translate-x-1 hover:scale-[1.02] hover:bg-white/10 hover:text-white ${
                         isOpen ? "animate-mobile-menu-item" : ""
                       }`}
                       style={{
@@ -226,7 +226,7 @@ export function GlassmorphismNav() {
                     <button
                       key={item.name}
                       onClick={() => scrollToSection(item.href)}
-                      className={`text-white/80 hover:text-white hover:bg-white/10 rounded-lg px-3 py-3 text-left transition-all duration-300 font-medium cursor-pointer transform hover:scale-[1.02] hover:translate-x-1 ${
+                      className={`rounded-lg px-3 py-3 text-left font-medium text-white/88 transition-all duration-300 hover:translate-x-1 hover:scale-[1.02] hover:bg-white/10 hover:text-white ${
                         isOpen ? "animate-mobile-menu-item" : ""
                       }`}
                       style={{
