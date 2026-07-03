@@ -629,7 +629,7 @@ Continuous background pipeline. Five sources, one normalized schema, deduped int
 - **Acceptance:** migration up/down clean, unique constraint on `url_hash` prevents duplicate inserts.
 - **Depends on:** BOOT-05.
 
-### ING-02 — NewsAPI adapter
+### ING-02 — NewsAPI adapter ✅
 
 - **Files:** `backend/app/pipelines/sources/newsapi.py`.
 - **Action:**
