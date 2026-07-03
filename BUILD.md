@@ -493,7 +493,7 @@ Everything a user configures about themselves. Nothing agentic yet.
     - Ticker validation errors return 400 with `validation_error` code.
 - **Depends on:** DATA-01, DATA-02, BOOT-03.
 
-### DATA-04 — Themes routes
+### DATA-04 — Themes routes ✅
 
 - **Files:** `backend/app/routes/themes.py`.
 - **Action:** Implement CRUD:

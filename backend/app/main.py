@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.routes import me as me_routes
 from app.routes import portfolios as portfolios_routes
 from app.routes import positions as positions_routes
+from app.routes import themes as themes_routes
 from app.utils.config import Config
 from app.utils.logging_config import configure_logging
 
@@ -142,3 +143,4 @@ async def health() -> dict[str, Any]:
 app.include_router(me_routes.router)
 app.include_router(portfolios_routes.router)
 app.include_router(positions_routes.router)
+app.include_router(themes_routes.router)
