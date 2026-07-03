@@ -87,18 +87,19 @@ vercel
 3. Click "New Project"
 4. Import your repository
 5. Configure:
-    - **Framework**: Next.js
+    - **Framework Preset**: Next.js
     - **Root Directory**: `frontend`
-    - **Build Command**: `npm run build`
-    - **Output Directory**: `.next`
+    - **Build Command**: `npm run build` (default)
+    - **Output Directory**: leave **empty** (do NOT set `.next` — that causes platform `404: NOT_FOUND`)
 
 ### Step 3: Configure Environment Variables
 
 In Vercel dashboard:
 
 ```bash
-NEXT_PUBLIC_API_URL=https://your-backend-api.com
-NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
+NEXT_PUBLIC_BACKEND_URL=https://your-backend-api.onrender.com
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 ### Step 4: Custom Domain (Optional)

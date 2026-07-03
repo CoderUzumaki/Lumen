@@ -44,14 +44,14 @@ const getImpactColor = (severity: string) => {
 	switch (severity?.toLowerCase()) {
 		case "critical":
 		case "high":
-			return "bg-red-100 text-red-700 border-red-300";
+			return "border-rose-400/30 bg-rose-500/15 text-rose-300";
 		case "medium":
-			return "bg-yellow-100 text-yellow-700 border-yellow-300";
+			return "border-amber-400/30 bg-amber-500/15 text-amber-300";
 		case "low":
 		case "info":
-			return "bg-blue-100 text-blue-700 border-blue-300";
+			return "border-primary/30 bg-primary/15 text-primary";
 		default:
-			return "bg-gray-100 text-gray-700 border-gray-300";
+			return "border-border bg-muted text-muted-foreground";
 	}
 };
 
@@ -86,9 +86,9 @@ export default function AISuggestionsCard() {
 
 	if (loading) {
 		return (
-			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+			<Card className="h-full border-border/70 bg-card/80 shadow-lg shadow-black/10">
 				<CardContent className="flex items-center justify-center h-[300px]">
-					<p className="text-gray-500">Loading AI suggestions...</p>
+					<p className="text-muted-foreground">Loading AI suggestions...</p>
 				</CardContent>
 			</Card>
 		);
@@ -96,9 +96,9 @@ export default function AISuggestionsCard() {
 
 	if (error) {
 		return (
-			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+			<Card className="h-full border-border/70 bg-card/80 shadow-lg shadow-black/10">
 				<CardContent className="flex items-center justify-center h-[300px]">
-					<p className="text-gray-500">{error}</p>
+					<p className="text-muted-foreground">{error}</p>
 				</CardContent>
 			</Card>
 		);
@@ -106,14 +106,14 @@ export default function AISuggestionsCard() {
 
 	if (suggestions.length === 0) {
 		return (
-			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+			<Card className="h-full border-border/70 bg-card/80 shadow-lg shadow-black/10">
 				<CardContent className="flex items-center justify-center h-[300px]">
 					<div className="text-center">
-						<Lightbulb className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-						<p className="text-gray-500">
+						<Lightbulb className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
+						<p className="text-muted-foreground">
 							No suggestions available yet
 						</p>
-						<p className="text-sm text-gray-400 mt-1">
+						<p className="mt-1 text-sm text-muted-foreground">
 							AI analysis will generate insights based on your
 							transaction data
 						</p>
@@ -130,16 +130,16 @@ export default function AISuggestionsCard() {
 			animate="visible"
 			className="h-full"
 		>
-			<Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 h-full flex flex-col">
+			<Card className="flex h-full flex-col border-border/70 bg-card/80 shadow-lg shadow-black/10 transition-all duration-300 hover:shadow-xl hover:shadow-black/10">
 				<CardHeader className="pb-3">
-					<CardTitle className="text-lg font-semibold text-gray-900 flex items-center justify-between">
+					<CardTitle className="flex items-center justify-between text-lg font-semibold text-foreground">
 						<div className="flex items-center gap-2">
-							<Lightbulb className="w-5 h-5 text-yellow-600" />
+							<Lightbulb className="h-5 w-5 text-amber-300" />
 							AI Suggestions
 						</div>
 						<Badge
 							variant="outline"
-							className="bg-blue-50 text-blue-700 border-blue-300"
+							className="border-primary/30 bg-primary/10 text-primary"
 						>
 							{suggestions.length} insights
 						</Badge>
@@ -159,15 +159,15 @@ export default function AISuggestionsCard() {
 										duration: 0.3,
 										delay: index * 0.1,
 									}}
-									className="p-4 rounded-lg bg-gray-50 border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer group"
+									className="group cursor-pointer rounded-xl border border-border/70 bg-background/55 p-4 transition-all duration-200 hover:bg-accent/60 hover:shadow-md"
 								>
 									<div className="flex items-start gap-3 mb-2">
-										<div className="p-2 bg-yellow-100 rounded-lg group-hover:bg-yellow-200 transition-colors">
-											<Icon className="w-4 h-4 text-yellow-600" />
+										<div className="rounded-lg bg-amber-500/15 p-2 transition-colors group-hover:bg-amber-500/20">
+											<Icon className="h-4 w-4 text-amber-300" />
 										</div>
 										<div className="flex-1">
 											<div className="flex items-start justify-between mb-1">
-												<h4 className="font-semibold text-gray-900 text-sm">
+												<h4 className="text-sm font-semibold text-foreground">
 													{suggestion.title}
 												</h4>
 												{suggestion.severity && (
@@ -181,14 +181,14 @@ export default function AISuggestionsCard() {
 													</Badge>
 												)}
 											</div>
-											<p className="text-xs text-gray-600 leading-relaxed">
+											<p className="text-xs leading-relaxed text-muted-foreground">
 												{suggestion.description}
 											</p>
 											{suggestion.confidence_score && (
 												<div className="mt-2 flex items-center gap-1">
-													<div className="h-1 flex-1 bg-gray-200 rounded-full overflow-hidden">
+													<div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
 														<div
-															className="h-full bg-blue-500 rounded-full"
+															className="h-full rounded-full bg-primary"
 															style={{
 																width: `${
 																	suggestion.confidence_score *
@@ -197,7 +197,7 @@ export default function AISuggestionsCard() {
 															}}
 														/>
 													</div>
-													<span className="text-xs text-gray-500">
+													<span className="text-xs text-muted-foreground">
 														{(
 															suggestion.confidence_score *
 															100

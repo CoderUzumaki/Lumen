@@ -1,8 +1,7 @@
 "use client";
 
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
 import { useState, useEffect } from "react";
+import { DashboardShell } from "@/components/dashboard-shell";
 import QuickStatsCard from "@/components/ai-analytics/quickStatsCard";
 import PaymentCalendarCard from "@/components/ai-analytics/paymentCalendarCard";
 import ReminderDetailsCard from "@/components/ai-analytics/reminderDetailsCard";
@@ -13,6 +12,7 @@ import CategoryPieChart from "@/components/ai-analytics/categoryPieChart";
 import { aiAnalyticsApi } from "@/lib/api/client";
 
 import { logger } from "@/lib/logger";
+import { Badge } from "@/components/ui/badge";
 
 export default function AIAnalyticsContent() {
 	const [analysisTriggered, setAnalysisTriggered] = useState(false);
@@ -40,45 +40,37 @@ export default function AIAnalyticsContent() {
 	}, [analysisTriggered]);
 
 	return (
-		<SidebarProvider>
-			<AppSidebar />
-			<main className="flex-1 overflow-y-auto bg-gray-50">
-				<div className="container mx-auto p-4 md:p-6 lg:p-8">
-					<div className="mb-6">
-						<h1 className="text-3xl font-bold text-gray-900 mb-2">
-							AI Analytics
-							{!analysisTriggered && (
-								<span className="ml-3 text-sm text-blue-600 animate-pulse">
-									Analyzing...
-								</span>
-							)}
-						</h1>
-						<p className="text-gray-600">
-							Intelligent insights and predictions for your
-							financial data
-						</p>
-					</div>
-
-					<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-						<QuickStatsCard />
-						<PaymentCalendarCard />
-						<ReminderDetailsCard />
-						<AnomalyDetectionCard />
-						<div className="lg:col-span-2">
-							<AISuggestionsCard />
-						</div>
-					</div>
-
-					<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-						<div className="lg:col-span-2">
-							<SpendingTrendGraph />
-						</div>
-						<div className="lg:col-span-1">
-							<CategoryPieChart />
-						</div>
-					</div>
+		<DashboardShell
+			title="AI Analytics"
+			description="Surface risk, reminders, anomaly detection, and forward-looking spend signals without leaving the core finance workflow."
+			eyebrow="AI Insights"
+			actions={
+				<Badge
+					variant="outline"
+					className="rounded-full border-border/70 bg-background/60 px-3 py-1 text-sm text-muted-foreground"
+				>
+					{analysisTriggered ? "Model refreshed" : "Analyzing live data..."}
+				</Badge>
+			}
+		>
+			<div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+				<QuickStatsCard />
+				<PaymentCalendarCard />
+				<ReminderDetailsCard />
+				<AnomalyDetectionCard />
+				<div className="lg:col-span-2">
+					<AISuggestionsCard />
 				</div>
-			</main>
-		</SidebarProvider>
+			</div>
+
+			<div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+				<div className="lg:col-span-2">
+					<SpendingTrendGraph />
+				</div>
+				<div className="lg:col-span-1">
+					<CategoryPieChart />
+				</div>
+			</div>
+		</DashboardShell>
 	);
 }

@@ -4,29 +4,28 @@ import * as React from "react";
 import {
 	BookOpen,
 	Bot,
-	Frame,
-	Map,
 	PieChart,
-	Settings2,
-	SquareTerminal,
+	LayoutDashboard,
 } from "lucide-react";
+import Image from "next/image";
 
 import { NavMain } from "@/components/nav-main";
 import { NavProjects } from "@/components/nav-projects";
 import { NavUser } from "@/components/nav-user";
-import { TeamSwitcher } from "@/components/team-switcher";
 import {
 	Sidebar,
 	SidebarContent,
 	SidebarFooter,
+	SidebarGroupLabel,
 	SidebarHeader,
 	SidebarRail,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/components/auth/auth-provider";
+
 const data = {
 	navMain: [
 		{
-			title: "Analytics",
+			title: "Spending Views",
 			url: "#",
 			icon: BookOpen,
 			items: [
@@ -47,19 +46,24 @@ const data = {
 	],
 	projects: [
 		{
-			name: "Dashboard",
+			name: "Overview",
 			url: "/dashboard",
-			icon: SquareTerminal,
+			icon: LayoutDashboard,
 		},
 		{
-			name: "Chat Bot",
-			url: "/chatbot",
-			icon: Bot,
+			name: "Analytics",
+			url: "/analytics",
+			icon: BookOpen,
 		},
 		{
-			name: "AI Analytics",
+			name: "AI Insights",
 			url: "/ai-analytics",
 			icon: PieChart,
+		},
+		{
+			name: "Ask Lumen",
+			url: "/chatbot",
+			icon: Bot,
 		},
 	],
 };
@@ -104,25 +108,34 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 		<Sidebar
 			collapsible="icon"
 			{...props}
-			className="bg-white border-r border-gray-200"
+			className="border-r border-sidebar-border/80"
 		>
-			<SidebarHeader className="bg-white border-b border-gray-200">
-				<div className="flex items-center gap-2 px-2 py-2">
-					<img
-						src="/lumen.svg"
-						alt="Lumen"
-						className="w-8 h-8"
+			<SidebarHeader className="border-b border-sidebar-border/80 px-3 py-3">
+				<div className="flex items-center gap-3">
+					<Image
+						src="/lumen_logo.svg"
+						alt="Lumen logo"
+						width={32}
+						height={32}
+						className="h-8 w-8"
 					/>
-					<span className="text-xl font-bold text-gray-800 group-data-[collapsible=icon]:hidden">
-						Lumen
-					</span>
+					<div className="group-data-[collapsible=icon]:hidden">
+						<p className="text-sm font-semibold tracking-wide text-sidebar-foreground">
+							Lumen
+						</p>
+						<p className="text-xs text-sidebar-foreground/60">
+							Financial command center
+						</p>
+					</div>
 				</div>
 			</SidebarHeader>
-			<SidebarContent className="bg-white">
+			<SidebarContent className="px-1 py-3">
+				<SidebarGroupLabel>Workspace</SidebarGroupLabel>
 				<NavProjects projects={data.projects} />
+				<SidebarGroupLabel className="mt-2">Compare</SidebarGroupLabel>
 				<NavMain items={data.navMain} />
 			</SidebarContent>
-			<SidebarFooter className="bg-white border-t border-gray-200">
+			<SidebarFooter className="border-t border-sidebar-border/80 pt-3">
 				<NavUser user={user} />
 			</SidebarFooter>
 			<SidebarRail />

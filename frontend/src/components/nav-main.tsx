@@ -1,6 +1,8 @@
 "use client";
 
 import { ChevronRight, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -31,6 +33,25 @@ export function NavMain({
 		}[];
 	}[];
 }) {
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
+
+	const isSubItemActive = (url: string) => {
+		const [path, queryString] = url.split("?");
+		if (pathname !== path) {
+			return false;
+		}
+
+		if (!queryString) {
+			return true;
+		}
+
+		const params = new URLSearchParams(queryString);
+		return [...params.entries()].every(
+			([key, value]) => searchParams.get(key) === value
+		);
+	};
+
 	return (
 		<SidebarGroup>
 			<SidebarMenu>
@@ -38,7 +59,12 @@ export function NavMain({
 					<Collapsible
 						key={item.title}
 						asChild
-						defaultOpen={item.isActive}
+						defaultOpen={
+							item.isActive ||
+							item.items?.some((subItem) =>
+								isSubItemActive(subItem.url)
+							)
+						}
 						className="group/collapsible"
 					>
 						<SidebarMenuItem>
@@ -53,10 +79,15 @@ export function NavMain({
 								<SidebarMenuSub>
 									{item.items?.map((subItem) => (
 										<SidebarMenuSubItem key={subItem.title}>
-											<SidebarMenuSubButton asChild>
-												<a href={subItem.url}>
+											<SidebarMenuSubButton
+												asChild
+												isActive={isSubItemActive(
+													subItem.url
+												)}
+											>
+												<Link href={subItem.url}>
 													<span>{subItem.title}</span>
-												</a>
+												</Link>
 											</SidebarMenuSubButton>
 										</SidebarMenuSubItem>
 									))}

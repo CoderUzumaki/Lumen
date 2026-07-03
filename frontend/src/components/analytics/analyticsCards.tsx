@@ -174,15 +174,15 @@ export default function AnalyticsCards({
 				{[...Array(4)].map((_, i) => (
 					<Card
 						key={i}
-						className="animate-pulse bg-white border border-gray-200"
+						className="animate-pulse border-border/70 bg-card/80"
 					>
 						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-							<div className="h-4 w-24 bg-gray-200 rounded"></div>
-							<div className="h-4 w-4 bg-gray-200 rounded"></div>
+							<div className="h-4 w-24 rounded bg-muted"></div>
+							<div className="h-4 w-4 rounded bg-muted"></div>
 						</CardHeader>
 						<CardContent>
-							<div className="h-8 w-32 bg-gray-200 rounded mb-2"></div>
-							<div className="h-4 w-full bg-gray-200 rounded"></div>
+							<div className="mb-2 h-8 w-32 rounded bg-muted"></div>
+							<div className="h-4 w-full rounded bg-muted"></div>
 						</CardContent>
 					</Card>
 				))}
@@ -234,22 +234,22 @@ export default function AnalyticsCards({
 				return (
 					<Card
 						key={index}
-						className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+						className="border-border/70 bg-card/80 shadow-lg shadow-black/10 transition-shadow hover:shadow-xl hover:shadow-black/10"
 					>
 						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-							<CardTitle className="text-sm font-medium text-gray-700">
+							<CardTitle className="text-sm font-medium text-muted-foreground">
 								{card.title}
 							</CardTitle>
-							<Icon className="h-4 w-4 text-gray-500" />
+							<Icon className="h-4 w-4 text-primary" />
 						</CardHeader>
 						<CardContent>
-							<div className="text-2xl font-bold text-gray-900">
+							<div className="text-2xl font-bold text-foreground">
 								{card.isTrend && (
 									<span
 										className={
 											isPositive
-												? "text-red-600"
-												: "text-blue-600"
+												? "text-amber-300"
+												: "text-primary"
 										}
 									>
 										{isPositive ? "+" : "-"}
@@ -261,21 +261,21 @@ export default function AnalyticsCards({
 									maximumFractionDigits: 2,
 								})}
 							</div>
-							<div className="flex items-center gap-1 text-xs text-gray-600 mt-1">
+							<div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
 								{isPositive ? (
 									<ArrowUpIcon
 										className={`h-3 w-3 ${
 											card.isTrend
-												? "text-red-600"
-												: "text-blue-600"
+												? "text-amber-300"
+												: "text-primary"
 										}`}
 									/>
 								) : (
 									<ArrowDownIcon
 										className={`h-3 w-3 ${
 											card.isTrend
-												? "text-blue-600"
-												: "text-red-600"
+												? "text-primary"
+												: "text-rose-300"
 										}`}
 									/>
 								)}
@@ -283,16 +283,16 @@ export default function AnalyticsCards({
 									className={
 										card.isTrend
 											? isPositive
-												? "text-red-600 font-medium"
-												: "text-blue-600 font-medium"
+												? "font-medium text-amber-300"
+												: "font-medium text-primary"
 											: isPositive
-											? "text-blue-600 font-medium"
-											: "text-red-600 font-medium"
+											? "font-medium text-primary"
+											: "font-medium text-rose-300"
 									}
 								>
 									{Math.abs(card.change).toFixed(1)}%
 								</span>
-								<span className="ml-1 text-gray-600">
+								<span className="ml-1 text-muted-foreground">
 									{card.description}
 								</span>
 							</div>

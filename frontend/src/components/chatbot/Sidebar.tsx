@@ -9,18 +9,15 @@ import {
 	Clock,
 	FolderIcon,
 	FileText,
-	Settings,
 	Asterisk,
 } from "lucide-react";
 import SidebarSection from "./SidebarSection";
 import ConversationRow from "./ConversationRow";
 import FolderRow from "./FolderRow";
 import TemplateRow from "./TemplateRow";
-import ThemeToggle from "./ThemeToggle";
 import CreateFolderModal from "./CreateFolderModal";
 import CreateTemplateModal from "./CreateTemplateModal";
 import SearchModal from "./SearchModal";
-import SettingsPopover from "./SettingsPopover";
 import { cls } from "./utils";
 import { useState, RefObject, Dispatch, SetStateAction } from "react";
 
@@ -68,8 +65,6 @@ interface CollapsedState {
 interface SidebarProps {
 	open: boolean;
 	onClose: () => void;
-	theme: string;
-	setTheme: Dispatch<SetStateAction<string>>;
 	collapsed: CollapsedState;
 	setCollapsed: Dispatch<SetStateAction<CollapsedState>>;
 	conversations: Conversation[];
@@ -95,8 +90,6 @@ interface SidebarProps {
 export default function Sidebar({
 	open,
 	onClose,
-	theme,
-	setTheme,
 	collapsed,
 	setCollapsed,
 	conversations,
@@ -259,17 +252,6 @@ export default function Sidebar({
 					>
 						<FolderIcon className="h-5 w-5" />
 					</button>
-
-					<div className="mt-auto mb-4">
-						<SettingsPopover>
-							<button
-								className="rounded-xl p-2 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-zinc-800"
-								title="Settings"
-							>
-								<Settings className="h-5 w-5" />
-							</button>
-						</SettingsPopover>
-					</div>
 				</div>
 			</motion.aside>
 		);
@@ -313,7 +295,7 @@ export default function Sidebar({
 									<Asterisk className="h-4 w-4" />
 								</div>
 								<div className="text-sm font-semibold tracking-tight">
-									AI Assistant
+									Ask Lumen
 								</div>
 							</div>
 							<div className="ml-auto flex items-center gap-1">
@@ -362,7 +344,7 @@ export default function Sidebar({
 								className="flex w-full items-center justify-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-white dark:text-zinc-900"
 								title="New Chat (⌘N)"
 							>
-								<Plus className="h-4 w-4" /> Start New Chat
+								<Plus className="h-4 w-4" /> New Thread
 							</button>
 						</div>
 
@@ -515,32 +497,14 @@ export default function Sidebar({
 						</nav>
 
 						<div className="mt-auto border-t border-zinc-200/60 px-3 py-3 dark:border-zinc-800">
-							<div className="flex items-center gap-2">
-								<SettingsPopover>
-									<button className="inline-flex items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-zinc-800">
-										<Settings className="h-4 w-4" />{" "}
-										Settings
-									</button>
-								</SettingsPopover>
-								<div className="ml-auto">
-									<ThemeToggle
-										theme={theme}
-										setTheme={setTheme}
-									/>
-								</div>
-							</div>
-							<div className="mt-2 flex items-center gap-2 rounded-xl bg-zinc-50 p-2 dark:bg-zinc-800/60">
-								<div className="grid h-8 w-8 place-items-center rounded-full bg-zinc-900 text-xs font-bold text-white dark:bg-white dark:text-zinc-900">
-									AM
-								</div>
-								<div className="min-w-0">
-									<div className="truncate text-sm font-medium">
-										Abhinav Mishra
-									</div>
-									<div className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-										Pro workspace
-									</div>
-								</div>
+							<div className="rounded-xl border border-zinc-200/70 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-950/60">
+								<p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+									Finance prompts
+								</p>
+								<p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+									Ask about vendors, payment dates, anomalies,
+									or month-end close trends.
+								</p>
 							</div>
 						</div>
 					</motion.aside>

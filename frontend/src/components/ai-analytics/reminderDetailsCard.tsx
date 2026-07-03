@@ -49,9 +49,9 @@ export default function ReminderDetailsCard() {
 
 	if (loading) {
 		return (
-			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+			<Card className="h-full border-border/70 bg-card/80 shadow-lg shadow-black/10">
 				<CardContent className="flex items-center justify-center h-[300px]">
-					<p className="text-gray-500">Loading reminders...</p>
+					<p className="text-muted-foreground">Loading reminders...</p>
 				</CardContent>
 			</Card>
 		);
@@ -64,20 +64,20 @@ export default function ReminderDetailsCard() {
 			animate="visible"
 			className="h-full"
 		>
-			<Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 h-full flex flex-col">
+			<Card className="flex h-full flex-col border-border/70 bg-card/80 shadow-lg shadow-black/10 transition-all duration-300 hover:shadow-xl hover:shadow-black/10">
 				<CardHeader className="pb-3">
-					<CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-						<Bell className="w-5 h-5 text-blue-600" />
+					<CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+						<Bell className="h-5 w-5 text-primary" />
 						Reminders & Forecasts
 					</CardTitle>
 				</CardHeader>
 				<CardContent className="flex-1 overflow-hidden">
 					{error ? (
-						<div className="text-center py-8 text-gray-500">
+						<div className="py-8 text-center text-muted-foreground">
 							{error}
 						</div>
 					) : reminders.length === 0 ? (
-						<div className="text-center py-8 text-gray-500">
+						<div className="py-8 text-center text-muted-foreground">
 							No reminders or forecasts available
 						</div>
 					) : (
@@ -93,13 +93,13 @@ export default function ReminderDetailsCard() {
 									}}
 									className={`p-3 rounded-lg border-l-4 transition-all duration-200 hover:shadow-md cursor-pointer ${
 										reminder.type === "upcoming"
-											? "bg-orange-50 border-orange-500 hover:bg-orange-100"
-											: "bg-blue-50 border-blue-500 hover:bg-blue-100"
+											? "bg-amber-500/10 border-amber-400 hover:bg-amber-500/15"
+											: "bg-primary/10 border-primary hover:bg-primary/15"
 									}`}
 								>
 									<div className="flex items-start justify-between mb-2">
 										<div className="flex-1">
-											<h4 className="font-semibold text-gray-900 text-sm">
+											<h4 className="text-sm font-semibold text-foreground">
 												{reminder.vendor}
 											</h4>
 											<div className="flex items-center gap-2 mt-1">
@@ -108,8 +108,8 @@ export default function ReminderDetailsCard() {
 													className={`text-xs ${
 														reminder.type ===
 														"upcoming"
-															? "bg-orange-100 text-orange-700 border-orange-300"
-															: "bg-blue-100 text-blue-700 border-blue-300"
+															? "border-amber-400/30 bg-amber-500/15 text-amber-300"
+															: "border-primary/30 bg-primary/15 text-primary"
 													}`}
 												>
 													{reminder.type ===
@@ -123,13 +123,13 @@ export default function ReminderDetailsCard() {
 														? "Upcoming"
 														: "Forecast"}
 												</Badge>
-												<span className="text-xs text-gray-600">
+												<span className="text-xs text-muted-foreground">
 													{reminder.category}
 												</span>
 											</div>
 										</div>
 										<div className="text-right">
-											<p className="font-bold text-gray-900">
+											<p className="font-bold text-foreground">
 												₹
 												{reminder.amount?.toLocaleString(
 													"en-IN",
@@ -139,12 +139,12 @@ export default function ReminderDetailsCard() {
 													}
 												) || "0.00"}
 											</p>
-											<p className="text-xs text-gray-600">
+											<p className="text-xs text-muted-foreground">
 												{reminder.date}
 											</p>
 										</div>
 									</div>
-									<p className="text-xs text-gray-600 mt-2 italic">
+									<p className="mt-2 text-xs italic text-muted-foreground">
 										{reminder.description ||
 											reminder.reason}
 									</p>
@@ -160,15 +160,15 @@ export default function ReminderDetailsCard() {
 					width: 6px;
 				}
 				.custom-scrollbar::-webkit-scrollbar-track {
-					background: #f3f4f6;
+					background: rgba(51, 65, 85, 0.4);
 					border-radius: 10px;
 				}
 				.custom-scrollbar::-webkit-scrollbar-thumb {
-					background: #d1d5db;
+					background: rgba(148, 163, 184, 0.55);
 					border-radius: 10px;
 				}
 				.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-					background: #9ca3af;
+					background: rgba(148, 163, 184, 0.8);
 				}
 			`}</style>
 		</motion.div>

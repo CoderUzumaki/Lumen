@@ -133,6 +133,7 @@ export function AITeamSection() {
 	const chatContainerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
+		const node = sectionRef.current;
 		const observer = new IntersectionObserver(
 			([entry]) => {
 				if (entry.isIntersecting) {
@@ -146,13 +147,13 @@ export function AITeamSection() {
 			}
 		);
 
-		if (sectionRef.current) {
-			observer.observe(sectionRef.current);
+		if (node) {
+			observer.observe(node);
 		}
 
 		return () => {
-			if (sectionRef.current) {
-				observer.unobserve(sectionRef.current);
+			if (node) {
+				observer.unobserve(node);
 			}
 		};
 	}, []);
@@ -229,7 +230,7 @@ export function AITeamSection() {
 							}`}
 						>
 							<MessageCircle className="w-4 h-4" />
-							AI Invoice Assistant Demo
+							Finance Copilot Demo
 						</div>
 
 						<h2
@@ -239,9 +240,9 @@ export function AITeamSection() {
 									: "opacity-0 translate-y-8"
 							}`}
 						>
-							See AI Handle{" "}
+							See Lumen Handle{" "}
 							<span className="bg-gradient-to-r from-slate-600 to-slate-400 bg-clip-text text-transparent">
-								Real Invoice Queries
+								Real Finance Questions
 							</span>
 						</h2>
 
@@ -252,9 +253,9 @@ export function AITeamSection() {
 									: "opacity-0 translate-y-8"
 							}`}
 						>
-							Watch how our AI answers invoice questions, analyzes
-							spending patterns, and provides 24/7 financial
-							insights.
+							Watch how the copilot explains spend, follows up on
+							vendors, and helps finance teams move faster without
+							losing audit context.
 						</p>
 					</div>
 
@@ -269,26 +270,25 @@ export function AITeamSection() {
 								}`}
 							>
 								<h3 className="text-2xl lg:text-3xl font-bold text-slate-900 mb-4 lg:mb-6">
-									This is how your team interacts with data
+									Finance answers without dashboard hunting
 								</h3>
 
 								<div className="space-y-3 lg:space-y-4 text-base lg:text-lg text-slate-700 leading-relaxed">
 									<p>
-										Your AI assistant analyzes invoices,
-										tracks spending patterns, and provides
-										instant insights 24/7.
+										Lumen turns stored transactions into a
+										working conversation layer for your
+										finance team.
 									</p>
 
 									<p>
-										Every conversation you're watching could
-										be happening at midnight, on weekends,
-										or when your finance team is focused on
-										critical tasks.
+										Use it to chase down vendor totals,
+										summarize unusual spikes, or prepare for
+										close without pulling raw exports first.
 									</p>
 
 									<p className="text-lg lg:text-xl font-semibold text-slate-900">
-										Manual invoice processing is costing you
-										time and money.
+										When questions are answered faster,
+										approvals and reporting move faster too.
 									</p>
 								</div>
 							</div>
@@ -302,14 +302,14 @@ export function AITeamSection() {
 							>
 								<div className="p-4 lg:p-6 bg-slate-50 rounded-xl border-l-4 border-slate-900">
 									<p className="text-slate-800 font-medium text-sm lg:text-base">
-										"We went from spending 8+ hours weekly
-										on invoice data entry to instant
-										automated extraction. Our finance team
-										can now focus on strategic analysis
-										instead of manual processing."
+										"Our AP team now gets the answer before
+										the follow-up email is drafted. Vendor
+										explanations, anomaly checks, and
+										spending summaries are all one prompt
+										away."
 									</p>
 									<p className="text-xs lg:text-sm text-slate-600 mt-2">
-										— Sarah Chen, Finance Director
+										— Priya Nair, Head of Finance Operations
 									</p>
 								</div>
 							</div>
