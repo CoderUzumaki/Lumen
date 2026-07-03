@@ -668,7 +668,7 @@ Continuous background pipeline. Five sources, one normalized schema, deduped int
 - **Acceptance:** Live call test (marked `@pytest.mark.integration`) returns ≥ 10 items.
 - **Depends on:** ING-01.
 
-### ING-05 — EDGAR adapter
+### ING-05 — EDGAR adapter ✅
 
 - **Files:** `backend/app/pipelines/sources/edgar.py`.
 - **Action:** SEC EDGAR filings via `https://data.sec.gov/submissions/CIK<10-digit>.json` — for each ticker in the union of all users' portfolios, look up recent 8-K, 10-K, 10-Q filings. Requires `User-Agent: Lumen <contact-email>` header (env var `EDGAR_USER_AGENT`). Because EDGAR is US-only and needs CIK lookup, add a `ticker_to_cik.json` map bundled with the app for the top 3000 US tickers.

@@ -16,6 +16,9 @@ dependencies = { file = ["requirements.txt"] }
 where = ["."]
 include = ["app*"]
 
+[tool.setuptools.package-data]
+"app.pipelines.sources.data" = ["*.json"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

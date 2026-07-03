@@ -2,8 +2,8 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-03 (session 16 — ING-04 GDELT adapter)
-**Progress:** 18/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01, DATA-02, DATA-03, DATA-05, ING-01, ING-02, ING-03, ING-04).
+**Last updated:** 2026-07-03 (session 17 — ING-05 EDGAR adapter)
+**Progress:** 19/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01, DATA-02, DATA-03, DATA-05, ING-01..ING-05).
 
 DATA-04 postponed (needs ING-07).
 
@@ -11,59 +11,62 @@ DATA-04 postponed (needs ING-07).
 
 ## Next module
 
-**ID:** `ING-05`
-**Title:** EDGAR adapter
+**ID:** `ING-06`
+**Title:** RSS adapter
 **Depends on:** ING-01
-**Read:** `BUILD.md` → the `ING-05` block. Notable: needs a bundled `ticker_to_cik.json` map for the top 3000 US tickers (or fetched once at startup — call is a decision). Uses `EDGAR_USER_AGENT` env var per SEC fair-use policy.
+**Read:** `BUILD.md` → the `ING-06` block. Uses `feedparser` (already in requirements.txt). `RSS_FEEDS` env var is a comma-separated list; the adapter deduplicates by URL hash before yielding.
 
-**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/05 + ING-01/02/03/04 stacked on `856d503`. Four adapters live: `NewsAPISource`, `MarketauxSource`, `GDELTSource`. Two markers registered — `free_tier_live` (LLM live probe) and `integration` (source live probes). Both opt-in via `pytest -m …`.
+**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/05 + ING-01..ING-05 stacked on `856d503`. Five adapters live: `BaseSource` (abstract), `NewsAPISource`, `MarketauxSource`, `GDELTSource`, `EDGARSource`.
 
 Before starting, verify:
 - `git branch --show-current` shows `v2/intelligence-agent`.
-- `git log --oneline -18` shows ING-04..HP-01 on top of `856d503` / `f7e479a`.
+- `git log --oneline -19` shows ING-05..HP-01 on top of `856d503` / `f7e479a`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **92 passed, 2 deselected**.
+- `cd backend && python -m pytest tests -q` reports **97 passed, 3 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute ING-04 — GDELT adapter (no API key, ~1 req/sec soft rate limit, ArtList JSON format).
+- **Session goal:** Execute ING-05 — SEC EDGAR adapter. For each requested ticker: resolve CIK → fetch `submissions/CIK<10-digit>.json` → emit one `NewsItemIn` per 8-K / 10-K / 10-Q with parsed body from the primary document.
 - **Completed:**
-  - `ING-04` ✅ — GDELT adapter.
-  - `backend/app/pipelines/sources/gdelt.py` — `GDELTSource(BaseSource)`. Endpoint `https://api.gdeltproject.org/api/v2/doc/doc`; query params `mode=ArtList`, `format=JSON`, `sort=DateDesc`, `maxrecords=250`, and `startdatetime` in GDELT's `YYYYMMDDHHMMSS` shape. Class-level `asyncio.Semaphore(1)` + inter-request `_MIN_INTERVAL_S` (1.0s) enforce the ~1 req/sec ceiling across all instances of the adapter — the shared state pattern GDELT's per-IP throttle needs. `seendate` is parsed from `%Y%m%dT%H%M%SZ` (no separators). `source_id` is null (GDELT has no stable id). `hints["domain"]` is set when the article has a domain. Server-side `startdatetime` filter is backed up by a client-side re-check so items older than `since` are dropped even if the server returned them. Same never-raise contract: retries 429 / 5xx via tenacity; exhausted returns []; non-retryable 4xx returns []; malformed article skipped.
-  - `backend/pyproject.toml` — registered the `integration` pytest marker and extended `addopts` to `"not free_tier_live and not integration"` so both live-provider suites stay opt-in by default.
-  - `backend/tests/pipelines/sources/test_gdelt.py` — 6 hermetic + 1 opt-in live probe (`@pytest.mark.integration`). Hermetic tests cover: article mapping + query params + startdatetime encoding; since-filter drops older items; 429 retried then succeeds; exhausted retries returns []; malformed seendate skipped not fatal; the class semaphore actually serializes concurrent calls (measured peak concurrency == 1 across two parallel fetches).
+  - `ING-05` ✅ — EDGAR adapter.
+  - `backend/app/pipelines/sources/data/__init__.py` (empty package marker).
+  - `backend/app/pipelines/sources/data/ticker_to_cik.json` — 74 well-known US tickers → CIKs. Curated for MVP: FAANG + top financials + healthcare + industrials + a few high-growth SaaS/fintechs (DDOG, SNOW, PLTR, etc.). BUILD.md's stated target of "top 3000 US tickers" is a follow-up expansion; the file layout and lookup pattern are what matters at this module boundary.
+  - `backend/pyproject.toml` — added `[tool.setuptools.package-data]` entry so the JSON ships with the built package.
+  - `backend/app/pipelines/sources/edgar.py` — `EDGARSource(BaseSource)`. Loads `ticker_to_cik.json` at class-load time. Per-ticker flow: resolve CIK → GET `https://data.sec.gov/submissions/CIK<10-digit>.json` → filter `filings.recent` arrays by form (`8-K`/`10-K`/`10-Q`) and filingDate ≥ since → for each, GET the primary document at `Archives/edgar/data/<cik_int>/<accession_no_dashes>/<primary_doc>`, parse with `selectolax`, keep first 4000 chars of extracted text. Title = `"<ticker> filed <form> on <date>"`. source_id = accession. hints = `{"tickers": [ticker], "form": form, "cik": cik}`. Requires `User-Agent: Config.EDGAR_USER_AGENT` per SEC fair-use — attached at httpx client construction. Same never-raise contract: unknown ticker skipped (no HTTP hit), submissions 5xx retried then ticker skipped, body fetch failure leaves body=None but the item is still emitted, non-retryable 4xx returns empty for that ticker.
+  - `backend/tests/pipelines/sources/test_edgar.py` — 5 hermetic + 1 opt-in live probe. Hermetic: full AAPL flow with 3 filings (10-K + 8-K + 10-Q; S-4 filtered out) and parsed bodies; unknown ticker skipped without HTTP; since-filter drops older filings (Jan-1-2026 keeps only the 10-K); body fetch 500 leaves body=None but item still emits; submissions 500 exhausts retries and skips the ticker without raising.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **92 passed, 2 deselected**.
+  - `python -m pytest tests -q` → **97 passed, 3 deselected** (the 3 deselected are the two live probes across GDELT + EDGAR + the LLM live probe).
   - `ruff check .` clean.
-- **Files touched:** created `backend/app/pipelines/sources/gdelt.py`, `backend/tests/pipelines/sources/test_gdelt.py`. Modified `backend/pyproject.toml` (marker + addopts), `BUILD.md` (tick), `HANDOFF.md` (this file).
+  - selectolax installed locally to support the body parser.
+- **Files touched:** created `backend/app/pipelines/sources/edgar.py`, `backend/app/pipelines/sources/data/__init__.py`, `backend/app/pipelines/sources/data/ticker_to_cik.json`, `backend/tests/pipelines/sources/test_edgar.py`. Modified `backend/pyproject.toml` (package-data), `BUILD.md` (tick), `HANDOFF.md` (this file).
 - **Migrations added:** none.
-- **Tests added:** 7 (6 hermetic + 1 live).
+- **Tests added:** 6 (5 hermetic + 1 live).
 - **In-flight work:** none.
-- **Deviations from BUILD.md:** none. GDELT's odd `YYYYMMDDTHHMMSSZ` `seendate` format required a manual `strptime`; that's an implementation detail, not a spec change. `hints["domain"]` is a small extra beyond BUILD.md's ING-04 text — using the `hints` extensibility slot from ING-03 to carry GDELT's `domain` field so downstream authority scoring (later module) has the publisher name without re-parsing raw_payload.
+- **Deviations from BUILD.md:**
+  - **`ticker_to_cik.json` contains 74 tickers, not the "top 3000".** MVP-sufficient: the demo portfolio (AAPL, MSFT, NVDA, GOOGL, VOO, BND) is covered; broader coverage lands as a follow-up "seed CIK map" module or a one-off script that pulls SEC's `company_tickers.json` and re-writes the file. The lookup + adapter code is production-shaped — only the data file scope is narrower.
+  - **hints populated with `{"tickers": [ticker], "form": form, "cik": cik}`.** Beyond BUILD.md's ING-05 text; using the `hints` extensibility slot established in ING-03. Downstream authority scoring + cluster tagging can use these hints without re-parsing raw_payload.
 
 ---
 
 ## Environment state
 
-- Backend: four adapters (Base + NewsAPI + Marketaux + GDELT). Two pytest markers gate live-provider tests. `NewsAPISource`, `MarketauxSource`, `GDELTSource` all follow the same never-raise contract.
+- Backend: five source adapters live. `EDGARSource` needs an input list of tickers (from ING-10's orchestrator, which will query the union of user portfolios).
 - Frontend: unchanged.
 - Database: unchanged.
 - Vectors: unchanged (none).
-- Tests: **92 hermetic, 2 opt-in.**
-- CI: green on ING-03 push.
+- Tests: **97 hermetic, 3 opt-in.**
+- CI: green on ING-03. ING-04 will trigger a rerun; ING-05 will too — verified locally.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **ING-05 introduces a data file — `ticker_to_cik.json` mapping the top 3000 US tickers to their SEC CIK numbers.** Two clean paths:
-  1. Bundle a static JSON at implementation time (needs a one-time download from SEC's [company_tickers.json](https://www.sec.gov/files/company_tickers.json) API, hand-verified).
-  2. Fetch it lazily at adapter startup and cache in memory.
-  Recommend (1) for MVP determinism — the CIK set changes rarely. The file lives in `backend/app/pipelines/sources/data/ticker_to_cik.json` (or similar) and is committed. The next session's implementer should choose.
+- **`selectolax==0.3.24`** is already pinned in `requirements.txt` (from BOOT-02) — CI will install it fresh.
+- **`ticker_to_cik.json`** should get a follow-up expansion. Suggest a new module `ING-05a` or "seed data" module to pull `https://www.sec.gov/files/company_tickers.json` and rewrite the bundled file.
 
 ---
 
