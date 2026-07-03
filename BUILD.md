@@ -551,7 +551,7 @@ Everything a user configures about themselves. Nothing agentic yet.
 
 Continuous background pipeline. Five sources, one normalized schema, deduped into clusters, embedded, stored.
 
-### ING-01 — News schemas + `news_items` and `news_clusters` migration
+### ING-01 — News schemas + `news_items` and `news_clusters` migration ✅
 
 - **Files:** `backend/app/db/models/news.py`, `backend/app/schemas/news.py`, new Alembic migration.
 - **Action:**
