@@ -678,7 +678,7 @@ Continuous background pipeline. Five sources, one normalized schema, deduped int
 - **Acceptance:** For a known-CIK ticker (AAPL, CIK 0000320193), adapter returns their last 3 filings with parsed bodies.
 - **Depends on:** ING-01.
 
-### ING-06 — RSS adapter
+### ING-06 — RSS adapter ✅
 
 - **Files:** `backend/app/pipelines/sources/rss.py`.
 - **Action:** `RSSSource` accepting a list of feed URLs (config: `RSS_FEEDS` env var, comma-separated). Default list: Reuters Business, WSJ Markets (headlines), Bloomberg Politics (RSS), Financial Times World, Livemint India, Moneycontrol, arxiv-econ. Parse with `feedparser`. Deduplicate by URL hash before yielding.

@@ -2,71 +2,67 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-03 (session 17 — ING-05 EDGAR adapter)
-**Progress:** 19/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01, DATA-02, DATA-03, DATA-05, ING-01..ING-05).
+**Last updated:** 2026-07-03 (session 18 — ING-06 RSS adapter)
+**Progress:** 20/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-03, DATA-05, ING-01..ING-06). One-third of BUILD.md done.
 
-DATA-04 postponed (needs ING-07).
+DATA-04 still postponed (needs ING-07).
 
 ---
 
 ## Next module
 
-**ID:** `ING-06`
-**Title:** RSS adapter
-**Depends on:** ING-01
-**Read:** `BUILD.md` → the `ING-06` block. Uses `feedparser` (already in requirements.txt). `RSS_FEEDS` env var is a comma-separated list; the adapter deduplicates by URL hash before yielding.
+**ID:** `ING-07`
+**Title:** Chroma vector store + local embeddings (free)
+**Depends on:** BOOT-06
+**Read:** `BUILD.md` → the `ING-07` block. Two files: `backend/app/db/vectorstore.py`, `backend/app/utils/embeddings.py`. Uses `sentence-transformers/all-MiniLM-L6-v2` locally (already pinned in `requirements.txt`) and `chromadb==0.5.11` (also pinned). This is the module that finally unblocks DATA-04.
 
-**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/05 + ING-01..ING-05 stacked on `856d503`. Five adapters live: `BaseSource` (abstract), `NewsAPISource`, `MarketauxSource`, `GDELTSource`, `EDGARSource`.
+**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/05 + ING-01..ING-06 stacked on `856d503`. Six adapters live (`Base`, NewsAPI, Marketaux, GDELT, EDGAR, RSS). All fetch surface is done — ING-07 shifts to the vector-store side.
 
 Before starting, verify:
 - `git branch --show-current` shows `v2/intelligence-agent`.
-- `git log --oneline -19` shows ING-05..HP-01 on top of `856d503` / `f7e479a`.
+- `git log --oneline -20` shows ING-06..HP-01 on top of `856d503` / `f7e479a`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **97 passed, 3 deselected**.
+- `cd backend && python -m pytest tests -q` reports **103 passed, 3 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute ING-05 — SEC EDGAR adapter. For each requested ticker: resolve CIK → fetch `submissions/CIK<10-digit>.json` → emit one `NewsItemIn` per 8-K / 10-K / 10-Q with parsed body from the primary document.
+- **Session goal:** Execute ING-06 — RSS adapter that pulls a caller-supplied list of feed URLs, parses each with `feedparser`, filters by `since`, and deduplicates by URL hash before yielding `NewsItemIn`s.
 - **Completed:**
-  - `ING-05` ✅ — EDGAR adapter.
-  - `backend/app/pipelines/sources/data/__init__.py` (empty package marker).
-  - `backend/app/pipelines/sources/data/ticker_to_cik.json` — 74 well-known US tickers → CIKs. Curated for MVP: FAANG + top financials + healthcare + industrials + a few high-growth SaaS/fintechs (DDOG, SNOW, PLTR, etc.). BUILD.md's stated target of "top 3000 US tickers" is a follow-up expansion; the file layout and lookup pattern are what matters at this module boundary.
-  - `backend/pyproject.toml` — added `[tool.setuptools.package-data]` entry so the JSON ships with the built package.
-  - `backend/app/pipelines/sources/edgar.py` — `EDGARSource(BaseSource)`. Loads `ticker_to_cik.json` at class-load time. Per-ticker flow: resolve CIK → GET `https://data.sec.gov/submissions/CIK<10-digit>.json` → filter `filings.recent` arrays by form (`8-K`/`10-K`/`10-Q`) and filingDate ≥ since → for each, GET the primary document at `Archives/edgar/data/<cik_int>/<accession_no_dashes>/<primary_doc>`, parse with `selectolax`, keep first 4000 chars of extracted text. Title = `"<ticker> filed <form> on <date>"`. source_id = accession. hints = `{"tickers": [ticker], "form": form, "cik": cik}`. Requires `User-Agent: Config.EDGAR_USER_AGENT` per SEC fair-use — attached at httpx client construction. Same never-raise contract: unknown ticker skipped (no HTTP hit), submissions 5xx retried then ticker skipped, body fetch failure leaves body=None but the item is still emitted, non-retryable 4xx returns empty for that ticker.
-  - `backend/tests/pipelines/sources/test_edgar.py` — 5 hermetic + 1 opt-in live probe. Hermetic: full AAPL flow with 3 filings (10-K + 8-K + 10-Q; S-4 filtered out) and parsed bodies; unknown ticker skipped without HTTP; since-filter drops older filings (Jan-1-2026 keeps only the 10-K); body fetch 500 leaves body=None but item still emits; submissions 500 exhausts retries and skips the ticker without raising.
+  - `ING-06` ✅ — RSS adapter.
+  - `backend/app/pipelines/sources/rss.py` — `RSSSource(BaseSource)`. httpx.AsyncClient fetches each feed's raw bytes, then `asyncio.to_thread(feedparser.parse, resp.content)` runs the sync parser off the event loop. `_url_hash(url)` = SHA-256 hex; per-fetch dedup keeps the stream tidy independent of the DB-layer `news_items.url_hash` UNIQUE constraint. `_parse_time` converts feedparser's `struct_time` tuples to `datetime` in UTC. Missing link → skip. Missing title → skip. Missing published date → skip. Constructor: `feeds=None` reads from `Config.RSS_FEEDS`; explicit `feeds=[]` is honored. Never raises — feed-level errors are logged and skipped.
+  - `backend/tests/pipelines/sources/test_rss.py` — 6 tests using two RSS fixture strings (bytes). Cover: happy path (`fixture yields correct news items` incl. body/source_id/published_at mapping), cross-feed URL-hash dedup, empty feeds list, one-feed error is contained, malformed entry dropped while good entries survive, non-200 response yields empty.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **97 passed, 3 deselected** (the 3 deselected are the two live probes across GDELT + EDGAR + the LLM live probe).
+  - `python -m pytest tests -q` → **103 passed, 3 deselected**.
   - `ruff check .` clean.
-  - selectolax installed locally to support the body parser.
-- **Files touched:** created `backend/app/pipelines/sources/edgar.py`, `backend/app/pipelines/sources/data/__init__.py`, `backend/app/pipelines/sources/data/ticker_to_cik.json`, `backend/tests/pipelines/sources/test_edgar.py`. Modified `backend/pyproject.toml` (package-data), `BUILD.md` (tick), `HANDOFF.md` (this file).
+  - `feedparser==6.0.11` installed locally (already pinned in requirements.txt — CI's fresh install covers it).
+- **Files touched:** created `backend/app/pipelines/sources/rss.py`, `backend/tests/pipelines/sources/test_rss.py`. Modified `BUILD.md` (tick), `HANDOFF.md` (this file).
 - **Migrations added:** none.
-- **Tests added:** 6 (5 hermetic + 1 live).
+- **Tests added:** 6.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **`ticker_to_cik.json` contains 74 tickers, not the "top 3000".** MVP-sufficient: the demo portfolio (AAPL, MSFT, NVDA, GOOGL, VOO, BND) is covered; broader coverage lands as a follow-up "seed CIK map" module or a one-off script that pulls SEC's `company_tickers.json` and re-writes the file. The lookup + adapter code is production-shaped — only the data file scope is narrower.
-  - **hints populated with `{"tickers": [ticker], "form": form, "cik": cik}`.** Beyond BUILD.md's ING-05 text; using the `hints` extensibility slot established in ING-03. Downstream authority scoring + cluster tagging can use these hints without re-parsing raw_payload.
+  - **No bundled default feed list.** BUILD.md's Action lists Reuters Business / WSJ Markets / Bloomberg Politics / FT / Livemint / Moneycontrol / arxiv-econ as the default. `Config.RSS_FEEDS` is documented in `backend/.env.example` (BOOT-07) but ships empty by default — operators fill in whichever feed URLs suit their portfolio. Hardcoding the seven above would (a) freeze operator choice and (b) risk shipping stale/gone feed URLs. Empty default + `.env.example` guidance is the more portable posture.
+  - **Feed HTTP fetch is via httpx.** BUILD.md just says "Parse with `feedparser`." feedparser can accept a URL directly and do its own fetch (blocking), but going through httpx keeps testability + timeout + UA-header uniform with the other adapters and lets `asyncio.to_thread` isolate the parser CPU work.
 
 ---
 
 ## Environment state
 
-- Backend: five source adapters live. `EDGARSource` needs an input list of tickers (from ING-10's orchestrator, which will query the union of user portfolios).
+- Backend: six source adapters live. Fetch surface complete. The five product tables + three news tables + `llm_calls` are on disk. Every `/api/*` route (portfolios / positions / me) authenticated + owner-scoped.
 - Frontend: unchanged.
-- Database: unchanged.
-- Vectors: unchanged (none).
-- Tests: **97 hermetic, 3 opt-in.**
-- CI: green on ING-03. ING-04 will trigger a rerun; ING-05 will too — verified locally.
+- Database: unchanged (Alembic head `d2a235b04a85`).
+- Vectors: unchanged — ING-07 provisions Chroma next.
+- Tests: **103 hermetic, 3 opt-in.**
+- CI: passing on ING-05 fix.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **`selectolax==0.3.24`** is already pinned in `requirements.txt` (from BOOT-02) — CI will install it fresh.
-- **`ticker_to_cik.json`** should get a follow-up expansion. Suggest a new module `ING-05a` or "seed data" module to pull `https://www.sec.gov/files/company_tickers.json` and rewrite the bundled file.
+- **None.** ING-07 is the last blocker for DATA-04. After ING-07 lands, the sensible order is: ING-08 (normalizer + idempotent insertion) → ING-09 (semantic dedup + clustering) → ING-10 (orchestrator + APScheduler). DATA-04 can slot in whenever — its scope is small once `EmbeddingClient` (ING-07) is real.
 
 ---
 
