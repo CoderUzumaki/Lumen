@@ -800,7 +800,7 @@ Given a news cluster + a user's portfolio + themes, decide relevance. First Lang
   - Given a niche pharma news cluster + a tech-only portfolio, prefilter drops it.
 - **Depends on:** REL-01, ING-07, DATA-01.
 
-### REL-03 — LLM classifier stage
+### REL-03 — LLM classifier stage ✅
 
 - **Files:** `backend/app/agents/relevance/classifier.py`.
 - **Action:**

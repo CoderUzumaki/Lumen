@@ -2,86 +2,79 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-03 (session 25 — REL-02 prefilter)
-**Progress:** 27/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01, REL-02).
-
-DATA-06 (frontend UI) still pending.
+**Last updated:** 2026-07-03 (session 26 — REL-03 classifier)
+**Progress:** 28/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-03). DATA-06 (frontend UI) still pending.
 
 ---
 
 ## Next module
 
-**ID:** `REL-03`
-**Title:** LLM classifier stage
-**Depends on:** REL-02, BOOT-06
-**Read:** `BUILD.md` → the `REL-03` block.
+**ID:** `REL-04`
+**Title:** Relevance graph (LangGraph)
+**Depends on:** REL-02, REL-03
+**Read:** `BUILD.md` → the `REL-04` block. Composes `run_prefilter()` + `run_classifier()` into a LangGraph node graph with an idempotency check.
 
-**Branch state:** REL-01 schema + REL-02 prefilter live. `run_prefilter()` either short-circuits (persisting a `stage='prefilter'` row) or returns a candidate shortlist for the LLM classifier — REL-03 consumes that shortlist.
+**Branch state:** REL-01 schema + REL-02 prefilter + REL-03 classifier all live. `run_prefilter()` short-circuits or hands a shortlist to `run_classifier()`, which structures the LLM output into a `RelevanceVerdict` and writes a `stage='classifier'` row.
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -27` shows REL-02..HP-01 on top of `856d503` / `f7e479a`.
+- `git log --oneline -28` shows REL-03..HP-01 on top of `856d503` / `f7e479a`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **155 passed, 4 deselected**.
+- `cd backend && python -m pytest tests -q` reports **159 passed, 5 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute REL-02 — the fast embedding-based prefilter. Compute cluster centroid, cosine-similarity against position/theme embeddings, either short-circuit with a persisted `stage='prefilter'` row or return the candidate shortlist for the LLM classifier.
+- **Session goal:** Execute REL-03 — the LLM classifier stage. Given a cluster + prefilter shortlist, prompt the fast-tier LLM for structured `RelevanceVerdict`, guardrail hallucinated IDs, persist a `stage='classifier'` row.
 - **Completed:**
-  - `REL-02` ✅ — prefilter.
-  - `backend/app/agents/__init__.py`, `backend/app/agents/relevance/__init__.py` (empty package markers).
-  - `backend/app/agents/relevance/prefilter.py`:
-    - `PrefilterResult` dataclass: `passed`, `max_similarity`, `candidate_position_ids`, `candidate_theme_ids`, `persisted_row`.
-    - `_cosine()` — pure-Python cosine; zero-vector → 0.0.
-    - `_mean_vector()` — pure-Python centroid.
-    - `run_prefilter(cluster_id, portfolio_id, session, news_store, themes_store, embed, threshold=None)`:
-      1. Loads portfolio + positions + themes via SQLAlchemy.
-      2. Fetches cluster item ids from `news_items`, then their embeddings from Chroma via `news_store.get(ids=[...])`, averages into a centroid.
-      3. If no embeddings, returns `passed=True, max_similarity=0.0` — defers to classifier rather than emit a low-signal prefilter row.
-      4. Embeds positions via `f"{ticker} {asset_type} {exchange}"` (per BUILD.md's per-position embedding spec) using the injected `EmbeddingClient`.
-      5. Fetches theme vectors from the `themes` Chroma collection using the theme's UUID as doc id (matches DATA-04's convention).
-      6. Cosine similarities to the centroid; picks `max` across positions ∪ themes.
-      7. If `max_sim < PREFILTER_THRESHOLD` (default 0.35): inserts `RelevanceScore(stage='prefilter', score=clamp(max_sim), touched_*=[])`, commits, returns `passed=False`.
-      8. Else: returns `passed=True` with the ids of positions/themes whose similarity ≥ threshold.
-    - `_cluster_centroid()` helper — handles Chroma's numpy-array `embeddings` field via explicit `is None` / `len()` checks so numpy's ambiguous-truth-value doesn't trip us.
-  - `backend/tests/agents/__init__.py`, `backend/tests/agents/test_relevance_prefilter.py` — 5 tests:
-    - `test_fed_cluster_and_aapl_portfolio_passes_with_aapl_candidate` — the primary BUILD.md acceptance case. Uses a deterministic `_FakeEmbed` that models "Fed and equities are close in embedding space".
-    - `test_pharma_cluster_and_tech_portfolio_drops` — the second acceptance case. Verifies `stage='prefilter'` row lands with empty touched arrays and score < threshold.
-    - `test_theme_stored_vector_used` — portfolio has only a theme; stored vector aligned with the cluster → theme surfaces as candidate.
-    - `test_cluster_with_no_embeddings_defers_to_classifier` — edge case; returns `passed=True, max_sim=0.0` and does NOT persist a prefilter row.
-    - `test_threshold_boundary_at_zero` — everything passes when `threshold=0`.
+  - `REL-03` ✅ — LLM classifier.
+  - `backend/app/agents/relevance/classifier.py`:
+    - `RelevanceVerdict(BaseModel)` — `score: float [0,1]`, `touched_positions: list[UUID]`, `touched_themes: list[UUID]`, `rationale: str` (≤500 chars).
+    - `_SYSTEM_PROMPT` — mechanism-language guardrail baked in: "Use mechanism language — never recommend buy, sell, or hold."
+    - `_build_user_prompt(cluster, body, positions, themes)` — formats the event title + body[:1500] + bulleted candidates with UUIDs.
+    - `run_classifier(cluster_id, portfolio_id, candidate_position_ids, candidate_theme_ids, session, llm, agent_name)`:
+      1. Loads the cluster, portfolio (for user_id), most-recent NewsItem body (best-effort), and the shortlisted positions/themes.
+      2. Calls `llm.complete(messages, tier="fast", response_model=RelevanceVerdict, ...)`.
+      3. Guardrails hallucinated IDs by intersecting `verdict.touched_positions/touched_themes` with the caller-supplied shortlist.
+      4. Persists `RelevanceScore(stage='classifier', score=clamp(0..1), touched_position_ids=[str(...)], touched_theme_ids=[str(...)], rationale=verdict.rationale)`.
+  - **Model tweak:** `RelevanceScore.touched_position_ids` / `touched_theme_ids` moved from `Mapped[list[UUID]]` to `Mapped[list[str]]`. Sqlite's JSON variant can't `json.dumps` a UUID object; the ARRAY variant stays functional on Postgres. Callers stringify at the boundary.
+  - `backend/tests/agents/test_relevance_classifier.py`:
+    - `test_persists_classifier_row_with_touched_ids` — end-to-end with a mocked LLM returning a canned verdict.
+    - `test_hallucinated_ids_are_filtered_out` — LLM outputs a UUID not in the shortlist; guardrail drops it.
+    - `test_score_clamped_and_rationale_persists` — score=1.0 → Decimal("1.00"); rationale round-trips.
+    - `test_prompt_contains_title_body_positions_themes` — the user prompt names the event title, body content, ticker, theme description, and both UUIDs.
+    - `@pytest.mark.free_tier_live test_classifier_hand_labeled_10_cases` — opt-in live probe against real OpenRouter with 10 hand-labeled event/ticker pairs (5 clear hits, 5 clear irrelevant). Passes when ≥8/10 verdicts match the expected `touched` flag. Skipped by default; enable with `pytest -m free_tier_live`.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **155 passed, 4 deselected**.
+  - `python -m pytest tests -q` → **159 passed, 5 deselected**.
   - `ruff check .` clean.
-- **Files touched:** created `backend/app/agents/{__init__,relevance/__init__,relevance/prefilter}.py`, `backend/tests/agents/{__init__,test_relevance_prefilter}.py`. Modified `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Files touched:** created `backend/app/agents/relevance/classifier.py`, `backend/tests/agents/test_relevance_classifier.py`. Modified `backend/app/db/models/relevance.py` (`touched_*` type flip), `BUILD.md` (tick), `HANDOFF.md` (this file). No migration change needed — the DDL types (`ARRAY(UUID)` / `JSON`) still match.
 - **Migrations added:** none.
-- **Tests added:** 5.
+- **Tests added:** 5 (4 hermetic + 1 opt-in live).
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **No-embeddings edge case defers to classifier.** BUILD.md's action list doesn't spell out what to do if a cluster has no Chroma vectors yet. Emitting a low-signal `stage='prefilter'` row with score=0 would let a real signal slip through. Deferring (`passed=True, max_similarity=0.0`) hands it to REL-03 where the LLM at least sees the raw text.
-  - **Candidate inclusion uses `≥ threshold`.** BUILD.md says "sim > threshold" for the shortlist. `≥` is inclusive of the boundary and matches the short-circuit condition (`< threshold` for the negation). Either is defensible; the inclusive form makes the two conditions logically complementary.
-  - **Theme vectors are fetched by `str(theme.id)`.** DATA-04 uses `str(theme.id)` as the Chroma doc id (with `embedding_id` mirroring it). REL-02 uses the same lookup key rather than reading `theme.embedding_id`, since they're identical by construction — one fewer indirection.
+  - **`touched_position_ids` / `touched_theme_ids` wire type is `list[str]`, not `list[UUID]`.** Necessary for portability: sqlite's default JSON serializer trips on `uuid.UUID`. The DDL is unchanged — Postgres still gets `ARRAY(UUID)`, sqlite still gets `JSON`. Callers stringify at the boundary; that keeps ORM behavior symmetric across dialects.
+  - **10-label live acceptance test is opt-in via `@pytest.mark.free_tier_live`.** BUILD.md's Acceptance says "≥ 8/10 correct classifications" — the hand-labeled fixture is embedded in the test but only runs under `pytest -m free_tier_live` with a real `OPENROUTER_API_KEY`. Default runs stay hermetic; production-grade quality gating happens on demand.
+  - **LangSmith trace visibility is inherent to `LLMClient.complete()`** (BOOT-06 wired tracing routing there). No REL-03-specific tracing code.
 
 ---
 
 ## Environment state
 
-- Backend: all previous + `run_prefilter()` available. Ready for REL-03 (LLM classifier) → REL-04 (LangGraph composition) → REL-05 (fan-out worker) → REL-06 (news endpoints) → REL-07 (frontend feed).
+- Backend: prefilter + classifier both wired. LangGraph composition (REL-04) is next.
 - Frontend: unchanged.
-- Database: Alembic head `b8ef3a217c04`.
-- Vectors: three cosine collections; `news_items` and `themes` both actively used by the prefilter.
-- Tests: **155 hermetic, 4 opt-in.**
-- CI: last successful run on REL-01 push.
+- Database: Alembic head `b8ef3a217c04`. Type flip in the model doesn't require a migration.
+- Vectors: unchanged.
+- Tests: **159 hermetic, 5 opt-in.**
+- CI: last successful run on REL-02.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** REL-03 is the LLM-classifier stage — first module with a real LLM prompt in the loop. Depends on `BOOT-06`'s `LLMClient` and Pydantic's `RelevanceVerdict`.
+- **None.** REL-04 composes prefilter → classifier as a LangGraph, adds the idempotency check (return cached row when it exists, unless `force=True`).
 
 ---
 

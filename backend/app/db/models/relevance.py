@@ -70,13 +70,17 @@ class RelevanceScore(IdMixin, Base):
         nullable=False,
     )
     score: Mapped[Decimal] = mapped_column(Numeric(3, 2), nullable=False)
-    touched_position_ids: Mapped[list[UUID]] = mapped_column(
-        ARRAY(PostgresUUID(as_uuid=True)).with_variant(JSON, "sqlite"),
+    # Wire type is `list[str]` so the sqlite JSON variant round-trips cleanly
+    # (json.dumps can't handle UUID). Callers should str(id) before assigning.
+    # On Postgres this still lands in a TEXT[] column; SQLAlchemy coerces the
+    # str values transparently.
+    touched_position_ids: Mapped[list[str]] = mapped_column(
+        ARRAY(PostgresUUID(as_uuid=False)).with_variant(JSON, "sqlite"),
         nullable=False,
         default=list,
     )
-    touched_theme_ids: Mapped[list[UUID]] = mapped_column(
-        ARRAY(PostgresUUID(as_uuid=True)).with_variant(JSON, "sqlite"),
+    touched_theme_ids: Mapped[list[str]] = mapped_column(
+        ARRAY(PostgresUUID(as_uuid=False)).with_variant(JSON, "sqlite"),
         nullable=False,
         default=list,
     )
