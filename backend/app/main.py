@@ -4,14 +4,17 @@ import logging
 import os
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.db.base import get_db_session
+from app.pipelines.orchestrator import _to_health_payload, latest_per_source
 from app.routes import me as me_routes
 from app.routes import portfolios as portfolios_routes
 from app.routes import positions as positions_routes
@@ -52,20 +55,70 @@ _HTTP_CODE_MAP: dict[int, str] = {
 # --- Lifespan ----------------------------------------------------------------
 # BOOT-06 will wire LangSmith / Langfuse tracing here.
 
+_scheduler: Any | None = None
+
+
+def _build_default_orchestrator():
+    """Construct the process-global IngestOrchestrator + start APScheduler.
+
+    Kept behind a try/except at the call site — a broken schedule shouldn't
+    kill the API. Returns the started scheduler (or None if disabled).
+    """
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    from app.db.base import get_session_factory
+    from app.db.vectorstore import VectorStore
+    from app.pipelines.orchestrator import IngestOrchestrator, default_source_factory
+    from app.utils.embeddings import EmbeddingClient
+
+    factory = get_session_factory()
+    orchestrator = IngestOrchestrator(
+        session_factory=factory,
+        embed=EmbeddingClient(),
+        store=VectorStore("news_items"),
+        source_factory=default_source_factory,
+    )
+
+    scheduler = AsyncIOScheduler(timezone="UTC")
+    scheduler.add_job(
+        orchestrator.run,
+        trigger=IntervalTrigger(minutes=Config.INGEST_INTERVAL_MINUTES),
+        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=30),
+        id="lumen-ingest",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.start()
+    log.info("Scheduler started; first ingest in 30s")
+    return scheduler
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    global _scheduler
     configure_logging()
     Config.validate()
     # Best-effort provision of the three canonical Chroma collections (ING-07).
-    # Never fatal at boot — if the vector store can't come up, downstream
-    # ingestion + retrieval will fail loudly at their call sites instead.
     try:
         from app.db.vectorstore import init_collections
         init_collections()
     except Exception:
         log.exception("vectorstore init_collections failed; continuing without")
+    # Best-effort start of the ingest scheduler (ING-10).
+    try:
+        _scheduler = _build_default_orchestrator()
+    except Exception:
+        log.exception("ingest scheduler failed to start; API will run without it")
+        _scheduler = None
     log.info("lumen_startup", extra={"version": app.version})
     yield
+    if _scheduler is not None:
+        try:
+            _scheduler.shutdown(wait=False)
+        except Exception:
+            log.exception("ingest scheduler shutdown failed")
     log.info("lumen_shutdown")
 
 
@@ -138,6 +191,14 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
 @app.get("/health")
 async def health() -> dict[str, Any]:
     return _ok({"status": "ok", "commit": os.environ.get("GIT_SHA", "dev")})
+
+
+@app.get("/health/ingest")
+async def health_ingest(
+    db=Depends(get_db_session),
+) -> dict[str, Any]:
+    rows = await latest_per_source(db)
+    return _ok({"sources": _to_health_payload(rows)})
 
 
 app.include_router(me_routes.router)

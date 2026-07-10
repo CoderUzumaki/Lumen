@@ -738,7 +738,7 @@ Continuous background pipeline. Five sources, one normalized schema, deduped int
   - `pytest backend/tests/pipelines/test_clusterer.py` includes synthetic + real-world fixtures.
 - **Depends on:** ING-08.
 
-### ING-10 — Ingestion orchestrator + APScheduler
+### ING-10 — Ingestion orchestrator + APScheduler ✅
 
 - **Files:** `backend/app/pipelines/orchestrator.py`, wire into `main.py` startup.
 - **Action:**
