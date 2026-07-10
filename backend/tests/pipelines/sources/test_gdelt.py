@@ -113,7 +113,9 @@ async def test_429_retried_then_succeeds(monkeypatch):
     http, calls = _mk_http([_fail(429), _ok(SAMPLE_ARTICLES[:1])])
     src = GDELTSource(http_client=http)
 
-    items = await src.fetch(since=datetime.now(timezone.utc))
+    # Pin to midnight of the fixture's seendate so wall-clock drift doesn't
+    # eventually filter the article out.
+    items = await src.fetch(since=datetime(2026, 7, 3, tzinfo=timezone.utc))
 
     assert len(items) == 1
     assert len(calls) == 2

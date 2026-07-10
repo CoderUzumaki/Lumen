@@ -2,82 +2,76 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-03 (session 20 — DATA-04 themes CRUD)
-**Progress:** 22/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-07). **Phase 1 fully closed.** DATA-06 (frontend portfolio UI) remains — the last piece of Phase 1 was DATA-04's backend, which just landed.
+**Last updated:** 2026-07-03 (session 21 — ING-08 normalizer + idempotent persist)
+**Progress:** 23/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-08).
 
-Wait — DATA-06 is still open. Correction: Phase 1 backend is closed; DATA-06 (frontend UI) is still pending. See Next module.
+**Worktree note:** The v2 branch is now checked out at `.claude/worktrees/v2` (was previously at `brave-benz-6b19f2`). If you're continuing from a fresh session, `cd` there.
 
 ---
 
 ## Next module
 
-**ID:** `ING-08`
-**Title:** Normalizer + idempotent insertion
-**Depends on:** ING-01, ING-02..ING-06
-**Read:** `BUILD.md` → the `ING-08` block.
+**ID:** `ING-09`
+**Title:** Semantic dedup + clustering into `news_clusters`
+**Depends on:** ING-07, ING-08
+**Read:** `BUILD.md` → the `ING-09` block.
 
-**Why not DATA-06 next?** DATA-06 is the frontend portfolio UI — a large module touching Next.js routes, TanStack Query, and design. It's better to keep momentum on Phase 2 (adapters → normalizer → dedup → orchestrator) so the ingest pipeline is functional end-to-end. DATA-06 can slot in whenever the frontend session comes around.
-
-**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/04/05 + ING-01..ING-07 stacked on `856d503`. All six adapters + Chroma + EmbeddingClient live. Themes CRUD writes to Chroma on create/update/delete.
+**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/04/05 + ING-01..ING-08 stacked on `856d503`. Fetch layer + normalizer + idempotent DB persist + Chroma indexing all live. ING-09's job is: for each newly-inserted `news_items` row, find its nearest neighbours in the last 48h via Chroma, and either attach it to an existing `news_clusters` row (if similarity > `CLUSTER_SIMILARITY_THRESHOLD`) or create a new cluster.
 
 Before starting, verify:
-- `git branch --show-current` shows `v2/intelligence-agent`.
-- `git log --oneline -22` shows DATA-04..HP-01 on top of `856d503` / `f7e479a`.
+- `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
+- `git log --oneline -23` shows ING-08..HP-01 on top of `856d503` / `f7e479a`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **118 passed, 4 deselected**.
+- `cd backend && python -m pytest tests -q` reports **135 passed, 4 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute DATA-04 — themes CRUD, generating an embedding for each theme's description on create/update and persisting the Chroma doc id in `themes.embedding_id`. Delete removes the Chroma doc too. Enforces the same owner-scoping / cross-user-404 pattern as DATA-03.
+- **Session goal:** Execute ING-08 — the normalizer that turns `NewsItemIn` into a `NormalizedItem` (canonical URL, url_hash, HTML-stripped body, ticker extraction) plus the idempotent bulk-insert into `news_items` with Chroma indexing.
 - **Completed:**
-  - `DATA-04` ✅ — themes routes.
-  - `backend/app/routes/themes.py` — router at `/api/themes`:
-    - `POST` → `create_theme` (201). Inserts row, flushes to get `theme.id`, then `_index_theme(theme)` embeds `description` and upserts a Chroma doc keyed on `str(theme.id)`. Persists `theme.embedding_id = str(theme.id)`.
-    - `GET` → `list_themes` ordered by created_at.
-    - `PUT /{theme_id}` → `update_theme` (200). Re-embeds only when `description` actually changed (weight-only updates skip Chroma).
-    - `DELETE /{theme_id}` → `delete_theme` (204). Deletes DB row + Chroma doc. Chroma delete wrapped in try/except so a Chroma outage after the DB commit doesn't make the endpoint appear to fail (log-and-skip; reconciliation is a separate concern).
-    - `_get_owned_theme` — reusable helper that raises 404 on missing or cross-user.
-    - Dependencies `get_embed_client` and `get_themes_vector_store` are dedicated `Depends()` functions so tests can override them cleanly.
-  - `backend/app/main.py` — imports and includes `themes_routes.router`.
-  - `backend/tests/routes/test_themes.py` — 7 tests. Fixture provisions fresh sqlite + fresh Chroma tempdir + injects a deterministic `_FakeEmbed` (3-dim vectors keyed on substring markers "recession" / "capex" / "energy"). Tests cover:
-    - Create indexes a Chroma doc with matching id + owner metadata.
-    - List / get scoped to owner (Bob's list is empty).
-    - Update re-embeds when description changes (verifies both stored description and vector differ from the pre-update state).
-    - Update on weight-only does NOT re-embed (vector unchanged).
-    - Delete removes both the DB row and the Chroma doc.
-    - Cross-user PUT / DELETE both 404.
-    - Description-too-short (min_length=3) returns 400 with `validation_error` envelope code.
+  - `ING-08` ✅ — normalizer + persist.
+  - `backend/app/pipelines/normalizer.py` — `_canonical_url()` lowercases host, drops fragment, drops every query param except `id`. `_url_hash()` = SHA-256 of canonical URL. `_strip_html()` uses `selectolax` (best-effort; falls back to raw on parse failure). `_extract_tickers()` finds `\b[A-Z]{1,5}(?:\.[A-Z])?\b` matches intersected with a caller-supplied `known_tickers` set (from the union of user positions). `normalize()` composes them, merges regex-extracted tickers with adapter-hinted `hints["tickers"]` (also filtered by `known_tickers`), truncates body to 8000 chars, returns a `NormalizedItem` dataclass.
+  - `backend/app/pipelines/persist.py` — `persist(items, *, session, embed, store)`:
+    - Intra-batch dedup by `url_hash` (preserves first-seen order).
+    - Pre-SELECT existing `url_hash`es to compute skipped-count and to only re-index new rows in Chroma.
+    - Dialect-dispatched `ON CONFLICT DO NOTHING`: `postgresql.insert(...).on_conflict_do_nothing(index_elements=["url_hash"])` on Postgres, `sqlite_insert(...)` on sqlite, plain `insert(...)` fallback for other dialects.
+    - Fetches back the inserted rows, embeds `title + body[:1500]` via the injected `EmbeddingClient`, upserts into the `news_items` Chroma collection with the row's UUID as the doc id. Metadata: `cluster_id, source, published_at_iso`.
+    - Chroma indexing wrapped in try/except (log-and-continue) so a vector-store outage doesn't fail the persist call after the DB commit.
+    - Returns `(inserted_count, skipped_count)`.
+  - `backend/tests/pipelines/test_normalizer.py` — 12 tests covering canonical URL, url_hash stability across tracking params, hash differs for different id, ticker intersection with known, empty known → empty tickers, url_hash from canonical URL, HTML stripping, tickers from title+body, body truncation at 8000, hint-tickers merge, other-fields preserved.
+  - `backend/tests/pipelines/test_persist.py` — 5 tests: first persist inserts all, second persist skips all, Chroma docs have matching ids, empty input returns (0,0), intra-batch duplicate counted once.
+  - **Fixed a wall-clock-sensitive GDELT test.** `tests/pipelines/sources/test_gdelt.py::test_429_retried_then_succeeds` was using `since=datetime.now(timezone.utc)` while the sample article's `seendate` is stamped `2026-07-03T13:00:00Z`. As real UTC time moved past that hour, the article filtered out of the fetch result. Pinned to `datetime(2026, 7, 3, tzinfo=timezone.utc)` (midnight) so drift doesn't affect it. Not caused by ING-08; unrelated latent bug surfaced during the full-suite run.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **118 passed, 4 deselected**.
+  - `python -m pytest tests -q` → **135 passed, 4 deselected**.
   - `ruff check .` clean.
-- **Files touched:** created `backend/app/routes/themes.py`, `backend/tests/routes/test_themes.py`. Modified `backend/app/main.py` (register router), `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Files touched:** created `backend/app/pipelines/normalizer.py`, `backend/app/pipelines/persist.py`, `backend/tests/pipelines/test_normalizer.py`, `backend/tests/pipelines/test_persist.py`. Modified `backend/tests/pipelines/sources/test_gdelt.py` (drift fix), `BUILD.md` (tick), `HANDOFF.md` (this file).
 - **Migrations added:** none.
-- **Tests added:** 7.
+- **Tests added:** 17.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **Chroma delete is wrapped in try/except after DB commit.** BUILD.md's Action says "Deleting a theme deletes the Chroma doc" — my implementation always tries, but a Chroma failure after the DB commit is logged instead of raising a 500 to the caller. Reason: the DB is authoritative for existence; a stale Chroma doc is a cleanup problem, not a correctness problem, and shouldn't make DELETE look failed.
-  - **`embedding_id` is `str(theme.id)`.** The DB column is opaque `str`; BUILD.md just says "Persist the Chroma doc id in `themes.embedding_id`" without specifying the id shape. Using the theme's own UUID keeps the code simple and makes the association discoverable without a separate lookup.
+  - **`known_tickers` is a caller-supplied parameter, not derived inside `normalize()`.** BUILD.md's Action says "Extract ticker mentions with a lightweight regex + known-ticker set (from all users' positions)." The DB query for the union of user positions is best done by the caller (the orchestrator in ING-10) so `normalize()` stays pure + testable + doesn't need a session. Same idea for `EmbeddingClient` and `VectorStore` on `persist()` — both injected.
+  - **`persist()` also short-circuits on Chroma failure.** BUILD.md doesn't specify; treating vector-store outages as non-fatal keeps the DB source of truth authoritative. A future cleanup module can reconcile orphan DB rows (rows without a matching Chroma doc).
+  - **Skipped-count uses a pre-INSERT SELECT rather than `RETURNING`.** Portable across sqlite (which has RETURNING in modern versions but SQLAlchemy support varies) and Postgres. Race-safe enough at portfolio-project scale; a stricter implementation would use `RETURNING id` and compare against the intended set.
 
 ---
 
 ## Environment state
 
-- Backend: 14 route endpoints across `/api/portfolios`, `/api/positions`, `/api/me`, `/api/themes`. All owner-scoped. Chroma writes on theme create/update/delete.
-- Frontend: unchanged from BOOT-04 (auth-only skeleton + placeholder landing).
-- Database: Alembic head `d2a235b04a85`. All product tables present.
-- Vectors: `news_items`, `themes`, `historical_analogs` collections. `themes` populated by DATA-04's routes.
-- Tests: **118 hermetic, 4 opt-in.**
-- CI: passing on ING-07 push. This push (DATA-04) will trigger a fresh run.
+- Backend: full fetch → normalize → persist → index pipeline available in Python. Chroma `news_items` gets populated by `persist()`. `news_clusters` still empty — that's ING-09's job.
+- Frontend: unchanged.
+- Database: unchanged (Alembic head `d2a235b04a85`).
+- Vectors: `news_items` collection now written to by the persist pipeline.
+- Tests: **135 hermetic, 4 opt-in.**
+- CI: last successful run on DATA-04 (`8373f83`); pending on the ING-08 push.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** Phase 1 backend is fully closed (DATA-01/02/03/04/05). Only DATA-06 (frontend UI) is left. Phase 2 progress: ING-01..ING-07 done, ING-08 (normalizer) is next in the pipeline order.
+- **None.** ING-09 is the next natural step in the pipeline sequence.
 
 ---
 

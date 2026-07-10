@@ -706,7 +706,7 @@ Continuous background pipeline. Five sources, one normalized schema, deduped int
   - Embedding a batch of 100 items completes in < 3s on the target Fly VM.
 - **Depends on:** BOOT-06.
 
-### ING-08 — Normalizer + idempotent insertion
+### ING-08 — Normalizer + idempotent insertion ✅
 
 - **Files:** `backend/app/pipelines/normalizer.py`, `backend/app/pipelines/persist.py`.
 - **Action:**
