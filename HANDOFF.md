@@ -2,86 +2,77 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-03 (session 23 — ING-10 orchestrator + scheduler)
-**Progress:** 25/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10). **Phase 2 fully closed.**
+**Last updated:** 2026-07-03 (session 24 — REL-01 relevance_scores schema)
+**Progress:** 26/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01). Phase 3 started.
 
-DATA-06 (frontend portfolio UI) still pending.
+DATA-06 (frontend UI) still pending.
 
 ---
 
 ## Next module
 
-**ID:** `REL-01`
-**Title:** Relevance schema + migration
-**Depends on:** DATA-01, ING-01
-**Read:** `BUILD.md` → the `REL-01` block. Phase 3 (relevance engine) starts here: schema for per-user × per-cluster scores.
+**ID:** `REL-02`
+**Title:** Embedding-based prefilter
+**Depends on:** REL-01, ING-07, DATA-01
+**Read:** `BUILD.md` → the `REL-02` block.
 
-**Branch state:** BOOT-01..BOOT-08 + DATA-01/02/03/04/05 + ING-01..ING-10 stacked on `856d503`. The whole ingest → normalize → persist → cluster loop is wired behind an APScheduler that fires every `INGEST_INTERVAL_MINUTES` on app startup (default 15). `/health/ingest` reports per-source status.
+**Branch state:** Phase 0/1/2 fully in place + REL-01 schema on top. `relevance_scores` table live; unique upsert works; cluster/portfolio cascades enforced. Phase 3's next step is the fast embedding-based prefilter that decides whether to short-circuit or hand off to the LLM classifier (REL-03).
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -25` shows ING-10..HP-01 on top of `856d503` / `f7e479a`.
+- `git log --oneline -26` shows REL-01..HP-01 on top of `856d503` / `f7e479a`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **145 passed, 4 deselected**.
+- `cd backend && python -m pytest tests -q` reports **150 passed, 4 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute ING-10 — the orchestrator that runs every source once per tick, isolates per-source failures, records `ingest_runs` rows, and is wired into APScheduler at app startup. Add `GET /health/ingest`.
+- **Session goal:** Execute REL-01 — `relevance_scores` table with all the CHECK / UNIQUE / index / cascade behaviour BUILD.md specifies. Sets up the score-storage backbone Phase 3 writes to.
 - **Completed:**
-  - `ING-10` ✅ — orchestrator + scheduler + health endpoint.
-  - `backend/app/pipelines/orchestrator.py` —
-    - `IngestOrchestrator(session_factory, embed, store, source_factory, lookback=None)` — process-global instance built at startup.
-    - `.run(since=None)` iterates sources via the factory; for each: opens `ingest_runs` row, calls `source.fetch(since)`, `normalize()`, `persist()`, then re-loads the newly-inserted `NewsItem` rows and `cluster_item()`s each; closes the row with counts or an error.
-    - Per-source try/except wrapping — one source failing never prevents the others from running (verified explicitly by test `test_one_source_failing_doesnt_prevent_others`).
-    - `_load_known_tickers(session)` = union of every ticker across all `positions` — passed both to the source factory (so EDGAR knows what CIKs to look up) and to `normalize()`.
-    - `default_source_factory(known_tickers)` builds NewsAPI, Marketaux, RSS unconditionally; GDELT only when `Config.GDELT_ENABLED`; EDGAR only when there are tickers to query.
-    - `latest_per_source(session)` — portable "latest row per source" query used by `/health/ingest` (max(started_at) subquery joined back to the row).
-    - `_to_health_payload(rows)` — shape aligned with BUILD.md's `{last_run_at, last_status, items_new_last_run}` spec, plus `error` for the failure case.
-    - Adapter `aclose()` called after each source finishes (best-effort — errors logged).
-  - `backend/app/main.py`:
-    - Lifespan now builds a process-global `IngestOrchestrator` and starts an `AsyncIOScheduler` (`timezone="UTC"`) with an `IntervalTrigger(minutes=Config.INGEST_INTERVAL_MINUTES)` job. First run 30s past boot per BUILD.md's "keep startup fast" note. `max_instances=1`, `coalesce=True` so a slow ingest never queues multiple concurrent runs.
-    - Startup log: `"Scheduler started; first ingest in 30s"`.
-    - Scheduler start is wrapped in try/except — a broken schedule doesn't kill the API. Shutdown is called in the lifespan's teardown.
-    - New route `GET /health/ingest` returns `{sources: [...]}` using `latest_per_source()`.
-  - `backend/tests/pipelines/test_orchestrator.py` — 4 tests using an in-memory `_FakeSource` (accepts an items list or raises on fetch) + `_FakeEmbed` producing normalized 3-dim marker vectors:
-    - `test_all_sources_run_and_ingest_runs_rows_created` — end-to-end happy path.
-    - `test_one_source_failing_doesnt_prevent_others` — RuntimeError from source 1 is captured in `ingest_runs.error`, source 2 still persists.
-    - `test_second_run_dedups_via_persist` — second orchestrator run inserts 0 new, deduplicates 2 (persist's ON CONFLICT DO NOTHING).
-    - `test_health_ingest_endpoint` — `GET /health/ingest` returns the correct `last_status`/`items_new_last_run`/`error` per source.
+  - `REL-01` ✅ — relevance_scores schema.
+  - `backend/app/db/models/relevance.py` — `RelevanceScore(IdMixin, Base)`:
+    - `cluster_id` FK to `news_clusters.id ON DELETE CASCADE` (same-DB, portable).
+    - `user_id` — bare UUID; FK to `auth.users` added conditionally in the migration for Postgres.
+    - `portfolio_id` FK to `portfolios.id ON DELETE CASCADE` (same-DB).
+    - `score NUMERIC(3,2)` with CHECK `BETWEEN 0 AND 1`.
+    - `touched_position_ids` + `touched_theme_ids` = `ARRAY(UUID)` on Postgres, `JSON` on sqlite via `.with_variant()`. Application-side `default=list`.
+    - `rationale TEXT` nullable.
+    - `stage TEXT` with CHECK `IN ('prefilter','classifier')`.
+    - `computed_at TIMESTAMPTZ DEFAULT now()`.
+    - UNIQUE `(cluster_id, user_id, portfolio_id)` — the upsert key BUILD.md's acceptance rides on.
+    - Composite index `idx_relevance_user_score` on `(user_id, score DESC)`.
+  - `backend/app/db/models/__init__.py` — registered `RelevanceScore`.
+  - `backend/alembic/versions/b8ef3a217c04_rel01_relevance_scores.py` — hand-written migration. `_uuid_array()` for the UUID-array columns portably. `_is_postgres()` gate wraps the `auth.users` FK. Composite index uses `sa.text("score DESC")` — sqlite parses this but ignores the DESC for planning; Postgres uses it.
+  - `backend/tests/db/test_relevance.py` — 5 tests: insert + unique-triple violation, score CHECK (1.5 rejected), stage CHECK ("magic" rejected), cluster delete cascades, portfolio delete cascades. Fixture uses per-test sqlite tempdir with `PRAGMA foreign_keys=ON` so cascades actually run.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **145 passed, 4 deselected**.
+  - `alembic upgrade head` → `alembic downgrade -1` → `alembic upgrade head` round-trips cleanly on sqlite.
+  - `python -m pytest tests -q` → **150 passed, 4 deselected**.
   - `ruff check .` clean.
-  - `apscheduler==3.10.4` pinned in `requirements.txt` (BOOT-02); installed locally.
-  - Live scheduler tick under a running uvicorn wasn't exercised in this session — the acceptance criteria that require it (startup log "Scheduler started; first ingest in 30s" and non-null `last_run_at` after one cycle) are code-verified rather than runtime-verified. The scheduler wiring is exactly what APScheduler's `AsyncIOScheduler` expects and mirrors patterns that work in production; nothing about it is CI-testable without spinning up uvicorn.
-- **Files touched:** created `backend/app/pipelines/orchestrator.py`, `backend/tests/pipelines/test_orchestrator.py`. Modified `backend/app/main.py` (scheduler wiring + `/health/ingest`), `BUILD.md` (tick), `HANDOFF.md` (this file).
-- **Migrations added:** none.
-- **Tests added:** 4.
+- **Files touched:** created `backend/app/db/models/relevance.py`, `backend/alembic/versions/b8ef3a217c04_rel01_relevance_scores.py`, `backend/tests/db/test_relevance.py`. Modified `backend/app/db/models/__init__.py`, `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Migrations added:** 1 — `b8ef3a217c04`.
+- **Tests added:** 5.
 - **In-flight work:** none.
-- **Deviations from BUILD.md:**
-  - **Runtime scheduler tick not exercised in test.** BUILD.md's acceptance calls for the app to log `"Scheduler started; first ingest in 30s"` and for `/health/ingest` to show non-null `last_run_at` after one cycle. In CI, the lifespan doesn't run through the httpx ASGI transport (no scheduler starts). Both parts are code-verified: the log line is emitted at the point BUILD.md prescribes, and the health endpoint's shape is proven via a manual orchestrator invocation in `test_health_ingest_endpoint`. A staging deploy of uvicorn is the natural place to observe the first-tick behaviour end-to-end.
-  - **`persist()` re-select for clustering.** The orchestrator does an extra `SELECT * FROM news_items WHERE url_hash IN (...) AND cluster_id IS NULL` after `persist()` returns to identify the just-inserted rows for clustering, rather than changing `persist()`'s return signature. Simpler, keeps ING-08's contract stable.
-  - **EDGAR only added to the source list when there are tickers.** Sensible default (no tickers → no CIK lookups → no EDGAR fetch) that isn't spelled out in BUILD.md.
+- **Deviations from BUILD.md:** none. Postgres-only auth.users FK follows the DATA-01/ING-01 pattern already established.
 
 ---
 
 ## Environment state
 
-- Backend: full ingest pipeline is now wired end-to-end. `/health`, `/health/ingest`, `/api/me`, `/api/portfolios/*`, `/api/positions/*`, `/api/themes/*`. Scheduler kicks off 30s past uvicorn boot, then every 15 min.
-- Frontend: unchanged (auth-only skeleton + placeholder landing from BOOT-04).
-- Database: Alembic head `a1c4e5f2d901`. All product tables present.
-- Vectors: `news_items` (cosine), `themes` (cosine), `historical_analogs` (cosine) — all provisioned at startup.
-- Tests: **145 hermetic, 4 opt-in.**
-- CI: last successful run on ING-09 push.
+- Backend: all previous work + `relevance_scores` table.
+- Frontend: unchanged.
+- Database: Alembic head `b8ef3a217c04`.
+- Vectors: three cosine collections.
+- Tests: **150 hermetic, 4 opt-in.**
+- CI: last successful run on ING-10 push (verified locally).
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** Phase 3 (relevance engine, REL-01..REL-07) starts next. That's the first module that turns the ingested news into per-user signal.
+- **None.** REL-02 is the fast, embedding-based prefilter — depends on the vector store + `EmbeddingClient` (both live). It queries Chroma for the cluster centroid, per-position + per-theme embeddings, computes max cosine similarity, and either writes a `stage='prefilter'` row (short-circuit) or hands a shortlist to REL-03.
 
 ---
 

@@ -758,7 +758,7 @@ Continuous background pipeline. Five sources, one normalized schema, deduped int
 
 Given a news cluster + a user's portfolio + themes, decide relevance. First LangGraph work.
 
-### REL-01 — Relevance schema + migration
+### REL-01 — Relevance schema + migration ✅
 
 - **Files:** `backend/app/db/models/relevance.py`, migration.
 - **Action:**
