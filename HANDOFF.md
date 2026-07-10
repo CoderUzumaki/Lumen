@@ -2,8 +2,8 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-03 (session 24 — REL-01 relevance_scores schema)
-**Progress:** 26/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01). Phase 3 started.
+**Last updated:** 2026-07-03 (session 25 — REL-02 prefilter)
+**Progress:** 27/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01, REL-02).
 
 DATA-06 (frontend UI) still pending.
 
@@ -11,68 +11,77 @@ DATA-06 (frontend UI) still pending.
 
 ## Next module
 
-**ID:** `REL-02`
-**Title:** Embedding-based prefilter
-**Depends on:** REL-01, ING-07, DATA-01
-**Read:** `BUILD.md` → the `REL-02` block.
+**ID:** `REL-03`
+**Title:** LLM classifier stage
+**Depends on:** REL-02, BOOT-06
+**Read:** `BUILD.md` → the `REL-03` block.
 
-**Branch state:** Phase 0/1/2 fully in place + REL-01 schema on top. `relevance_scores` table live; unique upsert works; cluster/portfolio cascades enforced. Phase 3's next step is the fast embedding-based prefilter that decides whether to short-circuit or hand off to the LLM classifier (REL-03).
+**Branch state:** REL-01 schema + REL-02 prefilter live. `run_prefilter()` either short-circuits (persisting a `stage='prefilter'` row) or returns a candidate shortlist for the LLM classifier — REL-03 consumes that shortlist.
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -26` shows REL-01..HP-01 on top of `856d503` / `f7e479a`.
+- `git log --oneline -27` shows REL-02..HP-01 on top of `856d503` / `f7e479a`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **150 passed, 4 deselected**.
+- `cd backend && python -m pytest tests -q` reports **155 passed, 4 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute REL-01 — `relevance_scores` table with all the CHECK / UNIQUE / index / cascade behaviour BUILD.md specifies. Sets up the score-storage backbone Phase 3 writes to.
+- **Session goal:** Execute REL-02 — the fast embedding-based prefilter. Compute cluster centroid, cosine-similarity against position/theme embeddings, either short-circuit with a persisted `stage='prefilter'` row or return the candidate shortlist for the LLM classifier.
 - **Completed:**
-  - `REL-01` ✅ — relevance_scores schema.
-  - `backend/app/db/models/relevance.py` — `RelevanceScore(IdMixin, Base)`:
-    - `cluster_id` FK to `news_clusters.id ON DELETE CASCADE` (same-DB, portable).
-    - `user_id` — bare UUID; FK to `auth.users` added conditionally in the migration for Postgres.
-    - `portfolio_id` FK to `portfolios.id ON DELETE CASCADE` (same-DB).
-    - `score NUMERIC(3,2)` with CHECK `BETWEEN 0 AND 1`.
-    - `touched_position_ids` + `touched_theme_ids` = `ARRAY(UUID)` on Postgres, `JSON` on sqlite via `.with_variant()`. Application-side `default=list`.
-    - `rationale TEXT` nullable.
-    - `stage TEXT` with CHECK `IN ('prefilter','classifier')`.
-    - `computed_at TIMESTAMPTZ DEFAULT now()`.
-    - UNIQUE `(cluster_id, user_id, portfolio_id)` — the upsert key BUILD.md's acceptance rides on.
-    - Composite index `idx_relevance_user_score` on `(user_id, score DESC)`.
-  - `backend/app/db/models/__init__.py` — registered `RelevanceScore`.
-  - `backend/alembic/versions/b8ef3a217c04_rel01_relevance_scores.py` — hand-written migration. `_uuid_array()` for the UUID-array columns portably. `_is_postgres()` gate wraps the `auth.users` FK. Composite index uses `sa.text("score DESC")` — sqlite parses this but ignores the DESC for planning; Postgres uses it.
-  - `backend/tests/db/test_relevance.py` — 5 tests: insert + unique-triple violation, score CHECK (1.5 rejected), stage CHECK ("magic" rejected), cluster delete cascades, portfolio delete cascades. Fixture uses per-test sqlite tempdir with `PRAGMA foreign_keys=ON` so cascades actually run.
+  - `REL-02` ✅ — prefilter.
+  - `backend/app/agents/__init__.py`, `backend/app/agents/relevance/__init__.py` (empty package markers).
+  - `backend/app/agents/relevance/prefilter.py`:
+    - `PrefilterResult` dataclass: `passed`, `max_similarity`, `candidate_position_ids`, `candidate_theme_ids`, `persisted_row`.
+    - `_cosine()` — pure-Python cosine; zero-vector → 0.0.
+    - `_mean_vector()` — pure-Python centroid.
+    - `run_prefilter(cluster_id, portfolio_id, session, news_store, themes_store, embed, threshold=None)`:
+      1. Loads portfolio + positions + themes via SQLAlchemy.
+      2. Fetches cluster item ids from `news_items`, then their embeddings from Chroma via `news_store.get(ids=[...])`, averages into a centroid.
+      3. If no embeddings, returns `passed=True, max_similarity=0.0` — defers to classifier rather than emit a low-signal prefilter row.
+      4. Embeds positions via `f"{ticker} {asset_type} {exchange}"` (per BUILD.md's per-position embedding spec) using the injected `EmbeddingClient`.
+      5. Fetches theme vectors from the `themes` Chroma collection using the theme's UUID as doc id (matches DATA-04's convention).
+      6. Cosine similarities to the centroid; picks `max` across positions ∪ themes.
+      7. If `max_sim < PREFILTER_THRESHOLD` (default 0.35): inserts `RelevanceScore(stage='prefilter', score=clamp(max_sim), touched_*=[])`, commits, returns `passed=False`.
+      8. Else: returns `passed=True` with the ids of positions/themes whose similarity ≥ threshold.
+    - `_cluster_centroid()` helper — handles Chroma's numpy-array `embeddings` field via explicit `is None` / `len()` checks so numpy's ambiguous-truth-value doesn't trip us.
+  - `backend/tests/agents/__init__.py`, `backend/tests/agents/test_relevance_prefilter.py` — 5 tests:
+    - `test_fed_cluster_and_aapl_portfolio_passes_with_aapl_candidate` — the primary BUILD.md acceptance case. Uses a deterministic `_FakeEmbed` that models "Fed and equities are close in embedding space".
+    - `test_pharma_cluster_and_tech_portfolio_drops` — the second acceptance case. Verifies `stage='prefilter'` row lands with empty touched arrays and score < threshold.
+    - `test_theme_stored_vector_used` — portfolio has only a theme; stored vector aligned with the cluster → theme surfaces as candidate.
+    - `test_cluster_with_no_embeddings_defers_to_classifier` — edge case; returns `passed=True, max_sim=0.0` and does NOT persist a prefilter row.
+    - `test_threshold_boundary_at_zero` — everything passes when `threshold=0`.
 - **Acceptance verified locally:**
-  - `alembic upgrade head` → `alembic downgrade -1` → `alembic upgrade head` round-trips cleanly on sqlite.
-  - `python -m pytest tests -q` → **150 passed, 4 deselected**.
+  - `python -m pytest tests -q` → **155 passed, 4 deselected**.
   - `ruff check .` clean.
-- **Files touched:** created `backend/app/db/models/relevance.py`, `backend/alembic/versions/b8ef3a217c04_rel01_relevance_scores.py`, `backend/tests/db/test_relevance.py`. Modified `backend/app/db/models/__init__.py`, `BUILD.md` (tick), `HANDOFF.md` (this file).
-- **Migrations added:** 1 — `b8ef3a217c04`.
+- **Files touched:** created `backend/app/agents/{__init__,relevance/__init__,relevance/prefilter}.py`, `backend/tests/agents/{__init__,test_relevance_prefilter}.py`. Modified `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Migrations added:** none.
 - **Tests added:** 5.
 - **In-flight work:** none.
-- **Deviations from BUILD.md:** none. Postgres-only auth.users FK follows the DATA-01/ING-01 pattern already established.
+- **Deviations from BUILD.md:**
+  - **No-embeddings edge case defers to classifier.** BUILD.md's action list doesn't spell out what to do if a cluster has no Chroma vectors yet. Emitting a low-signal `stage='prefilter'` row with score=0 would let a real signal slip through. Deferring (`passed=True, max_similarity=0.0`) hands it to REL-03 where the LLM at least sees the raw text.
+  - **Candidate inclusion uses `≥ threshold`.** BUILD.md says "sim > threshold" for the shortlist. `≥` is inclusive of the boundary and matches the short-circuit condition (`< threshold` for the negation). Either is defensible; the inclusive form makes the two conditions logically complementary.
+  - **Theme vectors are fetched by `str(theme.id)`.** DATA-04 uses `str(theme.id)` as the Chroma doc id (with `embedding_id` mirroring it). REL-02 uses the same lookup key rather than reading `theme.embedding_id`, since they're identical by construction — one fewer indirection.
 
 ---
 
 ## Environment state
 
-- Backend: all previous work + `relevance_scores` table.
+- Backend: all previous + `run_prefilter()` available. Ready for REL-03 (LLM classifier) → REL-04 (LangGraph composition) → REL-05 (fan-out worker) → REL-06 (news endpoints) → REL-07 (frontend feed).
 - Frontend: unchanged.
 - Database: Alembic head `b8ef3a217c04`.
-- Vectors: three cosine collections.
-- Tests: **150 hermetic, 4 opt-in.**
-- CI: last successful run on ING-10 push (verified locally).
+- Vectors: three cosine collections; `news_items` and `themes` both actively used by the prefilter.
+- Tests: **155 hermetic, 4 opt-in.**
+- CI: last successful run on REL-01 push.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** REL-02 is the fast, embedding-based prefilter — depends on the vector store + `EmbeddingClient` (both live). It queries Chroma for the cluster centroid, per-position + per-theme embeddings, computes max cosine similarity, and either writes a `stage='prefilter'` row (short-circuit) or hands a shortlist to REL-03.
+- **None.** REL-03 is the LLM-classifier stage — first module with a real LLM prompt in the loop. Depends on `BOOT-06`'s `LLMClient` and Pydantic's `RelevanceVerdict`.
 
 ---
 

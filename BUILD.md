@@ -783,7 +783,7 @@ Given a news cluster + a user's portfolio + themes, decide relevance. First Lang
 - **Acceptance:** migration clean; unique constraint on `(cluster_id, user_id, portfolio_id)` upserts correctly.
 - **Depends on:** DATA-01, ING-01.
 
-### REL-02 — Embedding-based prefilter
+### REL-02 — Embedding-based prefilter ✅
 
 - **Files:** `backend/app/agents/relevance/prefilter.py`.
 - **Action:**
