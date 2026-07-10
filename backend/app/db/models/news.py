@@ -67,6 +67,14 @@ class NewsCluster(IdMixin, CreatedAtMixin, Base):
     novelty_score: Mapped[Decimal] = mapped_column(
         Numeric(3, 2), nullable=False, default=Decimal("1.0"), server_default="1.0"
     )
+    # ING-09: the set of source ids that have contributed items to this
+    # cluster. Grows monotonically as new items dedupe into an existing
+    # cluster. Portable via .with_variant() (JSON on sqlite, ARRAY on Postgres).
+    member_sources: Mapped[list[str]] = mapped_column(
+        ARRAY(String).with_variant(JSON, "sqlite"),
+        nullable=False,
+        default=list,
+    )
 
 
 class NewsItem(IdMixin, Base):

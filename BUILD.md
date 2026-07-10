@@ -724,7 +724,7 @@ Continuous background pipeline. Five sources, one normalized schema, deduped int
   - Embeddings appear in Chroma with matching ids.
 - **Depends on:** ING-01, ING-07.
 
-### ING-09 — Semantic dedup + clustering into `news_clusters`
+### ING-09 — Semantic dedup + clustering into `news_clusters` ✅
 
 - **Files:** `backend/app/pipelines/clusterer.py`.
 - **Action:**

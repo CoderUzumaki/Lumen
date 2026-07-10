@@ -22,6 +22,15 @@ log = logging.getLogger(__name__)
 
 COLLECTIONS: tuple[str, ...] = ("news_items", "themes", "historical_analogs")
 
+# Per-collection Chroma settings. Cosine everywhere because EmbeddingClient
+# normalizes on encode (ING-07). ING-09 depends on `distance = 1 - similarity`
+# semantics so the 0.87 threshold in BUILD.md carries over directly.
+_COLLECTION_METADATA: dict[str, dict[str, str]] = {
+    "news_items": {"hnsw:space": "cosine"},
+    "themes": {"hnsw:space": "cosine"},
+    "historical_analogs": {"hnsw:space": "cosine"},
+}
+
 
 _client: Any | None = None
 
@@ -50,7 +59,9 @@ def init_collections(client: Any | None = None) -> None:
     """Idempotent: create each canonical collection if it doesn't exist."""
     c = client or get_client()
     for name in COLLECTIONS:
-        c.get_or_create_collection(name=name)
+        c.get_or_create_collection(
+            name=name, metadata=_COLLECTION_METADATA[name]
+        )
 
 
 class VectorStore:
@@ -62,7 +73,9 @@ class VectorStore:
                 f"unknown collection {collection!r}; expected one of {COLLECTIONS}"
             )
         self._client = client or get_client()
-        self._collection = self._client.get_or_create_collection(name=collection)
+        self._collection = self._client.get_or_create_collection(
+            name=collection, metadata=_COLLECTION_METADATA[collection]
+        )
         self._collection_name = collection
 
     @property
@@ -104,3 +117,19 @@ class VectorStore:
 
     def count(self) -> int:
         return self._collection.count()
+
+    def get(
+        self,
+        *,
+        ids: list[str],
+        include: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Fetch specific docs by id. `include` names extra fields
+        (`embeddings`, `metadatas`, `documents`)."""
+        return self._collection.get(ids=ids, include=include or ["metadatas"])
+
+    def update_metadata(
+        self, *, ids: list[str], metadatas: list[dict[str, Any]]
+    ) -> None:
+        """Update metadata for existing docs without re-embedding."""
+        self._collection.update(ids=ids, metadatas=metadatas)

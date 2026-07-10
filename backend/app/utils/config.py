@@ -148,6 +148,21 @@ class Config:
     ) or "sentence-transformers/all-MiniLM-L6-v2"
     EMBEDDING_DEVICE: str = _env_str("EMBEDDING_DEVICE", "cpu") or "cpu"
 
+    # --- Clustering / relevance ---
+    # Per-source authority weight in [0, 1]. Feeds ING-09's cluster.authority_score
+    # (max over member sources). Higher = more trusted. Override via env with a
+    # full JSON object.
+    SOURCE_AUTHORITY: dict = _env_json(
+        "SOURCE_AUTHORITY",
+        {
+            "newsapi": 0.60,
+            "marketaux": 0.60,
+            "gdelt": 0.50,
+            "edgar": 0.95,
+            "rss": 0.70,
+        },
+    )
+
     # --- News sources ---
     NEWSAPI_KEY: str | None = _env_str("NEWSAPI_KEY")
     MARKETAUX_KEY: str | None = _env_str("MARKETAUX_KEY")
