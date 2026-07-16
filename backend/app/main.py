@@ -63,6 +63,9 @@ def _build_default_orchestrator():
 
     Kept behind a try/except at the call site — a broken schedule shouldn't
     kill the API. Returns the started scheduler (or None if disabled).
+
+    Each scheduled tick runs one ingest pass and then fans out relevance
+    scoring across every active portfolio (REL-05).
     """
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.interval import IntervalTrigger
@@ -70,19 +73,44 @@ def _build_default_orchestrator():
     from app.db.base import get_session_factory
     from app.db.vectorstore import VectorStore
     from app.pipelines.orchestrator import IngestOrchestrator, default_source_factory
+    from app.pipelines.relevance_fanout import run_fanout
     from app.utils.embeddings import EmbeddingClient
+    from app.utils.llm import LLMClient
 
     factory = get_session_factory()
+    embed = EmbeddingClient()
+    news_store = VectorStore("news_items")
+    themes_store = VectorStore("themes")
+    llm = LLMClient()
     orchestrator = IngestOrchestrator(
         session_factory=factory,
-        embed=EmbeddingClient(),
-        store=VectorStore("news_items"),
+        embed=embed,
+        store=news_store,
         source_factory=default_source_factory,
     )
 
+    async def _ingest_and_fanout() -> None:
+        cycle_started = datetime.now(timezone.utc)
+        try:
+            await orchestrator.run()
+        except Exception:
+            log.exception("scheduler: ingest run failed")
+            return
+        try:
+            await run_fanout(
+                session_factory=factory,
+                news_store=news_store,
+                themes_store=themes_store,
+                embed=embed,
+                llm=llm,
+                since=cycle_started,
+            )
+        except Exception:
+            log.exception("scheduler: fanout run failed")
+
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
-        orchestrator.run,
+        _ingest_and_fanout,
         trigger=IntervalTrigger(minutes=Config.INGEST_INTERVAL_MINUTES),
         next_run_time=datetime.now(timezone.utc) + timedelta(seconds=30),
         id="lumen-ingest",

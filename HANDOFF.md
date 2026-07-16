@@ -2,80 +2,83 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-17 (session 27 — REL-04 relevance graph)
-**Progress:** 29/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-04). DATA-06 (frontend UI) still pending.
+**Last updated:** 2026-07-17 (session 28 — REL-05 relevance fan-out)
+**Progress:** 30/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-05). DATA-06 (frontend UI) still pending.
 
 ---
 
 ## Next module
 
-**ID:** `REL-05`
-**Title:** Fan-out worker: score new clusters for all users
-**Depends on:** REL-04, ING-10
-**Read:** `BUILD.md` → the `REL-05` block. Builds `backend/app/pipelines/relevance_fanout.py`: after each ingest cycle, enumerate clusters created/updated in that cycle × each user's active portfolio and enqueue `score_cluster_for_user()` calls in a bounded `asyncio.Semaphore(10)` worker pool. Log per-cluster cost estimates. Acceptance: 50 clusters × 3 active users → ≤ 150 rows within 5 minutes; re-running yields 0 new rows.
+**ID:** `REL-06`
+**Title:** News endpoints
+**Depends on:** REL-01, DATA-03
+**Read:** `BUILD.md` → the `REL-06` block. Builds `backend/app/routes/news.py` with two endpoints:
+- `GET /api/news/relevant?limit=20&since=YYYY-MM-DDTHH:MM` → `[{cluster: NewsClusterRead, relevance: RelevanceRead}]` for the caller's active portfolio, ordered by score DESC, published_at DESC.
+- `GET /api/news/clusters/{cluster_id}` → `{cluster, relevance | null, impact | null}` (impact is still `null` until IMP-* modules ship).
 
-**Branch state:** REL-01 schema, REL-02 prefilter, REL-03 classifier, and REL-04 graph (`score_cluster_for_user`) are all live. Idempotency is enforced at the graph boundary — REL-05 can spam calls without worrying about duplicate rows.
+Acceptance: `/api/news/relevant` must return in < 300ms with 10k clusters and 200 relevance rows for the user; cross-user isolation — a user must never see another user's rows.
+
+**Branch state:** relevance_scores are being populated end-to-end by the scheduler (ING-10 → REL-05 → REL-04 → REL-03/REL-02). Read schemas (`NewsClusterRead`, `RelevanceRead`) probably don't exist yet in `app/schemas/` — check before adding; if absent, add them alongside the routes rather than as a separate module.
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows REL-04 on top.
+- `git log --oneline -5` shows REL-05 on top.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **164 passed, 5 deselected**.
+- `cd backend && python -m pytest tests -q` reports **170 passed, 5 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute REL-04 — compose prefilter + classifier as a LangGraph with cache-hit idempotency and a `force=True` override.
+- **Session goal:** Execute REL-05 — the fan-out worker that scores every newly-created/updated cluster against every active portfolio after each ingest cycle.
 - **Completed:**
-  - `REL-04` ✅ — Relevance graph (LangGraph).
-  - `backend/app/agents/relevance/graph.py`:
-    - `_GraphState` — `TypedDict` carrying cluster/user/portfolio ids, injected deps (`session`, `news_store`, `themes_store`, `embed`, `llm`), the `PrefilterResult`, and the final `row`.
-    - `_prefilter_node` — invokes `run_prefilter()`; if the prefilter short-circuits with a persisted row, that row is written into state and the graph routes to END.
-    - `_classifier_node` — invokes `run_classifier()` with the prefilter's candidate shortlists.
-    - `_route_after_prefilter` — conditional edge: `passed=True → classifier`, else `→ END`.
-    - `_build_graph()` compiles a `StateGraph(_GraphState)` with `START → prefilter → {classifier | END}` and `classifier → END`. **Compiled at import time** as `RELEVANCE_GRAPH` so shape errors surface immediately (acceptance).
-    - `score_cluster_for_user(cluster_id, user_id, portfolio_id, *, session, news_store, themes_store, embed, llm, force=False, agent_name)`:
-      1. Cache probe on the unique `(cluster_id, user_id, portfolio_id)` key.
-      2. Cache hit + `force=False` → return the cached row (no LLM call).
-      3. Cache hit + `force=True` → delete the row (unique-constraint headroom), commit, then run the graph.
-      4. `await RELEVANCE_GRAPH.ainvoke({...})` → return the `row` produced by whichever branch ran.
-  - `backend/tests/agents/test_relevance_graph.py`:
-    - `test_graph_compiles_at_import` — validates `RELEVANCE_GRAPH` is a compiled, invocable graph.
-    - `test_prefilter_hit_returns_classifier_row` — Fed-style vector + AAPL portfolio → prefilter passes → classifier persists a `stage='classifier'` row with the mocked verdict; LLM call count = 1.
-    - `test_prefilter_short_circuit_returns_prefilter_row_and_skips_llm` — Pharma vector + tech portfolio → prefilter drops the cluster, returns the persisted `stage='prefilter'` row, and the classifier LLM is never called (count = 0).
-    - `test_idempotent_second_call_returns_cached_row_without_llm` — two invocations for the same key: second returns identical row, DB has exactly one row, LLM call count stays at 1.
-    - `test_force_true_re_invokes_and_replaces_row` — first call → row A (LLM count = 1); swap verdict, `force=True` → new row B with the updated score/rationale (LLM count = 2), DB still has exactly one row for the key.
-  - Uses a `_CountingLLM` subclass of `LLMClient` that returns a canned `RelevanceVerdict` and increments `.calls`, so the "LLM not re-invoked on cache hit" claim is directly asserted.
+  - `REL-05` ✅ — Fan-out worker.
+  - `backend/app/pipelines/relevance_fanout.py`:
+    - `FanoutSummary` dataclass — `tasks`, `cache_hits`, `prefilter_short_circuits`, `classifier_calls`, `errors`, `elapsed_seconds`, `cluster_ids`.
+    - `_discover_cluster_ids(session, since)` — `SELECT NewsCluster.id WHERE last_seen_at >= since`. This is the "created or updated in the last cycle" definition.
+    - `_active_portfolios(session)` — `(user_id, portfolio_id)` for every `Portfolio.is_active = True`.
+    - `_score_one(...)` — one (cluster, portfolio) task. Cheap pre-probe on `(cluster, user, portfolio)` to know whether the ensuing `score_cluster_for_user()` was a cache hit or a real invocation (used for stats + cost logging). Each task opens its OWN `AsyncSession` from the injected factory (async sessions aren't concurrency-safe).
+    - `run_fanout(*, session_factory, news_store, themes_store, embed, llm, cluster_ids=None, since=None, concurrency=10)` — exactly one of `cluster_ids` / `since` required. Discovers clusters + active portfolios once at the start, then groups tasks per cluster: for each cluster, `asyncio.gather()` over all portfolios under an `asyncio.Semaphore(concurrency)`. Emits a per-cluster `fanout_cluster` log line (with `est_tokens` cost estimate = `classifier_calls * 800`) and a terminal `fanout_done` line with aggregate counts + wall clock.
+  - `backend/app/main.py`:
+    - The scheduler job that used to be `orchestrator.run` is now a wrapper `_ingest_and_fanout()` that captures `cycle_started = now`, runs the ingest, then calls `run_fanout(since=cycle_started, ...)`. Ingest failures don't skip fanout scheduling for future cycles (each is wrapped in its own try/except). The `EmbeddingClient`, `VectorStore("news_items")`, `VectorStore("themes")`, and `LLMClient()` are all constructed once at scheduler build and passed by reference.
+  - `backend/tests/pipelines/test_relevance_fanout.py`:
+    - `test_fanout_50_clusters_3_users_yields_at_most_150_rows_and_reruns_zero` — the literal BUILD acceptance. Runs to completion in ~10s on sqlite, well under the 5-minute bound. Second pass: `cache_hits=150`, LLM call count unchanged, `0` new rows.
+    - `test_fanout_since_window_only_scores_clusters_touched_after_since` — old cluster before boundary + fresh cluster after → only fresh is scored.
+    - `test_fanout_inactive_portfolios_are_skipped` — `is_active=False` portfolios don't count.
+    - `test_fanout_respects_concurrency_bound` — a tracking-LLM records the max in-flight `complete()` calls; with `concurrency=2` and 4 portfolios × 1 cluster, `max_in_flight <= 2`.
+    - `test_fanout_logs_per_cluster_cost_line` — a `fanout_cluster cluster=<id> ... est_tokens=<N>` line is emitted per cluster (acceptance: "Log per-cluster fan-out cost estimates").
+    - `test_fanout_requires_cluster_ids_or_since` — calling without either raises `ValueError`.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **164 passed, 5 deselected** (+5 new hermetic tests).
+  - `python -m pytest tests -q` → **170 passed, 5 deselected** (+6 new hermetic tests).
   - `ruff check .` clean.
-- **Files touched:** created `backend/app/agents/relevance/graph.py`, `backend/tests/agents/test_relevance_graph.py`. Modified `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Files touched:** created `backend/app/pipelines/relevance_fanout.py`, `backend/tests/pipelines/test_relevance_fanout.py`. Modified `backend/app/main.py` (scheduler job wraps ingest+fanout), `BUILD.md` (tick), `HANDOFF.md` (this file).
 - **Migrations added:** none.
-- **Tests added:** 5 hermetic.
+- **Tests added:** 6 hermetic.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **`force=True` deletes the cached row before re-running.** BUILD.md says "re-invoking the LLM (unless `force=True`)" without saying what happens to the existing row. The unique constraint on `(cluster, user, portfolio)` means a naive re-run would trip `UNIQUE`; deletion is the simplest correct handling and preserves the invariant that at most one row exists per key.
-  - **`score_cluster_for_user` takes injected deps (`session`, `news_store`, `themes_store`, `embed`, `llm`) as keyword-only args**, not built from a global container. Matches the shape of `run_prefilter`/`run_classifier` and keeps tests hermetic. Callers (REL-05 fan-out worker will be the first) construct these once and pass them in.
+  - **"Created or updated in the last cycle" is defined as `NewsCluster.last_seen_at >= cycle_started`.** BUILD.md phrases it in plain English without naming a column; `last_seen_at` is the natural cluster-touched-timestamp (bumped whenever an item dedupes into the cluster).
+  - **`run_fanout` accepts either an explicit `cluster_ids` iterable or a `since` timestamp.** BUILD.md only mentions the "last cycle" flow; `cluster_ids` gives back-fill / manual re-scoring callers a clean entry, and tests use it to be deterministic. Exactly one must be supplied — a `ValueError` otherwise.
+  - **Cost is logged as `est_tokens` (integer, ≈ `classifier_calls × 800`), not `$`**. PRD §11.4 pins fast-tier free-tier at $0 marginal cost, so a dollar figure would always be 0. Token count is the meaningful operational signal.
+  - **Scheduler wiring changed.** The APScheduler job's callable moved from `orchestrator.run` to a nested `_ingest_and_fanout` wrapper in `main.py::_build_default_orchestrator`. Ingest and fanout are each wrapped in their own `try/except` so a failure in one doesn't kill the other. No test covers `main.py` directly (matches the existing pattern — orchestrator is tested via its own module).
 
 ---
 
 ## Environment state
 
-- Backend: prefilter + classifier + graph composition all wired. `score_cluster_for_user()` is the entry point for REL-05's fan-out.
+- Backend: full ingest → cluster → fan-out → relevance-score pipeline is wired in-process. The scheduler tick now populates `relevance_scores` autonomously.
 - Frontend: unchanged.
-- Database: Alembic head `b8ef3a217c04`. No schema change in REL-04.
-- Vectors: unchanged.
-- Tests: **164 hermetic, 5 opt-in.**
-- CI: last successful run on REL-02 (REL-03 and REL-04 pending push).
+- Database: Alembic head `b8ef3a217c04`. No schema change in REL-05.
+- Vectors: unchanged (news_items + themes collections).
+- Tests: **170 hermetic, 5 opt-in.**
+- CI: last successful run on REL-02 (REL-03..REL-05 pending push through CI).
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** REL-05 wires the fan-out worker: after each ingest cycle, for each newly-created/updated cluster × each active portfolio, spawn `score_cluster_for_user()` under an `asyncio.Semaphore(10)`.
+- **None.** REL-06 wires the read side: two FastAPI endpoints over `relevance_scores` scoped to the caller's active portfolio.
 
 ---
 

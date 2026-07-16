@@ -836,7 +836,7 @@ Given a news cluster + a user's portfolio + themes, decide relevance. First Lang
   - Idempotent: calling twice for the same `(cluster, user, portfolio)` returns the cached row without re-invoking the LLM (unless `force=True`).
 - **Depends on:** REL-02, REL-03.
 
-### REL-05 — Fan-out worker: score new clusters for all users
+### REL-05 — Fan-out worker: score new clusters for all users ✅
 
 - **Files:** `backend/app/pipelines/relevance_fanout.py`.
 - **Action:**
