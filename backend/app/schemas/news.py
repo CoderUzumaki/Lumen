@@ -83,3 +83,44 @@ class IngestRunRead(BaseModel):
     items_new: int | None
     items_deduped: int | None
     error: str | None
+
+
+# --- Relevance (REL-06) ------------------------------------------------------
+
+
+class RelevanceRead(BaseModel):
+    """Response shape for a `relevance_scores` row (REL-01)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    cluster_id: UUID
+    user_id: UUID
+    portfolio_id: UUID
+    score: Decimal
+    touched_position_ids: list[str] = Field(default_factory=list)
+    touched_theme_ids: list[str] = Field(default_factory=list)
+    stage: Literal["prefilter", "classifier"]
+    rationale: str | None
+    computed_at: datetime
+
+
+class RelevantClusterRead(BaseModel):
+    """One row of `/api/news/relevant` — a cluster paired with its relevance verdict."""
+
+    cluster: NewsClusterRead
+    relevance: RelevanceRead
+
+
+class ClusterDetailRead(BaseModel):
+    """Response shape for `/api/news/clusters/{cluster_id}`.
+
+    `impact` is `None` until the IMP-* modules add impact assessments; the
+    field is present so the frontend contract is stable.
+    """
+
+    cluster: NewsClusterRead
+    relevance: RelevanceRead | None = None
+    # Placeholder until IMP-01 lands an `ImpactRead` schema. Using `Any` keeps
+    # the wire contract stable now without leaking a fake type upstream.
+    impact: Any | None = None

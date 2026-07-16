@@ -848,7 +848,7 @@ Given a news cluster + a user's portfolio + themes, decide relevance. First Lang
   - Idempotency: re-running the fan-out yields 0 new rows.
 - **Depends on:** REL-04, ING-10.
 
-### REL-06 — News endpoints
+### REL-06 — News endpoints ✅
 
 - **Files:** `backend/app/routes/news.py`.
 - **Action:**

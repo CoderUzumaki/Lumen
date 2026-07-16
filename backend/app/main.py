@@ -16,6 +16,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.db.base import get_db_session
 from app.pipelines.orchestrator import _to_health_payload, latest_per_source
 from app.routes import me as me_routes
+from app.routes import news as news_routes
 from app.routes import portfolios as portfolios_routes
 from app.routes import positions as positions_routes
 from app.routes import themes as themes_routes
@@ -233,3 +234,4 @@ app.include_router(me_routes.router)
 app.include_router(portfolios_routes.router)
 app.include_router(positions_routes.router)
 app.include_router(themes_routes.router)
+app.include_router(news_routes.router)

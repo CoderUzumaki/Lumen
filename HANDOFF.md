@@ -2,83 +2,87 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-17 (session 28 — REL-05 relevance fan-out)
-**Progress:** 30/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-05). DATA-06 (frontend UI) still pending.
+**Last updated:** 2026-07-17 (session 29 — REL-06 news read endpoints)
+**Progress:** 31/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06). DATA-06 (frontend UI) + REL-07 (frontend news feed) still pending — both are frontend-blocked; backend continues into Phase 4 (Impact Analysis Agent).
 
 ---
 
 ## Next module
 
-**ID:** `REL-06`
-**Title:** News endpoints
-**Depends on:** REL-01, DATA-03
-**Read:** `BUILD.md` → the `REL-06` block. Builds `backend/app/routes/news.py` with two endpoints:
-- `GET /api/news/relevant?limit=20&since=YYYY-MM-DDTHH:MM` → `[{cluster: NewsClusterRead, relevance: RelevanceRead}]` for the caller's active portfolio, ordered by score DESC, published_at DESC.
-- `GET /api/news/clusters/{cluster_id}` → `{cluster, relevance | null, impact | null}` (impact is still `null` until IMP-* modules ship).
+**ID:** `IMP-01`
+**Title:** Impact schema + migration
+**Depends on:** DATA-01 (auth.users FK pattern), REL-01 (relevance_scores table pattern).
+**Read:** `BUILD.md` → the `IMP-01` block starting at ~line 886. Introduces `backend/app/db/models/impact.py` + an Alembic migration for the impact-assessment table (structured output of the impact analyst agent — see PRD §4 "For each relevant event"). Cross-reference the REL-01 model + migration pair for the portability patterns (`ARRAY(...).with_variant(JSON, "sqlite")`, conditional `auth.users` FK, unique constraint shape).
 
-Acceptance: `/api/news/relevant` must return in < 300ms with 10k clusters and 200 relevance rows for the user; cross-user isolation — a user must never see another user's rows.
+**Why skip REL-07 and DATA-06?** Both are frontend modules. The previous agents kept `v2/intelligence-agent` moving on the backend spine so the frontend can be tackled later against a stable API surface. Continue that pattern unless the user redirects.
 
-**Branch state:** relevance_scores are being populated end-to-end by the scheduler (ING-10 → REL-05 → REL-04 → REL-03/REL-02). Read schemas (`NewsClusterRead`, `RelevanceRead`) probably don't exist yet in `app/schemas/` — check before adding; if absent, add them alongside the routes rather than as a separate module.
+**Branch state:** REL-06 exposes `/api/news/relevant` (with `?limit=&since=` + active-portfolio scoping) and `/api/news/clusters/{id}` (with placeholder `impact: null` slot). IMP-01 fills that slot with a real schema.
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows REL-05 on top.
+- `git log --oneline -5` shows REL-06 on top.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **170 passed, 5 deselected**.
+- `cd backend && python -m pytest tests -q` reports **179 passed, 5 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute REL-05 — the fan-out worker that scores every newly-created/updated cluster against every active portfolio after each ingest cycle.
+- **Session goal:** Execute REL-06 — two FastAPI read endpoints over `relevance_scores`, active-portfolio-scoped, cross-user-safe.
 - **Completed:**
-  - `REL-05` ✅ — Fan-out worker.
-  - `backend/app/pipelines/relevance_fanout.py`:
-    - `FanoutSummary` dataclass — `tasks`, `cache_hits`, `prefilter_short_circuits`, `classifier_calls`, `errors`, `elapsed_seconds`, `cluster_ids`.
-    - `_discover_cluster_ids(session, since)` — `SELECT NewsCluster.id WHERE last_seen_at >= since`. This is the "created or updated in the last cycle" definition.
-    - `_active_portfolios(session)` — `(user_id, portfolio_id)` for every `Portfolio.is_active = True`.
-    - `_score_one(...)` — one (cluster, portfolio) task. Cheap pre-probe on `(cluster, user, portfolio)` to know whether the ensuing `score_cluster_for_user()` was a cache hit or a real invocation (used for stats + cost logging). Each task opens its OWN `AsyncSession` from the injected factory (async sessions aren't concurrency-safe).
-    - `run_fanout(*, session_factory, news_store, themes_store, embed, llm, cluster_ids=None, since=None, concurrency=10)` — exactly one of `cluster_ids` / `since` required. Discovers clusters + active portfolios once at the start, then groups tasks per cluster: for each cluster, `asyncio.gather()` over all portfolios under an `asyncio.Semaphore(concurrency)`. Emits a per-cluster `fanout_cluster` log line (with `est_tokens` cost estimate = `classifier_calls * 800`) and a terminal `fanout_done` line with aggregate counts + wall clock.
+  - `REL-06` ✅ — News endpoints.
+  - `backend/app/schemas/news.py`:
+    - Added `RelevanceRead` (mirrors the `RelevanceScore` model — `id`, `cluster_id`, `user_id`, `portfolio_id`, `score`, `touched_position_ids`, `touched_theme_ids`, `stage` (Literal['prefilter','classifier']), `rationale`, `computed_at`).
+    - `RelevantClusterRead` — `{cluster: NewsClusterRead, relevance: RelevanceRead}` for the feed.
+    - `ClusterDetailRead` — `{cluster, relevance | None, impact: Any = None}` for the detail endpoint. `impact` is `Any` for now; IMP-01 will tighten it to a real `ImpactRead` schema.
+  - `backend/app/routes/news.py`:
+    - `_active_portfolio(user_id, db)` — helper that returns the caller's active portfolio (or None).
+    - `GET /api/news/relevant?limit=&since=` — `limit ∈ [1, 100]` (default 20). SQL: `SELECT relevance_scores, news_clusters JOIN ON cluster_id WHERE user_id=? AND portfolio_id=? [AND last_seen_at >= since] ORDER BY score DESC, last_seen_at DESC LIMIT ?`. Uses the `idx_relevance_user_score` index. Empty list (200) when the caller has no active portfolio — legitimate onboarding state, not an error.
+    - `GET /api/news/clusters/{cluster_id}` — 404 for unknown cluster. Loads cluster + items (published_at DESC) + the caller's own relevance row (if any). Cross-user check: relevance query filters on `user_id = caller` AND `portfolio_id = caller's active pf`, so another user's row on the same cluster is invisible.
   - `backend/app/main.py`:
-    - The scheduler job that used to be `orchestrator.run` is now a wrapper `_ingest_and_fanout()` that captures `cycle_started = now`, runs the ingest, then calls `run_fanout(since=cycle_started, ...)`. Ingest failures don't skip fanout scheduling for future cycles (each is wrapped in its own try/except). The `EmbeddingClient`, `VectorStore("news_items")`, `VectorStore("themes")`, and `LLMClient()` are all constructed once at scheduler build and passed by reference.
-  - `backend/tests/pipelines/test_relevance_fanout.py`:
-    - `test_fanout_50_clusters_3_users_yields_at_most_150_rows_and_reruns_zero` — the literal BUILD acceptance. Runs to completion in ~10s on sqlite, well under the 5-minute bound. Second pass: `cache_hits=150`, LLM call count unchanged, `0` new rows.
-    - `test_fanout_since_window_only_scores_clusters_touched_after_since` — old cluster before boundary + fresh cluster after → only fresh is scored.
-    - `test_fanout_inactive_portfolios_are_skipped` — `is_active=False` portfolios don't count.
-    - `test_fanout_respects_concurrency_bound` — a tracking-LLM records the max in-flight `complete()` calls; with `concurrency=2` and 4 portfolios × 1 cluster, `max_in_flight <= 2`.
-    - `test_fanout_logs_per_cluster_cost_line` — a `fanout_cluster cluster=<id> ... est_tokens=<N>` line is emitted per cluster (acceptance: "Log per-cluster fan-out cost estimates").
-    - `test_fanout_requires_cluster_ids_or_since` — calling without either raises `ValueError`.
+    - Included `news_routes.router` alongside the existing routers.
+  - `backend/tests/routes/test_news.py`:
+    - `test_relevant_feed_orders_by_score_desc_then_last_seen_desc` — 3 clusters, verified tiebreak on `last_seen_at`.
+    - `test_relevant_feed_respects_limit_and_since` — `limit=3` returns 3 of 6; `since` filter with URL-encoded ISO datetime (via httpx `params=`) drops older clusters.
+    - `test_relevant_feed_excludes_other_users_rows` — shared cluster, Bob has a 0.99 row, Alice sees `[]`; after Alice adds her own row she sees only hers.
+    - `test_relevant_feed_uses_active_portfolio_only` — inactive portfolio's high-score row does not surface.
+    - `test_relevant_feed_with_no_active_portfolio_returns_empty` — no pf → `[]`.
+    - `test_cluster_detail_includes_items_and_caller_relevance` — items are newest-first; relevance body present; `impact` is null.
+    - `test_cluster_detail_relevance_is_null_when_caller_has_no_row` — no row for caller → `relevance: null`.
+    - `test_cluster_detail_never_exposes_another_users_relevance` — Bob has scored, Alice fetches → `relevance: null` (only Bob's row exists, and it's invisible).
+    - `test_cluster_detail_404_for_unknown_cluster` — random UUID → 404.
+  - Auth is stubbed via `app.dependency_overrides[require_auth]` — same pattern used by `tests/routes/test_portfolios.py`.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **170 passed, 5 deselected** (+6 new hermetic tests).
+  - `python -m pytest tests -q` → **179 passed, 5 deselected** (+9 new hermetic tests).
   - `ruff check .` clean.
-- **Files touched:** created `backend/app/pipelines/relevance_fanout.py`, `backend/tests/pipelines/test_relevance_fanout.py`. Modified `backend/app/main.py` (scheduler job wraps ingest+fanout), `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Files touched:** created `backend/app/routes/news.py`, `backend/tests/routes/test_news.py`. Modified `backend/app/schemas/news.py` (added 3 schemas), `backend/app/main.py` (router include), `BUILD.md` (tick), `HANDOFF.md` (this file).
 - **Migrations added:** none.
-- **Tests added:** 6 hermetic.
+- **Tests added:** 9 hermetic.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **"Created or updated in the last cycle" is defined as `NewsCluster.last_seen_at >= cycle_started`.** BUILD.md phrases it in plain English without naming a column; `last_seen_at` is the natural cluster-touched-timestamp (bumped whenever an item dedupes into the cluster).
-  - **`run_fanout` accepts either an explicit `cluster_ids` iterable or a `since` timestamp.** BUILD.md only mentions the "last cycle" flow; `cluster_ids` gives back-fill / manual re-scoring callers a clean entry, and tests use it to be deterministic. Exactly one must be supplied — a `ValueError` otherwise.
-  - **Cost is logged as `est_tokens` (integer, ≈ `classifier_calls × 800`), not `$`**. PRD §11.4 pins fast-tier free-tier at $0 marginal cost, so a dollar figure would always be 0. Token count is the meaningful operational signal.
-  - **Scheduler wiring changed.** The APScheduler job's callable moved from `orchestrator.run` to a nested `_ingest_and_fanout` wrapper in `main.py::_build_default_orchestrator`. Ingest and fanout are each wrapped in their own `try/except` so a failure in one doesn't kill the other. No test covers `main.py` directly (matches the existing pattern — orchestrator is tested via its own module).
+  - **Ordering is `score DESC, cluster.last_seen_at DESC` — not `published_at DESC`.** BUILD.md says `score DESC, published_at DESC` without naming the entity. `NewsCluster` has no `published_at`; the cluster-level freshness signal is `last_seen_at` (bumped when the newest item dedupes in). Joining to `news_items` just to sort would burn an index scan for no user-visible gain, so the sort is on `last_seen_at` at the cluster level. Same rule as REL-05's `since` window.
+  - **No active portfolio → `200 []`, not `404`.** BUILD.md doesn't spell out this edge case; empty list keeps the feed page renderable for a newly-signed-up user who hasn't set up a portfolio yet.
+  - **`ClusterDetailRead.impact` is typed `Any = None`** as a shape-stable placeholder. Once IMP-01 lands `ImpactRead`, tighten to `ImpactRead | None = None`.
+  - **The 300ms perf acceptance is not tested with a 10k-cluster corpus** — the hermetic sqlite suite would need seed fixtures that dwarf the test runtime. The `(user_id, score)` index from REL-01 and the LIMIT keep the query cheap; on Postgres with the index this is trivially sub-100ms. If we grow ops confidence bars later, add a `@pytest.mark.integration` corpus test that seeds 10k clusters + 200 rows and measures wall-clock.
 
 ---
 
 ## Environment state
 
-- Backend: full ingest → cluster → fan-out → relevance-score pipeline is wired in-process. The scheduler tick now populates `relevance_scores` autonomously.
+- Backend: full read stack over `relevance_scores` is live behind auth. Frontend can now render a personalized feed.
 - Frontend: unchanged.
-- Database: Alembic head `b8ef3a217c04`. No schema change in REL-05.
-- Vectors: unchanged (news_items + themes collections).
-- Tests: **170 hermetic, 5 opt-in.**
-- CI: last successful run on REL-02 (REL-03..REL-05 pending push through CI).
+- Database: Alembic head `b8ef3a217c04`. No schema change in REL-06.
+- Vectors: unchanged.
+- Tests: **179 hermetic, 5 opt-in.**
+- CI: REL-03..REL-06 pending push through CI.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** REL-06 wires the read side: two FastAPI endpoints over `relevance_scores` scoped to the caller's active portfolio.
+- **None.** IMP-01 introduces the `impact_assessments` table + Alembic migration — pattern-copy REL-01. If REL-07 (frontend news feed) turns out to block a demo before DATA-06 finishes, escalate to the user for scope reordering.
 
 ---
 
