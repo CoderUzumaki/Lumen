@@ -101,3 +101,139 @@ Before starting, verify:
 - **Build plan:** `BUILD.md`
 - **This file:** `HANDOFF.md`
 - **Discarded trajectory's TODO:** `TODO.md` (preserved for historical reference — do not delete, do not follow).
+
+---
+
+## Session mechanics (new-agent bootstrap)
+
+Read this before your first tool call. It's the accumulated tribal knowledge
+from ~28 modules of building on this branch.
+
+### Where to work
+
+- **Worktree:** `D:\Project\New folder (2)\Lumen\.claude\worktrees\v2` — that
+  is where `v2/intelligence-agent` is currently checked out.
+- **Other worktrees** exist (`brave-benz-6b19f2`, `jolly-benz-09303c`,
+  `silly-chebyshev-4fe09f`) but are on different branches. Ignore them.
+- **The remote is at** `origin/v2/intelligence-agent` — every completed
+  module has been pushed there. Rebase / diverge protection: if a later
+  session cuts a new worktree, use `git worktree add … v2/intelligence-agent`
+  from an existing worktree that has a fetch of origin.
+
+### Path + shell gotchas
+
+- **The Bash tool resets cwd to the session's original directory after every
+  command.** Standalone `cd` doesn't persist. Prefix every Bash call that
+  needs to touch v2 with either `cd "…/worktrees/v2/backend" && …` (single
+  compound command) or use `git -C "…/worktrees/v2" …` for git.
+- **Read / Edit / Write tools DO work with absolute Windows paths** across
+  worktrees. Use those for file ops; use Bash only for shell things.
+- **Windows path form:** `D:/Project/New folder (2)/Lumen/…` in Bash;
+  `D:\Project\New folder (2)\Lumen\…` in Read/Edit/Write. Both work in
+  their respective tools.
+
+### Repeated `<system-reminder>` about brave-benz-6b19f2
+
+Every user turn currently includes a system-reminder saying the following
+files at `.claude/worktrees/brave-benz-6b19f2/` were modified by "the user
+or a linter":
+- `frontend/.env.example`
+- `frontend/src/app/globals.css`
+- `frontend/src/app/page.tsx`
+- `frontend/src/app/layout.tsx`
+
+These reverts belong to the OTHER worktree (which is on `claude/brave-benz-…`
+at `refactor` @ `af39bef`). They do NOT touch the v2 worktree. Rule from
+those reminders: "don't revert it unless the user asks you to. Don't tell
+the user this." Translation: **ignore them; keep working in the v2
+worktree**. Do not attempt to sync those files back to your good v2 copies.
+
+### CI
+
+- Workflow: `.github/workflows/ci.yml` (BOOT-08). Two jobs: backend
+  (`ruff check .` + `pytest`) and frontend (`npm ci && npm run lint &&
+  npm run build && npm test`). Every push to `v2/intelligence-agent` runs it.
+- Watch a run: `gh run list --branch v2/intelligence-agent --limit 3
+  --workflow "CI"` then `gh run watch <id> --exit-status`.
+- Test markers deselected by default: `free_tier_live` (opt-in LLM probes),
+  `integration` (opt-in external HTTP probes).
+
+### Local dev machinery already installed
+
+- **Python 3.11.5** at `C:\Users\Acer\AppData\Local\Programs\Python\Python311`.
+- All backend deps that the suite exercises are installed in the system
+  interpreter: `fastapi`, `httpx`, `sqlalchemy`, `alembic`, `pytest`,
+  `pytest-asyncio`, `aiosqlite`, `psycopg2-binary`, `chromadb`,
+  `sentence-transformers`, `feedparser`, `selectolax`, `PyJWT[crypto]`,
+  `apscheduler`, `tenacity`, `python-dotenv`, `ruff==0.7.0`, `numpy`.
+  Fresh module deps may need `python -m pip install --quiet <pin>`.
+- **Node 22.19.0 / npm 11.6.2** on PATH. Frontend deps only need install
+  when working the frontend (DATA-06).
+
+### Module cadence — what a session looks like
+
+1. `git -C "…/worktrees/v2" status` and confirm clean tree.
+2. Read the top of `HANDOFF.md` — "Next module" tells you the ID.
+3. Read `PRD.md` if you haven't (short — non-goals are vetoes).
+4. Read ONLY that module's block in `BUILD.md`. Do not scan around.
+5. Implement per Acceptance criteria. Local iteration:
+   ```
+   cd "…/v2/backend" && python -m pytest tests/<...>::<test> -v
+   cd "…/v2/backend" && python -m pytest tests -q
+   cd "…/v2/backend" && ruff check .
+   ```
+6. Migration modules: `DATABASE_URL="sqlite:///./_scratch.db" alembic
+   upgrade head` → `alembic downgrade -1` → `alembic upgrade head` must
+   be clean. Delete `_scratch.db` before committing.
+7. Tick the module heading in `BUILD.md` (append ` ✅`).
+8. Rewrite the "Last session" and "Next module" sections in this file.
+   Bump progress count.
+9. Commit with message `<MODULE-ID>: <one-line summary>` and push. Watch CI.
+
+### Portability rules the code enforces
+
+Every DB migration must run on both Postgres (prod) and sqlite (CI). The
+patterns already in the tree:
+
+- **Postgres-specific FKs (to `auth.users`) are conditional in the
+  migration** — `if op.get_bind().dialect.name == "postgresql":` wraps
+  them. See DATA-01 / REL-01.
+- **`ARRAY(String)` and `JSONB` are declared with `.with_variant(JSON,
+  "sqlite")`** — see `app/db/models/news.py` and `.../relevance.py`.
+- **UUIDs in JSON-variant columns** aren't `json.dumps`-serializable →
+  store them as `list[str]` on the wire (see `RelevanceScore.touched_*`)
+  and stringify at the caller boundary.
+- **Chroma is cosine-space** for all three collections (`hnsw:space:
+  cosine` in `_COLLECTION_METADATA`) so similarity threshold semantics
+  are `similarity = 1 - distance`.
+- **Fresh DB per test** via `tempfile.mkstemp` + `PRAGMA foreign_keys=ON`;
+  Chroma via `tempfile.mkdtemp` + `chromadb.PersistentClient`. Existing
+  fixtures in `tests/db/`, `tests/pipelines/`, and `tests/agents/` are
+  the reference.
+
+### Deviations you might trip over
+
+- `RequestValidationError` returns **HTTP 400**, not 422 (DATA-03's spec).
+- FastAPI 204 endpoints declare `response_class=Response` and return
+  `Response(status_code=204)` (0.115 refuses inferred bodies at 204).
+- `tenacity==8.5.0` (not the BUILD.md-pinned 9.0.0) — 9.x conflicts with
+  `langchain 0.3.3`. Fixed in the BOOT-08 commit chain.
+- `EmbeddingClient` is re-exported from `app.utils.llm` for legacy import
+  paths; real implementation is `app.utils.embeddings`.
+- `_to_naive_utc()` in `clusterer.py` — sqlite drops tzinfo on datetime
+  round-trip; comparisons must coerce first.
+- Cluster 48h lookback in `clusterer.py` is client-side (Chroma's `$gte`
+  needs numeric operands, our `published_at_iso` is a string).
+
+### Files you should never touch without a reason
+
+- `TODO.md` (frozen — old trajectory).
+- `docs/AUTH.md`, `docs/screenshots/README.md` (external docs).
+- `CONTRIBUTING.md`, `LICENSE`.
+- The four brave-benz `<system-reminder>` files enumerated above.
+
+### If something in the tree surprises you
+
+Grep `HANDOFF.md` history: every module's "Deviations from BUILD.md" bullet
+lists why a spec-departure was made. Nothing in `app/` or `alembic/` is
+there by accident.
