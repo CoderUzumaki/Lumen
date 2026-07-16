@@ -821,7 +821,7 @@ Given a news cluster + a user's portfolio + themes, decide relevance. First Lang
   - LangSmith trace visible for each call.
 - **Depends on:** REL-02, BOOT-06.
 
-### REL-04 — Relevance graph (LangGraph)
+### REL-04 — Relevance graph (LangGraph) ✅
 
 - **Files:** `backend/app/agents/relevance/graph.py`.
 - **Action:** Compose prefilter + classifier as a LangGraph:
