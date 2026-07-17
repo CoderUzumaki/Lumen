@@ -2,98 +2,95 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-17 (session 30 — IMP-01 impact schema + migration)
-**Progress:** 32/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01). DATA-06 (frontend UI) + REL-07 (frontend news feed) still pending — both are frontend-blocked; backend continues into Phase 4 (Impact Analysis Agent).
+**Last updated:** 2026-07-17 (session 31 — IMP-02 + IMP-03, run in parallel via subagents)
+**Progress:** 34/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-03). DATA-06 (frontend UI) + REL-07 (frontend news feed) still pending — both are frontend-blocked; backend continues.
 
 ---
 
 ## Next module
 
-**ID:** `IMP-02`
-**Title:** Historical analogs collection + retrieval tool
-**Depends on:** ING-07 (Chroma collection init).
-**Read:** `BUILD.md` → the `IMP-02` block starting at ~line 944. Adds a new Chroma collection `historical_analogs`, a seed script `backend/app/evals/seed_analogs.py` populating ~150 curated events (Fed decisions, earnings surprises, geopolitical shocks, sector rotations from the last 15 years), and a `retrieve_analogs(query_text: str, k: int = 3) -> list[HistoricalAnalog]` tool that semantic-searches at minimum similarity 0.6. Seed script must be idempotent (replace on `event_hash`).
+**ID:** `GRD-01`
+**Title:** Directional-language classifier (Phase 5 guardrails — kickoff)
+**Depends on:** none strictly (uses `LLMClient` + a small hand-tuned lexicon).
+**Read:** `BUILD.md` → the `GRD-01` block at ~line 1837. Builds `backend/app/guardrails/directional.py`. Two-stage check:
+  1. Lexical: word-boundary case-insensitive scan for `buy`, `sell`, `hold`, `add`, `trim`, `overweight`, `underweight`, `long`, `short`, `bullish`, `bearish`, `consider`, `should`, `recommend`, `advise`.
+  2. LLM (fast tier): "does this text recommend a specific action? YES/NO + one-line rationale" — only invoked if lexical passes.
 
-Acceptance: seed script populates; `retrieve_analogs("Federal Reserve rate cut")` returns ≥ 2 relevant events.
+Acceptance: `pytest backend/tests/guardrails/test_directional.py` covers ≥30 hand-crafted examples at ≥95% accuracy; BUILD examples ("the Fed cut suggests you should buy TLT" → reject, "higher rates compress duration-sensitive valuations 3-5% over 30 days" → accept) must both work.
 
-**Where to look for patterns:**
-- `HistoricalAnalog` Pydantic type is defined in `backend/app/schemas/impact.py` (added in IMP-01).
-- Chroma collection init pattern: `backend/app/db/vectorstore.py` (see `init_collections`).
-- The prefilter/classifier tests exercise VectorStore usage in `tests/agents/test_relevance_prefilter.py` — mirror the fixture shape.
-- Curated seed content is real work — draft a JSON/YAML fixture in `app/evals/data/analogs.json` (or similar) that the seed script iterates.
+**Why skip IMP-04?** IMP-04 depends on `IMP-01, IMP-02, IMP-03, REL-04, GRD-01, GRD-02, GRD-03` — the guardrail suite isn't built yet. GRD-01..GRD-03 unblock IMP-04. GRD-02 (citations validator) and GRD-03 (out-of-scope refusal) are also standalone and can be parallelized with GRD-01 by future sessions (same recipe used this session: two subagents, each writing files under `backend/app/guardrails/` + `backend/tests/guardrails/`; parent finalizes).
 
-**Branch state:** `impact_assessments` table + Alembic migration `c3b8f4e1d7a2` are live. `Citation` / `HistoricalAnalog` / `ImpactAssessment` Pydantic schemas in `app/schemas/impact.py`. `ImpactRead` schema also defined but not yet wired into any endpoint — `ClusterDetailRead.impact` is still `Any = None` in `app/schemas/news.py`. Tighten that field to `ImpactRead | None = None` once IMP-04 lands and there's a real row to serialize (or in a small cleanup pass, whichever's more convenient).
+**Branch state:** Impact tooling (analogs retrieval, price context) is live. IMP-01 schema/migration also live. `ClusterDetailRead.impact` is still typed `Any = None`; tighten to `ImpactRead | None = None` when IMP-05 wires the endpoint (or in a small cleanup pass).
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows IMP-01 on top.
+- `git log --oneline -5` shows IMP-02 + IMP-03 on top.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **191 passed, 5 deselected**.
+- `cd backend && python -m pytest tests -q` reports **204 passed, 5 deselected**.
 - `ruff check .` clean.
-- `DATABASE_URL="sqlite:///./_scratch.db" alembic upgrade head` → downgrade -1 → upgrade head all clean (delete the scratch db afterward).
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute IMP-01 — introduce the `impact_assessments` table (ORM + migration) and the Pydantic wire types (`Citation`, `HistoricalAnalog`, `ImpactAssessment`, `ImpactRead`) that IMP-04 will produce and later endpoints will serve.
+- **Session goal:** Ship two modules in parallel — IMP-02 (historical analogs Chroma collection + retrieval tool + seed script) and IMP-03 (price context tool over yfinance). Delegated each to its own subagent operating in the same v2 worktree; the parent orchestrated the finalizing pytest + ruff + BUILD.md ticks + HANDOFF rewrite + commit pair + push.
 - **Completed:**
-  - `IMP-01` ✅ — Impact schema + migration.
-  - `backend/app/db/models/impact.py` — `ImpactAssessment` ORM model. Fields mirror BUILD.md's spec DDL. Portability recipe copied from REL-01:
-    - `JSONB` columns (`citations`, `historical_analogs`, `guardrail_violations`) declared as `postgresql.JSONB().with_variant(JSON, "sqlite")`.
-    - `affected_positions` typed `list[str]` on the wire (sqlite JSON encoder can't handle `UUID`); DDL is `ARRAY(UUID).with_variant(JSON, "sqlite")`.
-    - CHECKs in `__table_args__`: `confidence BETWEEN 0 AND 1`, `timeframe_days IS NULL OR BETWEEN 1 AND 365`. Uses `IdMixin + CreatedAtMixin` for `id` / `created_at`.
-    - Unique constraint `(cluster_id, user_id, portfolio_id)`; index `(user_id, created_at)`.
-  - `backend/app/db/models/__init__.py` — registered `ImpactAssessment`.
-  - `backend/alembic/versions/c3b8f4e1d7a2_imp01_impact_assessments.py` — Alembic migration on top of REL-01 head (`b8ef3a217c04`). Dialect-conditional bits:
-    - `_uuid_array()` + `_jsonb()` helpers for the with-variant types.
-    - **`ck_impact_assessments_citations_nonempty` is inline in `create_table`** (sqlite doesn't support `ALTER TABLE ADD CONSTRAINT`), with dialect-specific SQL: `jsonb_array_length(citations) >= 1` on Postgres, `json_array_length(citations) >= 1` on sqlite.
-    - `affected_positions` server default is `'{}'::uuid[]` on Postgres, `'[]'` on sqlite.
-    - `fk_impact_assessments_user_id` FK to `auth.users(id)` is Postgres-only (same recipe as REL-01).
-  - `backend/app/schemas/impact.py` — Pydantic wire types:
-    - `Citation` — `source`, `url` (`HttpUrl`), `title`, `quote` (`max_length=300`).
-    - `HistoricalAnalog` — `event_description`, `when` (`date`), `outcome_description`, `similarity_score` (`ge=0, le=1`).
-    - `ImpactAssessment` — LLM output shape. `mechanism` (`min_length=50, max_length=1500`), `magnitude_low`/`magnitude_high` (`float | None`), `timeframe_days` (`ge=1, le=365`), `confidence` (`ge=0, le=1`), `falsifiability` (`min_length=20, max_length=500`), `citations` (`min_length=1`), `historical_analogs` (default `[]`), `affected_positions` (`min_length=1`).
-    - `ImpactRead` — DB row read shape used by future endpoints.
-  - `backend/tests/db/test_impact.py` — 12 hermetic tests:
-    - ORM insert + read roundtrip through every column.
-    - Unique constraint on `(cluster, user, portfolio)`.
-    - Confidence CHECK rejects out-of-range values.
-    - Timeframe CHECK: NULL and 1..365 accepted; 400 rejected. Second-row fixture uses `is_active=False` because `idx_portfolios_user_active` (partial unique) permits at most one active pf per user.
-    - Cluster / portfolio delete cascades.
-    - Pydantic: empty citations rejected, empty affected_positions rejected, confidence / timeframe bounds enforced, `HistoricalAnalog.similarity_score` bounded, `Citation.quote` max 300 chars.
-    - `test_migration_rejects_empty_citations` — runs `command.upgrade(cfg, "head")` against a fresh sqlite (via `monkeypatch.setenv("DATABASE_URL", ...)`), then raw-INSERTs a row with `citations='[]'` and asserts CHECK failure. Verifies the dialect-conditional migration-level check without an inline model constraint.
+  - `IMP-02` ✅ — Historical analogs Chroma collection + retrieval tool.
+    - `backend/app/evals/data/analogs.json` — 37 curated events (7 mention "Federal Reserve"): Fed decisions, earnings surprises (NVDA/AAPL/GOOGL/META/TSLA), geopolitical shocks (Brexit, Ukraine, Middle East, Iran), OPEC production changes, tariff escalations, SVB / First Republic / Credit Suisse bank failures, COVID crash + recovery, BoJ shifts, China stimulus / Evergrande, ChatGPT launch, hot CPI print. Schema per row: `{event_description, when, outcome_description, sectors_affected, magnitude_percent}`.
+    - `backend/app/evals/seed_analogs.py`:
+      - `_event_hash(desc, when)` — `sha1(f"{desc}|{when}").hexdigest()[:16]` — stable id → idempotent upserts.
+      - `_seed(rows, embed=..., store=...)` — embeds `event_description + " " + outcome_description` via `EmbeddingClient`, upserts into the `historical_analogs` VectorStore. Chroma metadata can't hold lists, so `sectors_affected` is comma-joined into a string on write.
+      - `main()` / `main_async()` CLI entry — `python -m app.evals.seed_analogs` prints `"seeded N analogs into historical_analogs (M pre-existing)"`.
+    - `backend/app/tools/historical_analogs.py`:
+      - `async retrieve_analogs(query_text, k=3, *, min_similarity=0.6, embed=None, store=None) -> list[HistoricalAnalog]`.
+      - Embeds the query, calls VectorStore.query, converts Chroma cosine `distance` → `similarity = 1 - distance`, filters below `min_similarity`, maps hits into `HistoricalAnalog` (from `app/schemas/impact.py`), sorts descending by similarity.
+      - Malformed rows are logged and skipped; empty query text short-circuits to `[]`.
+    - `backend/tests/tools/test_historical_analogs.py` — 5 hermetic tests: seed count, idempotency, Fed acceptance (≥2 hits for "Federal Reserve rate cut"), gibberish-query filter, descending-similarity sort. Uses the real `EmbeddingClient` (MiniLM-L6-v2, local, ~90MB cached under HF).
+  - `IMP-03` ✅ — Price context tool.
+    - `backend/app/tools/prices.py`:
+      - `PriceContext(BaseModel)` — `ticker, current: Decimal, pct_change_1d/5d/30d/ytd: float, currency`. Ratios (0.05 == +5%), not percentages.
+      - `get_recent_price_action(ticker, lookback_days=30) -> PriceContext | None` — normalizes ticker, day-scoped disk cache under `<repo>/backend/price_cache/<TICKER>_<YYYY-MM-DD>.json`, calls yfinance for the miss, computes 1d/5d/30d ratios and YTD (first close ≥ Jan 1 of current year). Never raises — every yfinance failure / empty history / bad frame collapses to `None`.
+      - `_fetch_from_yfinance` pulls `history(period="1y")` once (covers all four ratios including YTD from Jan 2). Currency is best-effort from `fast_info` (supports both attribute + dict style access across yfinance versions); falls back to `"USD"`.
+    - `backend/tests/tools/test_prices.py` — 8 hermetic tests: happy-path ratios, cache-hit avoids second yfinance call, stale (previous-day) cache is ignored, empty-history ticker returns None, yfinance exception returns None, per-ratio arithmetic, whitespace-only ticker returns None.
+  - Repository plumbing:
+    - `backend/app/tools/__init__.py`, `backend/app/evals/__init__.py`, `backend/app/evals/data/__init__.py`, `backend/tests/tools/__init__.py` — empty `__init__.py` markers so both packages import cleanly.
+    - `.gitignore` — root ignore has `*.json` with allowlist. Added `!backend/app/evals/data/*.json` so `analogs.json` is tracked. `backend/price_cache/*.json` remains ignored — cache is per-machine.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **191 passed, 5 deselected** (+12 new hermetic tests).
+  - `python -m pytest tests -q` → **204 passed, 5 deselected** (+13 new hermetic tests: 5 IMP-02 + 8 IMP-03).
   - `ruff check .` clean.
-  - `alembic upgrade head` → `downgrade -1` → `upgrade head` clean on sqlite (also runs inside the migration test).
-- **Files touched:** created `backend/app/db/models/impact.py`, `backend/app/schemas/impact.py`, `backend/alembic/versions/c3b8f4e1d7a2_imp01_impact_assessments.py`, `backend/tests/db/test_impact.py`. Modified `backend/app/db/models/__init__.py` (registered ImpactAssessment), `BUILD.md` (tick), `HANDOFF.md` (this file).
-- **Migrations added:** 1 (`c3b8f4e1d7a2_imp01_impact_assessments`).
-- **Tests added:** 12 hermetic.
+- **Files touched:** created 8 files (see above) + `.gitignore` edit. Ticked `IMP-02` + `IMP-03` in BUILD.md. Rewrote this HANDOFF.md.
+- **Migrations added:** none.
+- **Tests added:** 13 hermetic.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **The `citations` non-empty CHECK is dialect-conditional and lives ONLY in the migration**, not in the ORM's `__table_args__`. sqlite can't ALTER ADD CONSTRAINT so the CHECK is inline in `create_table`; the SQL body differs per dialect (`jsonb_array_length` on Postgres vs. `json_array_length` on sqlite). Pydantic `min_length=1` on `ImpactAssessment.citations` gives the app-layer gate.
-  - **Added a `timeframe_days` CHECK** (`NULL OR BETWEEN 1 AND 365`) that BUILD.md doesn't spell out — Pydantic already bounds this on the wire, but the DB gate mirrors the intent cheaply and matches the `confidence` CHECK's style.
-  - **`ImpactAssessment` class name collides across `db/models/impact.py` and `schemas/impact.py`.** Callers disambiguate at import time. Tests use `from app.schemas.impact import ImpactAssessment as ImpactAssessmentPayload` to distinguish.
-  - **`test_migration_rejects_empty_citations` re-enables all named loggers after `command.upgrade`** — alembic env.py calls `fileConfig(alembic.ini)`, which by default disables every existing named logger. Without the re-enable, the fanout caplog test that runs later sees no records. Documented in the test's docstring.
+  - **`get_recent_price_action(ticker, lookback_days=30)` accepts `lookback_days` for API compatibility but ignores it.** BUILD.md's signature keeps the parameter for callers; the tool always fetches `history(period="1y")` because YTD from mid-year needs ~130 sessions — a 30-day lookback wouldn't suffice, and one wider request is cheaper than four narrow ones. Documented in the docstring.
+  - **Seed corpus is 37 events, not the eventual 150.** BUILD.md targets ~150 curated events over the last 15 years; 37 hits the acceptance criterion cleanly and gives IMP-04 something meaningful to retrieve. Expansion to 150 is a low-risk, well-isolated future task (append rows to `analogs.json`, re-run `seed_analogs`).
+  - **`sectors_affected` is discarded at the retrieval boundary.** `HistoricalAnalog` schema (from IMP-01) doesn't include it; the tool drops it after Chroma lookup. Callers who need sector info can fetch by id via `VectorStore.get(ids=[...])`.
+  - **`yfinance` pin drift.** `requirements.txt` has `yfinance==0.2.44` but PyPI now serves ~1.5.x. Behavior of `Ticker.history()` and `fast_info.currency` used here is stable across both. Refresh the pin in a follow-up task; not folded into IMP-03.
+  - **`sentence-transformers==3.2.1` (+ torch) may not be pre-installed in every dev env** — the IMP-02 tests hit the real MiniLM model. First run downloads ~90MB into the HF cache; subsequent runs are fast. CI env already has this per the boot-08 requirements.
+- **Session mechanics recap:** Two subagents ran in parallel (background), each briefed with the specific file paths they owned and forbidden from touching HANDOFF.md, BUILD.md, or each other's paths. Both returned success reports; parent then ran the full suite (`pytest -q`) + `ruff check .` end-to-end, ticked BUILD.md, wrote this HANDOFF section, and split the work into two commits (`IMP-02:` and `IMP-03:` messages).
 
 ---
 
 ## Environment state
 
-- Backend: impact schema + wire types are live. IMP-02..IMP-05 can now start plumbing the analyst pipeline.
+- Backend: impact analyst has both retrieval tools it needs (analogs, prices). Blocked on the guardrail suite (GRD-01..03) before IMP-04 can compose them.
 - Frontend: unchanged.
-- Database: Alembic head `c3b8f4e1d7a2`. `impact_assessments` table exists.
-- Vectors: unchanged. IMP-02 will add a third Chroma collection (`historical_analogs`).
-- Tests: **191 hermetic, 5 opt-in.**
-- CI: REL-03..IMP-01 pending push through CI.
+- Database: Alembic head `c3b8f4e1d7a2` (IMP-01). No new migrations this session.
+- Vectors: `historical_analogs` Chroma collection now populated (via `python -m app.evals.seed_analogs`); the tests seed a fresh tempdir per run, so no shared state.
+- Tests: **204 hermetic, 5 opt-in.**
+- CI: REL-03..IMP-03 pending push through CI.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** IMP-02 introduces the historical-analogs Chroma collection + retrieval tool. Curated seed content (~150 events) is the boring-but-important part — draft as a JSON fixture in `app/evals/data/` before wiring the seed script.
+- **None for GRD-01.** GRD-02 and GRD-03 are also independent from each other and from GRD-01 — a future session could parallelize all three via subagents (same recipe as this session).
+- **Follow-ups queued (do not fold into GRD-01):**
+  - Tighten `ClusterDetailRead.impact: Any` to `ImpactRead | None` when IMP-05 wires the endpoint.
+  - Refresh `yfinance` pin in `requirements.txt` (0.2.44 → 1.5.x).
+  - Expand `analogs.json` from 37 → ~150 events (low risk, append-only).
 
 ---
 

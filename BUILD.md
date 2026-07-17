@@ -941,7 +941,7 @@ The core AI-engineering showcase: multi-step reasoning agent that turns a releva
 - **Acceptance:** migration clean; `citations` must be non-empty (JSON schema check via CHECK constraint on jsonb length).
 - **Depends on:** REL-01.
 
-### IMP-02 — Historical analogs collection + retrieval tool
+### IMP-02 — Historical analogs collection + retrieval tool ✅
 
 - **Files:** `backend/app/tools/historical_analogs.py`, seed script `backend/app/evals/seed_analogs.py`.
 - **Action:**
@@ -953,7 +953,7 @@ The core AI-engineering showcase: multi-step reasoning agent that turns a releva
   - `retrieve_analogs("Federal Reserve rate cut")` returns ≥ 2 relevant historical events.
 - **Depends on:** ING-07.
 
-### IMP-03 — Price context tool
+### IMP-03 — Price context tool ✅
 
 - **Files:** `backend/app/tools/prices.py`.
 - **Action:** Tool `get_recent_price_action(ticker: str, lookback_days: int = 30) -> PriceContext`. Uses `yfinance` (offline-friendly with a small file cache under `/app/price_cache/`). Returns:
