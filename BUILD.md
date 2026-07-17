@@ -883,7 +883,7 @@ Given a news cluster + a user's portfolio + themes, decide relevance. First Lang
 
 The core AI-engineering showcase: multi-step reasoning agent that turns a relevant news cluster into a cited, structured impact assessment.
 
-### IMP-01 — Impact schema + migration
+### IMP-01 — Impact schema + migration ✅
 
 - **Files:** `backend/app/db/models/impact.py`, migration.
 - **Action:**

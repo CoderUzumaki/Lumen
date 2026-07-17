@@ -2,87 +2,98 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-17 (session 29 — REL-06 news read endpoints)
-**Progress:** 31/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06). DATA-06 (frontend UI) + REL-07 (frontend news feed) still pending — both are frontend-blocked; backend continues into Phase 4 (Impact Analysis Agent).
+**Last updated:** 2026-07-17 (session 30 — IMP-01 impact schema + migration)
+**Progress:** 32/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01). DATA-06 (frontend UI) + REL-07 (frontend news feed) still pending — both are frontend-blocked; backend continues into Phase 4 (Impact Analysis Agent).
 
 ---
 
 ## Next module
 
-**ID:** `IMP-01`
-**Title:** Impact schema + migration
-**Depends on:** DATA-01 (auth.users FK pattern), REL-01 (relevance_scores table pattern).
-**Read:** `BUILD.md` → the `IMP-01` block starting at ~line 886. Introduces `backend/app/db/models/impact.py` + an Alembic migration for the impact-assessment table (structured output of the impact analyst agent — see PRD §4 "For each relevant event"). Cross-reference the REL-01 model + migration pair for the portability patterns (`ARRAY(...).with_variant(JSON, "sqlite")`, conditional `auth.users` FK, unique constraint shape).
+**ID:** `IMP-02`
+**Title:** Historical analogs collection + retrieval tool
+**Depends on:** ING-07 (Chroma collection init).
+**Read:** `BUILD.md` → the `IMP-02` block starting at ~line 944. Adds a new Chroma collection `historical_analogs`, a seed script `backend/app/evals/seed_analogs.py` populating ~150 curated events (Fed decisions, earnings surprises, geopolitical shocks, sector rotations from the last 15 years), and a `retrieve_analogs(query_text: str, k: int = 3) -> list[HistoricalAnalog]` tool that semantic-searches at minimum similarity 0.6. Seed script must be idempotent (replace on `event_hash`).
 
-**Why skip REL-07 and DATA-06?** Both are frontend modules. The previous agents kept `v2/intelligence-agent` moving on the backend spine so the frontend can be tackled later against a stable API surface. Continue that pattern unless the user redirects.
+Acceptance: seed script populates; `retrieve_analogs("Federal Reserve rate cut")` returns ≥ 2 relevant events.
 
-**Branch state:** REL-06 exposes `/api/news/relevant` (with `?limit=&since=` + active-portfolio scoping) and `/api/news/clusters/{id}` (with placeholder `impact: null` slot). IMP-01 fills that slot with a real schema.
+**Where to look for patterns:**
+- `HistoricalAnalog` Pydantic type is defined in `backend/app/schemas/impact.py` (added in IMP-01).
+- Chroma collection init pattern: `backend/app/db/vectorstore.py` (see `init_collections`).
+- The prefilter/classifier tests exercise VectorStore usage in `tests/agents/test_relevance_prefilter.py` — mirror the fixture shape.
+- Curated seed content is real work — draft a JSON/YAML fixture in `app/evals/data/analogs.json` (or similar) that the seed script iterates.
+
+**Branch state:** `impact_assessments` table + Alembic migration `c3b8f4e1d7a2` are live. `Citation` / `HistoricalAnalog` / `ImpactAssessment` Pydantic schemas in `app/schemas/impact.py`. `ImpactRead` schema also defined but not yet wired into any endpoint — `ClusterDetailRead.impact` is still `Any = None` in `app/schemas/news.py`. Tighten that field to `ImpactRead | None = None` once IMP-04 lands and there's a real row to serialize (or in a small cleanup pass, whichever's more convenient).
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows REL-06 on top.
+- `git log --oneline -5` shows IMP-01 on top.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **179 passed, 5 deselected**.
+- `cd backend && python -m pytest tests -q` reports **191 passed, 5 deselected**.
 - `ruff check .` clean.
+- `DATABASE_URL="sqlite:///./_scratch.db" alembic upgrade head` → downgrade -1 → upgrade head all clean (delete the scratch db afterward).
 
 ---
 
 ## Last session
 
-- **Session goal:** Execute REL-06 — two FastAPI read endpoints over `relevance_scores`, active-portfolio-scoped, cross-user-safe.
+- **Session goal:** Execute IMP-01 — introduce the `impact_assessments` table (ORM + migration) and the Pydantic wire types (`Citation`, `HistoricalAnalog`, `ImpactAssessment`, `ImpactRead`) that IMP-04 will produce and later endpoints will serve.
 - **Completed:**
-  - `REL-06` ✅ — News endpoints.
-  - `backend/app/schemas/news.py`:
-    - Added `RelevanceRead` (mirrors the `RelevanceScore` model — `id`, `cluster_id`, `user_id`, `portfolio_id`, `score`, `touched_position_ids`, `touched_theme_ids`, `stage` (Literal['prefilter','classifier']), `rationale`, `computed_at`).
-    - `RelevantClusterRead` — `{cluster: NewsClusterRead, relevance: RelevanceRead}` for the feed.
-    - `ClusterDetailRead` — `{cluster, relevance | None, impact: Any = None}` for the detail endpoint. `impact` is `Any` for now; IMP-01 will tighten it to a real `ImpactRead` schema.
-  - `backend/app/routes/news.py`:
-    - `_active_portfolio(user_id, db)` — helper that returns the caller's active portfolio (or None).
-    - `GET /api/news/relevant?limit=&since=` — `limit ∈ [1, 100]` (default 20). SQL: `SELECT relevance_scores, news_clusters JOIN ON cluster_id WHERE user_id=? AND portfolio_id=? [AND last_seen_at >= since] ORDER BY score DESC, last_seen_at DESC LIMIT ?`. Uses the `idx_relevance_user_score` index. Empty list (200) when the caller has no active portfolio — legitimate onboarding state, not an error.
-    - `GET /api/news/clusters/{cluster_id}` — 404 for unknown cluster. Loads cluster + items (published_at DESC) + the caller's own relevance row (if any). Cross-user check: relevance query filters on `user_id = caller` AND `portfolio_id = caller's active pf`, so another user's row on the same cluster is invisible.
-  - `backend/app/main.py`:
-    - Included `news_routes.router` alongside the existing routers.
-  - `backend/tests/routes/test_news.py`:
-    - `test_relevant_feed_orders_by_score_desc_then_last_seen_desc` — 3 clusters, verified tiebreak on `last_seen_at`.
-    - `test_relevant_feed_respects_limit_and_since` — `limit=3` returns 3 of 6; `since` filter with URL-encoded ISO datetime (via httpx `params=`) drops older clusters.
-    - `test_relevant_feed_excludes_other_users_rows` — shared cluster, Bob has a 0.99 row, Alice sees `[]`; after Alice adds her own row she sees only hers.
-    - `test_relevant_feed_uses_active_portfolio_only` — inactive portfolio's high-score row does not surface.
-    - `test_relevant_feed_with_no_active_portfolio_returns_empty` — no pf → `[]`.
-    - `test_cluster_detail_includes_items_and_caller_relevance` — items are newest-first; relevance body present; `impact` is null.
-    - `test_cluster_detail_relevance_is_null_when_caller_has_no_row` — no row for caller → `relevance: null`.
-    - `test_cluster_detail_never_exposes_another_users_relevance` — Bob has scored, Alice fetches → `relevance: null` (only Bob's row exists, and it's invisible).
-    - `test_cluster_detail_404_for_unknown_cluster` — random UUID → 404.
-  - Auth is stubbed via `app.dependency_overrides[require_auth]` — same pattern used by `tests/routes/test_portfolios.py`.
+  - `IMP-01` ✅ — Impact schema + migration.
+  - `backend/app/db/models/impact.py` — `ImpactAssessment` ORM model. Fields mirror BUILD.md's spec DDL. Portability recipe copied from REL-01:
+    - `JSONB` columns (`citations`, `historical_analogs`, `guardrail_violations`) declared as `postgresql.JSONB().with_variant(JSON, "sqlite")`.
+    - `affected_positions` typed `list[str]` on the wire (sqlite JSON encoder can't handle `UUID`); DDL is `ARRAY(UUID).with_variant(JSON, "sqlite")`.
+    - CHECKs in `__table_args__`: `confidence BETWEEN 0 AND 1`, `timeframe_days IS NULL OR BETWEEN 1 AND 365`. Uses `IdMixin + CreatedAtMixin` for `id` / `created_at`.
+    - Unique constraint `(cluster_id, user_id, portfolio_id)`; index `(user_id, created_at)`.
+  - `backend/app/db/models/__init__.py` — registered `ImpactAssessment`.
+  - `backend/alembic/versions/c3b8f4e1d7a2_imp01_impact_assessments.py` — Alembic migration on top of REL-01 head (`b8ef3a217c04`). Dialect-conditional bits:
+    - `_uuid_array()` + `_jsonb()` helpers for the with-variant types.
+    - **`ck_impact_assessments_citations_nonempty` is inline in `create_table`** (sqlite doesn't support `ALTER TABLE ADD CONSTRAINT`), with dialect-specific SQL: `jsonb_array_length(citations) >= 1` on Postgres, `json_array_length(citations) >= 1` on sqlite.
+    - `affected_positions` server default is `'{}'::uuid[]` on Postgres, `'[]'` on sqlite.
+    - `fk_impact_assessments_user_id` FK to `auth.users(id)` is Postgres-only (same recipe as REL-01).
+  - `backend/app/schemas/impact.py` — Pydantic wire types:
+    - `Citation` — `source`, `url` (`HttpUrl`), `title`, `quote` (`max_length=300`).
+    - `HistoricalAnalog` — `event_description`, `when` (`date`), `outcome_description`, `similarity_score` (`ge=0, le=1`).
+    - `ImpactAssessment` — LLM output shape. `mechanism` (`min_length=50, max_length=1500`), `magnitude_low`/`magnitude_high` (`float | None`), `timeframe_days` (`ge=1, le=365`), `confidence` (`ge=0, le=1`), `falsifiability` (`min_length=20, max_length=500`), `citations` (`min_length=1`), `historical_analogs` (default `[]`), `affected_positions` (`min_length=1`).
+    - `ImpactRead` — DB row read shape used by future endpoints.
+  - `backend/tests/db/test_impact.py` — 12 hermetic tests:
+    - ORM insert + read roundtrip through every column.
+    - Unique constraint on `(cluster, user, portfolio)`.
+    - Confidence CHECK rejects out-of-range values.
+    - Timeframe CHECK: NULL and 1..365 accepted; 400 rejected. Second-row fixture uses `is_active=False` because `idx_portfolios_user_active` (partial unique) permits at most one active pf per user.
+    - Cluster / portfolio delete cascades.
+    - Pydantic: empty citations rejected, empty affected_positions rejected, confidence / timeframe bounds enforced, `HistoricalAnalog.similarity_score` bounded, `Citation.quote` max 300 chars.
+    - `test_migration_rejects_empty_citations` — runs `command.upgrade(cfg, "head")` against a fresh sqlite (via `monkeypatch.setenv("DATABASE_URL", ...)`), then raw-INSERTs a row with `citations='[]'` and asserts CHECK failure. Verifies the dialect-conditional migration-level check without an inline model constraint.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **179 passed, 5 deselected** (+9 new hermetic tests).
+  - `python -m pytest tests -q` → **191 passed, 5 deselected** (+12 new hermetic tests).
   - `ruff check .` clean.
-- **Files touched:** created `backend/app/routes/news.py`, `backend/tests/routes/test_news.py`. Modified `backend/app/schemas/news.py` (added 3 schemas), `backend/app/main.py` (router include), `BUILD.md` (tick), `HANDOFF.md` (this file).
-- **Migrations added:** none.
-- **Tests added:** 9 hermetic.
+  - `alembic upgrade head` → `downgrade -1` → `upgrade head` clean on sqlite (also runs inside the migration test).
+- **Files touched:** created `backend/app/db/models/impact.py`, `backend/app/schemas/impact.py`, `backend/alembic/versions/c3b8f4e1d7a2_imp01_impact_assessments.py`, `backend/tests/db/test_impact.py`. Modified `backend/app/db/models/__init__.py` (registered ImpactAssessment), `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Migrations added:** 1 (`c3b8f4e1d7a2_imp01_impact_assessments`).
+- **Tests added:** 12 hermetic.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **Ordering is `score DESC, cluster.last_seen_at DESC` — not `published_at DESC`.** BUILD.md says `score DESC, published_at DESC` without naming the entity. `NewsCluster` has no `published_at`; the cluster-level freshness signal is `last_seen_at` (bumped when the newest item dedupes in). Joining to `news_items` just to sort would burn an index scan for no user-visible gain, so the sort is on `last_seen_at` at the cluster level. Same rule as REL-05's `since` window.
-  - **No active portfolio → `200 []`, not `404`.** BUILD.md doesn't spell out this edge case; empty list keeps the feed page renderable for a newly-signed-up user who hasn't set up a portfolio yet.
-  - **`ClusterDetailRead.impact` is typed `Any = None`** as a shape-stable placeholder. Once IMP-01 lands `ImpactRead`, tighten to `ImpactRead | None = None`.
-  - **The 300ms perf acceptance is not tested with a 10k-cluster corpus** — the hermetic sqlite suite would need seed fixtures that dwarf the test runtime. The `(user_id, score)` index from REL-01 and the LIMIT keep the query cheap; on Postgres with the index this is trivially sub-100ms. If we grow ops confidence bars later, add a `@pytest.mark.integration` corpus test that seeds 10k clusters + 200 rows and measures wall-clock.
+  - **The `citations` non-empty CHECK is dialect-conditional and lives ONLY in the migration**, not in the ORM's `__table_args__`. sqlite can't ALTER ADD CONSTRAINT so the CHECK is inline in `create_table`; the SQL body differs per dialect (`jsonb_array_length` on Postgres vs. `json_array_length` on sqlite). Pydantic `min_length=1` on `ImpactAssessment.citations` gives the app-layer gate.
+  - **Added a `timeframe_days` CHECK** (`NULL OR BETWEEN 1 AND 365`) that BUILD.md doesn't spell out — Pydantic already bounds this on the wire, but the DB gate mirrors the intent cheaply and matches the `confidence` CHECK's style.
+  - **`ImpactAssessment` class name collides across `db/models/impact.py` and `schemas/impact.py`.** Callers disambiguate at import time. Tests use `from app.schemas.impact import ImpactAssessment as ImpactAssessmentPayload` to distinguish.
+  - **`test_migration_rejects_empty_citations` re-enables all named loggers after `command.upgrade`** — alembic env.py calls `fileConfig(alembic.ini)`, which by default disables every existing named logger. Without the re-enable, the fanout caplog test that runs later sees no records. Documented in the test's docstring.
 
 ---
 
 ## Environment state
 
-- Backend: full read stack over `relevance_scores` is live behind auth. Frontend can now render a personalized feed.
+- Backend: impact schema + wire types are live. IMP-02..IMP-05 can now start plumbing the analyst pipeline.
 - Frontend: unchanged.
-- Database: Alembic head `b8ef3a217c04`. No schema change in REL-06.
-- Vectors: unchanged.
-- Tests: **179 hermetic, 5 opt-in.**
-- CI: REL-03..REL-06 pending push through CI.
+- Database: Alembic head `c3b8f4e1d7a2`. `impact_assessments` table exists.
+- Vectors: unchanged. IMP-02 will add a third Chroma collection (`historical_analogs`).
+- Tests: **191 hermetic, 5 opt-in.**
+- CI: REL-03..IMP-01 pending push through CI.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None.** IMP-01 introduces the `impact_assessments` table + Alembic migration — pattern-copy REL-01. If REL-07 (frontend news feed) turns out to block a demo before DATA-06 finishes, escalate to the user for scope reordering.
+- **None.** IMP-02 introduces the historical-analogs Chroma collection + retrieval tool. Curated seed content (~150 events) is the boring-but-important part — draft as a JSON fixture in `app/evals/data/` before wiring the seed script.
 
 ---
 
