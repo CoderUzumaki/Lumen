@@ -1,0 +1,261 @@
+[
+  {
+    "event_description": "Federal Reserve cuts rates by 50bps in emergency response to COVID market stress",
+    "when": "2020-03-03",
+    "outcome_description": "SPX rallied briefly then resumed its slide, losing over 20% in the following two weeks as pandemic scale became clear.",
+    "sectors_affected": ["equities", "rates", "credit"],
+    "magnitude_percent": -20.0
+  },
+  {
+    "event_description": "Federal Reserve emergency 100bps rate cut and QE restart as COVID pandemic disrupts global markets",
+    "when": "2020-03-15",
+    "outcome_description": "Markets initially sold off another 12% before stabilizing as fiscal stimulus arrived; ultimately marked the reflation bottom.",
+    "sectors_affected": ["equities", "rates", "credit", "usd"],
+    "magnitude_percent": -12.0
+  },
+  {
+    "event_description": "Federal Reserve raises rates by 75bps, largest hike since 1994, to combat surging inflation",
+    "when": "2022-06-15",
+    "outcome_description": "SPX fell roughly 6% over the following week; growth stocks led the decline as discount rates jumped.",
+    "sectors_affected": ["equities", "rates", "tech", "housing"],
+    "magnitude_percent": -6.0
+  },
+  {
+    "event_description": "Federal Reserve delivers fourth consecutive 75bps rate hike, signals higher terminal rate",
+    "when": "2022-11-02",
+    "outcome_description": "SPX dropped 2.5% on the day and small-caps underperformed as recession odds re-priced higher.",
+    "sectors_affected": ["equities", "rates", "small-caps"],
+    "magnitude_percent": -2.5
+  },
+  {
+    "event_description": "Federal Reserve pauses rate hikes for first time in 15 months, holds Fed Funds at 5.25%",
+    "when": "2023-06-14",
+    "outcome_description": "Equities finished flat as the hawkish dot plot offset the pause; 2Y yields jumped 10bps.",
+    "sectors_affected": ["equities", "rates", "usd"],
+    "magnitude_percent": 0.0
+  },
+  {
+    "event_description": "Federal Reserve delivers 50bps rate cut, first cut of the easing cycle after inflation cooled",
+    "when": "2024-09-18",
+    "outcome_description": "SPX gained 1.7% next session and small-caps outperformed by 200bps; USD softened against DXY basket.",
+    "sectors_affected": ["equities", "rates", "small-caps", "usd"],
+    "magnitude_percent": 1.7
+  },
+  {
+    "event_description": "Federal Reserve raises rates by 25bps and signals possible pause amid banking stress",
+    "when": "2023-05-03",
+    "outcome_description": "SPX fell 0.7% while regional banks declined further; short-end yields dropped as cuts were priced in.",
+    "sectors_affected": ["equities", "banks", "rates"],
+    "magnitude_percent": -0.7
+  },
+  {
+    "event_description": "NVIDIA reports Q2 FY24 revenue of $13.5B, doubling YoY on AI GPU demand, guides $16B next quarter",
+    "when": "2023-08-23",
+    "outcome_description": "NVDA rose 6% after hours; broader AI infrastructure names (AMD, AVGO, TSMC) rallied 3-5% the next session.",
+    "sectors_affected": ["tech", "semiconductors", "ai"],
+    "magnitude_percent": 6.0
+  },
+  {
+    "event_description": "NVIDIA guides Q1 revenue $11B versus $7B consensus, citing generative AI inflection",
+    "when": "2023-05-24",
+    "outcome_description": "NVDA jumped 24% next session, adding $200B in market cap; semiconductor ETF SMH gained 7%.",
+    "sectors_affected": ["tech", "semiconductors", "ai"],
+    "magnitude_percent": 24.0
+  },
+  {
+    "event_description": "NVIDIA reports Q3 FY25 earnings beat but guides Q4 gross margin compression from Blackwell ramp",
+    "when": "2024-11-20",
+    "outcome_description": "NVDA fell 2.5% after hours despite beating; semiconductor peers were mixed the following day.",
+    "sectors_affected": ["tech", "semiconductors", "ai"],
+    "magnitude_percent": -2.5
+  },
+  {
+    "event_description": "Apple reports iPhone revenue decline of 10% YoY in Greater China amid Huawei competition",
+    "when": "2024-02-01",
+    "outcome_description": "AAPL fell 2% next session; supply chain names in Asia declined 3-5% over the week.",
+    "sectors_affected": ["tech", "consumer", "china"],
+    "magnitude_percent": -2.0
+  },
+  {
+    "event_description": "Apple unveils Vision Pro headset at WWDC, priced at $3499, ships early 2024",
+    "when": "2023-06-05",
+    "outcome_description": "AAPL closed roughly flat as investors questioned the addressable market; adjacent VR names traded sideways.",
+    "sectors_affected": ["tech", "consumer"],
+    "magnitude_percent": 0.0
+  },
+  {
+    "event_description": "Google Alphabet Q4 cloud revenue misses expectations, ad growth decelerates",
+    "when": "2024-01-30",
+    "outcome_description": "GOOGL fell 7% after hours; other cloud hyperscaler names (MSFT, AMZN) declined 1-2% the next day.",
+    "sectors_affected": ["tech", "internet", "cloud"],
+    "magnitude_percent": -7.0
+  },
+  {
+    "event_description": "Google demonstrates Bard AI chatbot with factual error in launch video, ceding ground to Microsoft OpenAI",
+    "when": "2023-02-08",
+    "outcome_description": "GOOGL lost $100B in market cap that day (-7.5%); MSFT gained 1.5% on OpenAI investment narrative.",
+    "sectors_affected": ["tech", "ai", "internet"],
+    "magnitude_percent": -7.5
+  },
+  {
+    "event_description": "United Kingdom votes to leave European Union in Brexit referendum",
+    "when": "2016-06-23",
+    "outcome_description": "GBP crashed 8% overnight to 30-year lows; FTSE 250 fell 7% next session; global risk assets sold off before recovering within weeks.",
+    "sectors_affected": ["fx", "equities", "european-banks", "rates"],
+    "magnitude_percent": -8.0
+  },
+  {
+    "event_description": "Russia invades Ukraine, launching full-scale military operation",
+    "when": "2022-02-24",
+    "outcome_description": "Brent crude spiked above $100, European gas prices doubled; SPX fell 2.5% intraday before recovering; RUB collapsed.",
+    "sectors_affected": ["oil", "gas", "defense", "equities", "fx"],
+    "magnitude_percent": 15.0
+  },
+  {
+    "event_description": "Hamas attacks Israel triggering war in Gaza, raising Middle East escalation risk",
+    "when": "2023-10-07",
+    "outcome_description": "Oil rose 4% Monday; defense stocks (LMT, RTX, NOC) gained 5-10% over the week; gold rallied 3%.",
+    "sectors_affected": ["oil", "defense", "gold", "equities"],
+    "magnitude_percent": 4.0
+  },
+  {
+    "event_description": "Iran launches drone and missile attack on Israel, first direct military strike from Iranian soil",
+    "when": "2024-04-13",
+    "outcome_description": "Oil opened up 2% Monday but faded as attack was largely intercepted; equities recovered by mid-week.",
+    "sectors_affected": ["oil", "defense", "equities"],
+    "magnitude_percent": 2.0
+  },
+  {
+    "event_description": "OPEC+ announces surprise 1.16 million barrel per day production cut ahead of expectations",
+    "when": "2023-04-02",
+    "outcome_description": "Brent gapped up 6% Monday; energy sector (XLE) rose 4%; airlines and transports weakened on cost pressure.",
+    "sectors_affected": ["oil", "energy", "airlines", "transports"],
+    "magnitude_percent": 6.0
+  },
+  {
+    "event_description": "OPEC+ extends voluntary output cuts of 2.2 million barrels per day through Q2 2024",
+    "when": "2024-03-03",
+    "outcome_description": "Brent gained 2% on the announcement but drifted lower over the following weeks as demand concerns dominated.",
+    "sectors_affected": ["oil", "energy"],
+    "magnitude_percent": 2.0
+  },
+  {
+    "event_description": "Saudi Arabia and Russia launch oil price war, boosting production amid COVID demand collapse",
+    "when": "2020-03-08",
+    "outcome_description": "Brent crashed 30% Monday, triggering circuit breakers in US equity futures; energy stocks lost a third of value.",
+    "sectors_affected": ["oil", "energy", "equities", "high-yield"],
+    "magnitude_percent": -30.0
+  },
+  {
+    "event_description": "US announces 25% tariffs on $200B of Chinese imports, escalating trade war",
+    "when": "2018-09-17",
+    "outcome_description": "Chinese equities (FXI) fell 2%; industrials and semiconductors underperformed over the following weeks.",
+    "sectors_affected": ["equities", "industrials", "semiconductors", "china"],
+    "magnitude_percent": -2.0
+  },
+  {
+    "event_description": "Trump administration announces additional 10% tariffs on remaining $300B of Chinese imports",
+    "when": "2019-08-01",
+    "outcome_description": "SPX fell 3% over three sessions; long-duration Treasuries rallied 3% as recession fears mounted.",
+    "sectors_affected": ["equities", "rates", "semiconductors", "retail"],
+    "magnitude_percent": -3.0
+  },
+  {
+    "event_description": "US and China agree Phase One trade deal, easing tariff escalation",
+    "when": "2020-01-15",
+    "outcome_description": "SPX rose 1% and made fresh highs; industrial metals (copper) gained 2% on cyclical relief.",
+    "sectors_affected": ["equities", "industrials", "materials", "china"],
+    "magnitude_percent": 1.0
+  },
+  {
+    "event_description": "Silicon Valley Bank collapses, largest US bank failure since 2008 triggering regional bank crisis",
+    "when": "2023-03-10",
+    "outcome_description": "KRE regional bank ETF fell 20% in a week; short-end Treasuries rallied 100bps as market priced Fed cuts.",
+    "sectors_affected": ["banks", "regional-banks", "rates", "credit"],
+    "magnitude_percent": -20.0
+  },
+  {
+    "event_description": "First Republic Bank fails and is seized by regulators, sold to JPMorgan Chase",
+    "when": "2023-05-01",
+    "outcome_description": "Regional bank stocks fell another 8% over the week; deposit outflows accelerated across mid-size banks.",
+    "sectors_affected": ["banks", "regional-banks", "credit"],
+    "magnitude_percent": -8.0
+  },
+  {
+    "event_description": "Credit Suisse forced merger with UBS at 60% discount amid AT1 bond writedown",
+    "when": "2023-03-19",
+    "outcome_description": "European banks fell 5% on Monday open; AT1/CoCo bond market froze temporarily on writedown precedent.",
+    "sectors_affected": ["european-banks", "credit", "at1-bonds"],
+    "magnitude_percent": -5.0
+  },
+  {
+    "event_description": "Meta reports Q4 2021 earnings with first-ever daily active user decline, cuts capex guidance",
+    "when": "2022-02-02",
+    "outcome_description": "META lost $230B in market cap next session (-26%); NASDAQ tumbled 3.7% and social media peers dropped 5-10%.",
+    "sectors_affected": ["tech", "internet", "advertising"],
+    "magnitude_percent": -26.0
+  },
+  {
+    "event_description": "ChatGPT public launch by OpenAI, kicking off generative AI investment cycle",
+    "when": "2022-11-30",
+    "outcome_description": "MSFT rose 3% over the week on OpenAI ties; NVDA began a 12-month rally that added over $2 trillion in market cap.",
+    "sectors_affected": ["tech", "ai", "semiconductors", "cloud"],
+    "magnitude_percent": 3.0
+  },
+  {
+    "event_description": "Bank of Japan abandons yield curve control, ending decade of negative interest rate policy",
+    "when": "2024-03-19",
+    "outcome_description": "JGB yields rose 5bps; JPY paradoxically weakened past 151 as guidance was dovish; Nikkei held near 40k.",
+    "sectors_affected": ["jgb", "fx", "japanese-equities"],
+    "magnitude_percent": -1.0
+  },
+  {
+    "event_description": "Bank of Japan tweaks yield curve control cap to 1.0%, signalling policy normalization",
+    "when": "2023-10-31",
+    "outcome_description": "USD/JPY spiked above 151 as tweak was seen as insufficient; JGB yields rose to 15-year highs.",
+    "sectors_affected": ["jgb", "fx", "japanese-equities"],
+    "magnitude_percent": 1.5
+  },
+  {
+    "event_description": "China announces broad stimulus package including rate cuts and property market support",
+    "when": "2024-09-24",
+    "outcome_description": "CSI 300 rallied 25% in a week; commodities and China-exposed Western names (LVMH, CAT) gained 3-8%.",
+    "sectors_affected": ["china", "commodities", "luxury", "materials"],
+    "magnitude_percent": 25.0
+  },
+  {
+    "event_description": "Evergrande China property developer defaults on offshore bonds, triggering property sector crisis",
+    "when": "2021-12-06",
+    "outcome_description": "Chinese high-yield property bonds fell 30%; iron ore lost 40% over the following quarter; HSI declined 15%.",
+    "sectors_affected": ["china", "property", "materials", "iron-ore"],
+    "magnitude_percent": -15.0
+  },
+  {
+    "event_description": "Tesla reports first-ever YoY delivery decline in Q1 2024 amid demand slowdown and price cuts",
+    "when": "2024-04-02",
+    "outcome_description": "TSLA fell 5% next session; EV suppliers (Panasonic, ALB) dropped 3-4% on demand concerns.",
+    "sectors_affected": ["ev", "auto", "lithium", "materials"],
+    "magnitude_percent": -5.0
+  },
+  {
+    "event_description": "Boeing 737 MAX grounded worldwide after second fatal crash within five months",
+    "when": "2019-03-13",
+    "outcome_description": "BA fell 11% in three sessions; supplier SPR dropped 8%; airlines with MAX orders declined 3-5%.",
+    "sectors_affected": ["aerospace", "airlines", "industrials"],
+    "magnitude_percent": -11.0
+  },
+  {
+    "event_description": "COVID-19 declared global pandemic by WHO, triggering fastest bear market on record",
+    "when": "2020-03-11",
+    "outcome_description": "SPX fell 20% in the following seven sessions; VIX peaked above 80; oil, credit, and equities all crashed together.",
+    "sectors_affected": ["equities", "credit", "oil", "travel", "airlines"],
+    "magnitude_percent": -20.0
+  },
+  {
+    "event_description": "US CPI prints 9.1% for June 2022, highest reading since 1981",
+    "when": "2022-07-13",
+    "outcome_description": "SPX fell 1% and 2Y yields rose 10bps as market priced 100bps Fed hike; gold sold off despite inflation.",
+    "sectors_affected": ["rates", "equities", "gold", "usd"],
+    "magnitude_percent": -1.0
+  }
+]
