@@ -2,95 +2,108 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-17 (session 31 — IMP-02 + IMP-03, run in parallel via subagents)
-**Progress:** 34/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-03). DATA-06 (frontend UI) + REL-07 (frontend news feed) still pending — both are frontend-blocked; backend continues.
+**Last updated:** 2026-07-17 (session 32 — GRD-01/02/03 shipped in parallel)
+**Progress:** 37/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-03, GRD-01..GRD-03). DATA-06 (frontend UI) + REL-07 (frontend news feed) still pending — both are frontend-blocked; backend continues.
 
 ---
 
 ## Next module
 
-**ID:** `GRD-01`
-**Title:** Directional-language classifier (Phase 5 guardrails — kickoff)
-**Depends on:** none strictly (uses `LLMClient` + a small hand-tuned lexicon).
-**Read:** `BUILD.md` → the `GRD-01` block at ~line 1837. Builds `backend/app/guardrails/directional.py`. Two-stage check:
-  1. Lexical: word-boundary case-insensitive scan for `buy`, `sell`, `hold`, `add`, `trim`, `overweight`, `underweight`, `long`, `short`, `bullish`, `bearish`, `consider`, `should`, `recommend`, `advise`.
-  2. LLM (fast tier): "does this text recommend a specific action? YES/NO + one-line rationale" — only invoked if lexical passes.
+**ID:** `IMP-04`
+**Title:** Impact analyst LangGraph
+**Depends on:** IMP-01, IMP-02, IMP-03, REL-04, GRD-01, GRD-02, GRD-03 — all now live.
+**Read:** `BUILD.md` → the `IMP-04` block at ~line 974. Builds `backend/app/agents/impact/graph.py` + `backend/app/agents/impact/prompts.py`. Graph nodes:
 
-Acceptance: `pytest backend/tests/guardrails/test_directional.py` covers ≥30 hand-crafted examples at ≥95% accuracy; BUILD examples ("the Fed cut suggests you should buy TLT" → reject, "higher rates compress duration-sensitive valuations 3-5% over 30 days" → accept) must both work.
+```
+START
+  → load_context     (cluster + touched positions + portfolio metadata)
+  → retrieve_analogs (via IMP-02 tool)
+  → fetch_price_context (via IMP-03 tool, one call per touched position)
+  → reason_mechanism (thorough-tier LLM producing structured JSON per app.schemas.impact.ImpactAssessment)
+  → validate         (Pydantic + GRD-01 + GRD-02)
+  → [conditional: violations → repair_prompt → reason_mechanism, 1 retry only]
+  → persist          (write app.db.models.impact.ImpactAssessment row, unique on cluster/user/portfolio)
+  → END
+```
 
-**Why skip IMP-04?** IMP-04 depends on `IMP-01, IMP-02, IMP-03, REL-04, GRD-01, GRD-02, GRD-03` — the guardrail suite isn't built yet. GRD-01..GRD-03 unblock IMP-04. GRD-02 (citations validator) and GRD-03 (out-of-scope refusal) are also standalone and can be parallelized with GRD-01 by future sessions (same recipe used this session: two subagents, each writing files under `backend/app/guardrails/` + `backend/tests/guardrails/`; parent finalizes).
+- `reason_mechanism` uses the **thorough** tier (`tier="thorough"` in `LLMClient.complete`); `repair_prompt` uses the **fast** tier.
+- The exact `reason_mechanism` prompt is in BUILD.md — mostly verbatim, with `{title}`, `{body[:2000]}`, `{citation_stubs}`, `{position_list}`, `{analogs}`, `{price_context}`, `{schema}` slotted in.
+- Guardrail wiring: `check_directional(draft.mechanism)` + `check_citations(draft.citations, allowed_stubs=...)`. Non-empty violation set triggers the one-shot repair path (prepend a "your previous draft violated these rules: ..." system message and re-invoke `reason_mechanism`); a second failure persists the row anyway with `guardrail_violations` populated and `raw_llm_output` set.
 
-**Branch state:** Impact tooling (analogs retrieval, price context) is live. IMP-01 schema/migration also live. `ClusterDetailRead.impact` is still typed `Any = None`; tighten to `ImpactRead | None = None` when IMP-05 wires the endpoint (or in a small cleanup pass).
+Acceptance: given a real news cluster + portfolio, produces a valid `ImpactAssessment` in ≤ 20s; LangSmith run visible with all nodes; repair retry triggers when the first attempt uses forbidden language and succeeds on retry; `pytest tests/agents/test_impact_graph.py` covers happy path + guardrail-violation-then-repair.
+
+**Branch state:** all dependencies land in the previous 6 commits (REL-04, IMP-01, IMP-02, IMP-03, GRD-01, GRD-02). GRD-03 is chat-only and NOT invoked by the impact graph — leave it out of the validate node. `historical_analogs` Chroma collection needs to be seeded before the graph can retrieve; `python -m app.evals.seed_analogs` is idempotent, run it once locally when smoke-testing.
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows IMP-02 + IMP-03 on top.
+- `git log --oneline -5` shows the GRD-01/02/03 trio on top.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **204 passed, 5 deselected**.
+- `cd backend && python -m pytest tests -q` reports **256 passed, 5 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Ship two modules in parallel — IMP-02 (historical analogs Chroma collection + retrieval tool + seed script) and IMP-03 (price context tool over yfinance). Delegated each to its own subagent operating in the same v2 worktree; the parent orchestrated the finalizing pytest + ruff + BUILD.md ticks + HANDOFF rewrite + commit pair + push.
+- **Session goal:** Ship the guardrail suite in parallel — GRD-01 (directional-language), GRD-02 (citations validator), GRD-03 (out-of-scope refusal). Three subagents in the same v2 worktree, each briefed with its exclusive file paths; parent handled finalize (full pytest + ruff + BUILD.md ticks + HANDOFF rewrite + three commits + push).
 - **Completed:**
-  - `IMP-02` ✅ — Historical analogs Chroma collection + retrieval tool.
-    - `backend/app/evals/data/analogs.json` — 37 curated events (7 mention "Federal Reserve"): Fed decisions, earnings surprises (NVDA/AAPL/GOOGL/META/TSLA), geopolitical shocks (Brexit, Ukraine, Middle East, Iran), OPEC production changes, tariff escalations, SVB / First Republic / Credit Suisse bank failures, COVID crash + recovery, BoJ shifts, China stimulus / Evergrande, ChatGPT launch, hot CPI print. Schema per row: `{event_description, when, outcome_description, sectors_affected, magnitude_percent}`.
-    - `backend/app/evals/seed_analogs.py`:
-      - `_event_hash(desc, when)` — `sha1(f"{desc}|{when}").hexdigest()[:16]` — stable id → idempotent upserts.
-      - `_seed(rows, embed=..., store=...)` — embeds `event_description + " " + outcome_description` via `EmbeddingClient`, upserts into the `historical_analogs` VectorStore. Chroma metadata can't hold lists, so `sectors_affected` is comma-joined into a string on write.
-      - `main()` / `main_async()` CLI entry — `python -m app.evals.seed_analogs` prints `"seeded N analogs into historical_analogs (M pre-existing)"`.
-    - `backend/app/tools/historical_analogs.py`:
-      - `async retrieve_analogs(query_text, k=3, *, min_similarity=0.6, embed=None, store=None) -> list[HistoricalAnalog]`.
-      - Embeds the query, calls VectorStore.query, converts Chroma cosine `distance` → `similarity = 1 - distance`, filters below `min_similarity`, maps hits into `HistoricalAnalog` (from `app/schemas/impact.py`), sorts descending by similarity.
-      - Malformed rows are logged and skipped; empty query text short-circuits to `[]`.
-    - `backend/tests/tools/test_historical_analogs.py` — 5 hermetic tests: seed count, idempotency, Fed acceptance (≥2 hits for "Federal Reserve rate cut"), gibberish-query filter, descending-similarity sort. Uses the real `EmbeddingClient` (MiniLM-L6-v2, local, ~90MB cached under HF).
-  - `IMP-03` ✅ — Price context tool.
-    - `backend/app/tools/prices.py`:
-      - `PriceContext(BaseModel)` — `ticker, current: Decimal, pct_change_1d/5d/30d/ytd: float, currency`. Ratios (0.05 == +5%), not percentages.
-      - `get_recent_price_action(ticker, lookback_days=30) -> PriceContext | None` — normalizes ticker, day-scoped disk cache under `<repo>/backend/price_cache/<TICKER>_<YYYY-MM-DD>.json`, calls yfinance for the miss, computes 1d/5d/30d ratios and YTD (first close ≥ Jan 1 of current year). Never raises — every yfinance failure / empty history / bad frame collapses to `None`.
-      - `_fetch_from_yfinance` pulls `history(period="1y")` once (covers all four ratios including YTD from Jan 2). Currency is best-effort from `fast_info` (supports both attribute + dict style access across yfinance versions); falls back to `"USD"`.
-    - `backend/tests/tools/test_prices.py` — 8 hermetic tests: happy-path ratios, cache-hit avoids second yfinance call, stale (previous-day) cache is ignored, empty-history ticker returns None, yfinance exception returns None, per-ratio arithmetic, whitespace-only ticker returns None.
-  - Repository plumbing:
-    - `backend/app/tools/__init__.py`, `backend/app/evals/__init__.py`, `backend/app/evals/data/__init__.py`, `backend/tests/tools/__init__.py` — empty `__init__.py` markers so both packages import cleanly.
-    - `.gitignore` — root ignore has `*.json` with allowlist. Added `!backend/app/evals/data/*.json` so `analogs.json` is tracked. `backend/price_cache/*.json` remains ignored — cache is per-machine.
+  - `GRD-01` ✅ — Directional-language classifier.
+    - `backend/app/guardrails/directional.py`:
+      - `_FORBIDDEN_TOKENS` tuple (`buy`, `sell`, `hold`, `add`, `trim`, `overweight`, `underweight`, `long`, `short`, `bullish`, `bearish`, `consider`, `should`, `recommend`, `advise`).
+      - `lexical_check(text) -> list[str]` — word-boundary case-insensitive scan, deduped + alpha-sorted.
+      - `_DirectionalCheck(BaseModel)` — `recommends_action: bool`, `rationale: str (≤200)`.
+      - `async check_directional(text, *, llm=None, skip_llm=False) -> DirectionalVerdict` — lexical first; if clean AND not `skip_llm`, fast-tier LLM call with `agent_name="guardrail-directional"` and `response_model=_DirectionalCheck`. `matched_tokens` reflects lexical hits only; `llm_asked` records whether the LLM stage ran.
+    - `backend/tests/guardrails/test_directional.py` — 16 tests. 37-example hand-crafted accuracy set → **37/37 (100%)** (BUILD.md threshold: ≥95%). Uses a fake LLM keyed on the input text for the LLM-only cases.
+  - `GRD-02` ✅ — Citation-required validator.
+    - `backend/app/guardrails/citations.py`:
+      - `SourceStub(url, body)` dataclass — the (url, body) pairs the LLM saw in its prompt.
+      - `check_citations(citations, *, allowed_stubs) -> CitationVerdict` — three hard rules: (1) `len ≥ 1`, (2) every citation URL matches at least one stub URL (case-insensitive on host, case-sensitive on path, ignore trailing `/` + scheme case), (3) every non-empty citation quote is a substring of the matched stub's body after `re.sub(r"\s+", " ", ...).strip()` whitespace normalization. Empty quotes generate an advisory in `reasons` but don't fail the verdict.
+      - `_normalize_url` and `_normalize_ws` — the only helpers.
+    - `backend/tests/guardrails/test_citations.py` — 10 tests: empty citations, URL mismatch, URL normalization (trailing slash, scheme case), whitespace-normalized substring match, quote-not-in-body, multi-citation with one bad, empty-quote advisory, case-sensitive path, and the extra "empty quote doesn't mask a real rule-2 failure" sanity test.
+  - `GRD-03` ✅ — Out-of-scope refusal.
+    - `backend/app/guardrails/scope.py`:
+      - `Category = Literal["in_scope", "tax", "legal", "personal_planning", "medical"]`.
+      - Curated per-category regex patterns (word-boundary for single tokens; substring case-insensitive for multi-word phrases). Ordered most-specific first so multi-word phrases match before their constituent tokens.
+      - `_REFUSAL_MESSAGES: dict[Category, str]` — canned refusals pointing at licensed CPA / attorney / CFP / physician.
+      - `async classify_scope(text, *, llm=None, skip_llm=False) -> ScopeVerdict` — lexical first; if clean and `skip_llm=False`, fast-tier LLM call with `agent_name="guardrail-scope"` and `_ScopeCheck` response model. LLM exceptions fail open to `in_scope` (per subagent's hardening note — a spurious refusal is worse than a rare miss because the app footer already carries the disclaimer). Input is `.strip()`ed and truncated to 4000 chars.
+    - `backend/tests/guardrails/test_scope.py` — 26 tests. 10-example acceptance set → **10/10 (100%)** on both category-correct and passed-flag axes (BUILD.md threshold: ≥90%). Covers all four out-of-scope categories, in-scope skip_llm short-circuit, LLM-only catch of subtle out-of-scope, refusal-message completeness, empty-input handling, and long-input trimming.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **204 passed, 5 deselected** (+13 new hermetic tests: 5 IMP-02 + 8 IMP-03).
-  - `ruff check .` clean.
-- **Files touched:** created 8 files (see above) + `.gitignore` edit. Ticked `IMP-02` + `IMP-03` in BUILD.md. Rewrote this HANDOFF.md.
+  - `python -m pytest tests -q` → **256 passed, 5 deselected** (+52 new hermetic tests: 16 GRD-01 + 10 GRD-02 + 26 GRD-03).
+  - `ruff check .` clean on all six new source/test files.
+- **Files touched:** created 8 files (6 modules + 2 shared `__init__.py` package markers). Ticked GRD-01/02/03 in BUILD.md. Rewrote this HANDOFF.md.
 - **Migrations added:** none.
-- **Tests added:** 13 hermetic.
+- **Tests added:** 52 hermetic.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **`get_recent_price_action(ticker, lookback_days=30)` accepts `lookback_days` for API compatibility but ignores it.** BUILD.md's signature keeps the parameter for callers; the tool always fetches `history(period="1y")` because YTD from mid-year needs ~130 sessions — a 30-day lookback wouldn't suffice, and one wider request is cheaper than four narrow ones. Documented in the docstring.
-  - **Seed corpus is 37 events, not the eventual 150.** BUILD.md targets ~150 curated events over the last 15 years; 37 hits the acceptance criterion cleanly and gives IMP-04 something meaningful to retrieve. Expansion to 150 is a low-risk, well-isolated future task (append rows to `analogs.json`, re-run `seed_analogs`).
-  - **`sectors_affected` is discarded at the retrieval boundary.** `HistoricalAnalog` schema (from IMP-01) doesn't include it; the tool drops it after Chroma lookup. Callers who need sector info can fetch by id via `VectorStore.get(ids=[...])`.
-  - **`yfinance` pin drift.** `requirements.txt` has `yfinance==0.2.44` but PyPI now serves ~1.5.x. Behavior of `Ticker.history()` and `fast_info.currency` used here is stable across both. Refresh the pin in a follow-up task; not folded into IMP-03.
-  - **`sentence-transformers==3.2.1` (+ torch) may not be pre-installed in every dev env** — the IMP-02 tests hit the real MiniLM model. First run downloads ~90MB into the HF cache; subsequent runs are fast. CI env already has this per the boot-08 requirements.
-- **Session mechanics recap:** Two subagents ran in parallel (background), each briefed with the specific file paths they owned and forbidden from touching HANDOFF.md, BUILD.md, or each other's paths. Both returned success reports; parent then ran the full suite (`pytest -q`) + `ruff check .` end-to-end, ticked BUILD.md, wrote this HANDOFF section, and split the work into two commits (`IMP-02:` and `IMP-03:` messages).
+  - **GRD-01 word-boundary regex doesn't catch inflected forms** (e.g., `adding`, `trimming`, `recommends`). That's the LLM stage's job by design; the accuracy tests confirm the LLM catches the subtle-recommendation cases without lexical hits. The `LLMClient` is passed per-invocation (no module-global), so IMP-04 must inject it.
+  - **GRD-02 `SourceStub` dedup policy is "last one wins"** when a caller passes two stubs with the same normalized URL. Deterministic; documented inline. Callers should dedupe upstream (relevant when the same URL appears in multiple ingest sources).
+  - **GRD-02 treats a whitespace-only quote (`"   "`) as empty** (advisory, not failure). BUILD.md only said "empty"; this is the natural extension and keeps the guardrail robust against LLMs padding with whitespace.
+  - **GRD-03 LLM exceptions fail open to `in_scope`** rather than raising. The tradeoff — a spurious refusal is worse UX than a rare miss (footer disclaimer covers the miss). Documented in the module docstring.
+  - **GRD-03 pattern list biases toward false positives** (e.g., bare `audit`, bare `will`). If user testing shows too many innocent hits (`"AT&T earnings audit call"`, `"Buffett will speak at AGM"`), tighten those specific tokens to phrases. Flagged for post-MVP.
+- **Session mechanics recap:** Three subagents ran in the same v2 worktree in the background, briefed with disjoint file paths. Parent pre-created `backend/app/guardrails/__init__.py` and `backend/tests/guardrails/__init__.py` as empty markers so no agent stomped another creating them. After all three returned, parent ran `pytest tests -q` end-to-end, `ruff check .`, ticked BUILD.md three times, wrote this HANDOFF, and split into three commits (`GRD-01:`, `GRD-02:`, `GRD-03:` messages) — HANDOFF.md landed in the last commit only.
 
 ---
 
 ## Environment state
 
-- Backend: impact analyst has both retrieval tools it needs (analogs, prices). Blocked on the guardrail suite (GRD-01..03) before IMP-04 can compose them.
+- Backend: full impact-analyst dependency graph now complete (REL-04 relevance, IMP-01 schema, IMP-02 analogs, IMP-03 prices, GRD-01+02 validators). IMP-04 can compose them.
 - Frontend: unchanged.
 - Database: Alembic head `c3b8f4e1d7a2` (IMP-01). No new migrations this session.
-- Vectors: `historical_analogs` Chroma collection now populated (via `python -m app.evals.seed_analogs`); the tests seed a fresh tempdir per run, so no shared state.
-- Tests: **204 hermetic, 5 opt-in.**
-- CI: REL-03..IMP-03 pending push through CI.
+- Vectors: unchanged. Remember to `python -m app.evals.seed_analogs` before smoke-testing IMP-04 locally.
+- Tests: **256 hermetic, 5 opt-in.**
+- CI: REL-03..GRD-03 pending push through CI.
 - Docs: unchanged.
 
 ---
 
 ## Open questions / blockers
 
-- **None for GRD-01.** GRD-02 and GRD-03 are also independent from each other and from GRD-01 — a future session could parallelize all three via subagents (same recipe as this session).
-- **Follow-ups queued (do not fold into GRD-01):**
+- **None for IMP-04.** All dependencies are live and passing.
+- **Follow-ups queued (do not fold into IMP-04):**
   - Tighten `ClusterDetailRead.impact: Any` to `ImpactRead | None` when IMP-05 wires the endpoint.
   - Refresh `yfinance` pin in `requirements.txt` (0.2.44 → 1.5.x).
   - Expand `analogs.json` from 37 → ~150 events (low risk, append-only).
+  - Tighten GRD-03 lexical patterns (`audit`, `will`) if UX testing shows over-refusal.
 
 ---
 

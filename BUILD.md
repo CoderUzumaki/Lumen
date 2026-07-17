@@ -1834,7 +1834,7 @@ Extends Phase 8. These modules produce the specific, publishable numbers that ba
 
 Applied by IMP-04, BRIEF-02, CHAT-03. All live under `backend/app/guardrails/`.
 
-### GRD-01 — Directional-language classifier
+### GRD-01 — Directional-language classifier ✅
 
 - **Files:** `backend/app/guardrails/directional.py`.
 - **Action:** A hybrid lexical + LLM guardrail.
@@ -1846,7 +1846,7 @@ Applied by IMP-04, BRIEF-02, CHAT-03. All live under `backend/app/guardrails/`.
   - Draft "higher rates historically compress duration-sensitive valuations by 3-5% over 30 days" → accepted.
   - `pytest backend/tests/guardrails/test_directional.py` covers 30 hand-crafted examples with ≥ 95% accuracy.
 
-### GRD-02 — Citation-required validator
+### GRD-02 — Citation-required validator ✅
 
 - **Files:** `backend/app/guardrails/citations.py`.
 - **Action:** For any structured output with a `citations` field, verify:
@@ -1854,7 +1854,7 @@ Applied by IMP-04, BRIEF-02, CHAT-03. All live under `backend/app/guardrails/`.
   - Every citation's `url` is one of the citation stubs passed into the prompt (prevents hallucinated citations).
   - Every citation `quote` is a substring of the corresponding source news body (allowing whitespace normalization).
 
-### GRD-03 — Out-of-scope refusal
+### GRD-03 — Out-of-scope refusal ✅
 
 - **Files:** `backend/app/guardrails/scope.py`.
 - **Action:** For chat inputs, an intent classifier that detects out-of-scope requests: tax advice, legal advice, personal financial planning ("should I buy a house?"), medical questions. Returns a canned refusal with a link to a licensed-professional suggestion.
