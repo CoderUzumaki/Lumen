@@ -1065,7 +1065,7 @@ The core AI-engineering showcase: multi-step reasoning agent that turns a releva
 
 Aggregate the day's impact assessments into a personalized briefing.
 
-### BRIEF-01 — Briefing schema + migration
+### BRIEF-01 — Briefing schema + migration ✅
 
 - **Files:** `backend/app/db/models/briefing.py`, migration.
 - **Action:**

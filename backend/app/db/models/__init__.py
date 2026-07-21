@@ -3,6 +3,7 @@
 Import every model module here so `Base.metadata` picks it up during
 Alembic autogenerate (and any downstream reflection).
 """
+from app.db.models.briefing import Briefing  # noqa: F401
 from app.db.models.impact import ImpactAssessment  # noqa: F401
 from app.db.models.llm_call import LlmCall  # noqa: F401
 from app.db.models.news import IngestRun, NewsCluster, NewsItem  # noqa: F401
@@ -13,6 +14,7 @@ from app.db.models.theme import Theme  # noqa: F401
 from app.db.models.user_preferences import UserPreferences  # noqa: F401
 
 __all__ = [
+    "Briefing",
     "ImpactAssessment",
     "IngestRun",
     "LlmCall",
