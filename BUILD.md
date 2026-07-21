@@ -971,7 +971,7 @@ The core AI-engineering showcase: multi-step reasoning agent that turns a releva
 - **Acceptance:** Called for AAPL returns non-null with plausible values. Called for garbage ticker returns None.
 - **Depends on:** BOOT-06.
 
-### IMP-04 — Impact analyst LangGraph
+### IMP-04 — Impact analyst LangGraph ✅
 
 - **Files:** `backend/app/agents/impact/graph.py`, `backend/app/agents/impact/prompts.py`.
 - **Action:**
