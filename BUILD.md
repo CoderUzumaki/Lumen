@@ -1180,7 +1180,7 @@ Aggregate the day's impact assessments into a personalized briefing.
 
 RAG over the user's news + assessments + portfolio, with streaming responses.
 
-### CHAT-01 — Chat schema + migration
+### CHAT-01 — Chat schema + migration ✅
 
 - **Files:** `backend/app/db/models/chat.py`, migration.
 - **Action:**
