@@ -74,6 +74,7 @@ def _build_default_orchestrator():
 
     from app.db.base import get_session_factory
     from app.db.vectorstore import VectorStore
+    from app.pipelines.briefing_scheduler import run_briefing_scheduler
     from app.pipelines.orchestrator import IngestOrchestrator, default_source_factory
     from app.pipelines.relevance_fanout import run_fanout
     from app.utils.embeddings import EmbeddingClient
@@ -110,6 +111,12 @@ def _build_default_orchestrator():
         except Exception:
             log.exception("scheduler: fanout run failed")
 
+    async def _briefing_tick() -> None:
+        try:
+            await run_briefing_scheduler(session_factory=factory, llm=llm)
+        except Exception:
+            log.exception("scheduler: briefing tick failed")
+
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
         _ingest_and_fanout,
@@ -120,8 +127,19 @@ def _build_default_orchestrator():
         max_instances=1,
         coalesce=True,
     )
+    # BRIEF-03: check every 15 min whether any user's local briefing hour
+    # matches now. Idempotent — synthesize_briefing_for_user rejects duplicates.
+    scheduler.add_job(
+        _briefing_tick,
+        trigger=IntervalTrigger(minutes=15),
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1),
+        id="lumen-briefing",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.start()
-    log.info("Scheduler started; first ingest in 30s")
+    log.info("Scheduler started; first ingest in 30s, first briefing tick in 60s")
     return scheduler
 
 
