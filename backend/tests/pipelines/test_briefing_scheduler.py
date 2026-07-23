@@ -5,13 +5,12 @@ import tempfile
 import uuid
 from collections.abc import AsyncIterator
 from datetime import date, datetime, timezone
-from decimal import Decimal
 from pathlib import Path
 from unittest.mock import AsyncMock
 from zoneinfo import ZoneInfo
 
 import pytest_asyncio
-from sqlalchemy import event, select
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,

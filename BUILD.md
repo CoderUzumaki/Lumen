@@ -1132,7 +1132,7 @@ Aggregate the day's impact assessments into a personalized briefing.
   - Guardrail violations block persistence.
 - **Depends on:** BRIEF-01, IMP-05, GRD-01, GRD-02.
 
-### BRIEF-03 — Scheduled briefing generation
+### BRIEF-03 — Scheduled briefing generation ✅
 
 - **Files:** `backend/app/pipelines/briefing_scheduler.py`.
 - **Action:** APScheduler job that runs every 15 minutes: query `user_preferences` for users whose local `briefing_hour` == current local hour and who don't have a briefing for today. Enqueue the briefing agent for each. Cap concurrency at 5.
@@ -1141,7 +1141,7 @@ Aggregate the day's impact assessments into a personalized briefing.
   - No duplicate briefings for the same `(user, portfolio, date)`.
 - **Depends on:** BRIEF-02, DATA-05.
 
-### BRIEF-04 — Briefing endpoints + streaming
+### BRIEF-04 — Briefing endpoints + streaming ✅
 
 - **Files:** `backend/app/routes/briefings.py`.
 - **Action:**
@@ -1224,7 +1224,7 @@ RAG over the user's news + assessments + portfolio, with streaming responses.
 - **Acceptance:** Each tool returns typed results in < 500ms.
 - **Depends on:** IMP-05, ING-07.
 
-### CHAT-03 — Chat agent (LangGraph)
+### CHAT-03 — Chat agent (LangGraph) ✅
 
 - **Files:** `backend/app/agents/chat/graph.py`.
 - **Action:**

@@ -20,7 +20,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Callable, Coroutine, Any
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -82,7 +82,7 @@ async def _default_synthesizer(
 
 def _user_local_hour_matches(
     pref: UserPreferences, now_utc: datetime
-) -> tuple[bool, "date" | None]:
+) -> tuple[bool, date | None]:
     """Return `(matches, user_local_date)`.
 
     `matches` is True iff the user's local wall-clock hour at `now_utc` equals

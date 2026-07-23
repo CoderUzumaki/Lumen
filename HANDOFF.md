@@ -2,33 +2,48 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-21 (session 35 — BRIEF-02 + CHAT-02 + EVAL-02, all in-session after subagents stalled)
-**Progress:** 44/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01..BRIEF-02, CHAT-01..CHAT-02, EVAL-02). DATA-06 (frontend UI) + REL-07 (frontend news feed) + IMP-06 (frontend impact card) still pending — all frontend-blocked.
+**Last updated:** 2026-07-21 (session 36 — BRIEF-03 in-session + BRIEF-04 & CHAT-03 in parallel via subagents)
+**Progress:** 47/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01..BRIEF-04, CHAT-01..CHAT-03, EVAL-02). DATA-06 (frontend UI) + REL-07 (news feed) + IMP-06 (impact card) + BRIEF-05 (briefing page) + CHAT-05 (chat UI) all pending — every frontend module.
 
 ---
 
 ## Next module
 
-**ID:** `BRIEF-03`
-**Title:** Scheduled briefing generation
-**Depends on:** BRIEF-02 (now live), DATA-05.
-**Read:** `BUILD.md` → the `BRIEF-03` block at ~line 1135. Builds `backend/app/pipelines/briefing_scheduler.py`. APScheduler job runs every 15 minutes; queries `user_preferences` for users whose local `briefing_hour == current local hour` AND who don't already have a briefing for today (per `Briefing.briefing_date` unique key). Enqueues `synthesize_briefing_for_user()` for each, bounded at concurrency=5.
+**ID:** `CHAT-04`
+**Title:** Chat endpoints + streaming
+**Depends on:** CHAT-03 (now live).
+**Read:** `BUILD.md` → the `CHAT-04` block at ~line 1253. Builds `backend/app/routes/chat.py`. Five endpoints:
 
-**Parallelizable siblings unblocked after BRIEF-03:**
-- `CHAT-03` (chat agent LangGraph) — depends on CHAT-02 (live), GRD-01/02/03 (live). Directly runnable in parallel with BRIEF-03 right now (different files entirely).
-- `BRIEF-04` (briefing endpoints + streaming) — depends on BRIEF-02 (live). Also directly runnable in parallel.
-- Consider spawning BRIEF-03 + CHAT-03 + BRIEF-04 as the next parallel trio (or hold BRIEF-04 to pair with CHAT-04 in a later round — CHAT-04 depends on CHAT-03).
+```
+POST   /api/chat/sessions                   body: { seed_cluster_id? } → ChatSessionRead
+GET    /api/chat/sessions                    → list[ChatSessionRead]
+GET    /api/chat/sessions/{id}               → ChatSessionRead + messages
+DELETE /api/chat/sessions/{id}               → 204
+POST   /api/chat/sessions/{id}/messages      body: { content: str } → SSE stream
+```
+
+SSE events for the message-post endpoint: `token`, `tool_call`, `tool_result`, `citations`, `done`. Ordered strictly.
+
+Pattern-copy `app/routes/briefings.py` (BRIEF-04) for the SSE machinery — same trick: run the graph and emit pseudo-node events around it (proper LangGraph streaming is a future refactor). Cross-user access to a session returns 404.
+
+**Parallelizable siblings after CHAT-04:**
+- `EVAL-03` (relevance eval runner) — depends on EVAL-01 (needs a labeled dataset, human work) + REL-04. Not independent — needs EVAL-01 first, which is human labeling work.
+- `EVAL-04` (impact + faithfulness runner) — same problem.
+- `OPT-*` (optimization phase) — most depend on OPT chain built up; check individually.
+
+Practically, after CHAT-04, the next parallel trio isn't obvious. Options: (a) tackle the EVAL-01 labeled-dataset problem head-on with a small pragmatic corpus (10-20 examples instead of the aspirational 200/50), (b) start wiring `run_metadata(...)` into the graphs (small cleanup — REL-04, IMP-04, BRIEF-02 each get one line), (c) begin the frontend chain with DATA-06 (single-session, big module). Escalate to user if unsure.
 
 **Branch state:**
-- `synthesize_briefing_for_user(user_id, portfolio_id, *, session, llm, briefing_date=None, lookback_hours=24, force=False) -> Briefing | None` in `app.agents.briefing.graph`. Idempotent on `(user_id, portfolio_id, briefing_date)`. Returns None when guardrails fire OR no candidates qualify.
-- Three chat retrieval tools live: `retrieve_recent_impacts`, `retrieve_news`, `get_portfolio_summary` in `app.agents.chat.retrievers`. Non-LLM. Ready to plug into CHAT-03's tool-calling graph.
-- `app.utils.langsmith`: `project_name(env)`, `is_tracing_enabled()`, `run_metadata(*, agent_name, user_id, git_sha, extra)`, `mark_public(run_id)`. Callers spread `run_metadata(...)` into `graph.ainvoke(state, config=...)` to auto-tag runs. Not yet wired into IMP-04 / REL-04 / BRIEF-02 graphs — that's a small follow-up.
+- `run_chat_turn(session_id, user_id, user_message, *, session, llm, news_store, embed) -> ChatMessage` in `app.agents.chat.graph`. Persists both user + assistant rows in one commit. Raises `PermissionError` on cross-user session access — the CHAT-04 endpoint must map this to HTTP 404 (matches BUILD.md's cross-user rule).
+- BRIEF-04 exposes `/api/briefings/{latest,by-date,regenerate,stream}` — the stream endpoint emits SSE with a single pseudo-node envelope (documented deviation).
+- BRIEF-03 wired into APScheduler at 15-minute intervals; runs `run_briefing_scheduler(...)` which is idempotent via BRIEF-02's unique key.
+- No new migrations this session (head is still `e5b02c8f6a39`, CHAT-01).
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows the BRIEF-02 / CHAT-02 / EVAL-02 trio on top.
+- `git log --oneline -5` shows the BRIEF-03 / BRIEF-04 / CHAT-03 trio on top.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **335 passed, 5 deselected**.
+- `cd backend && python -m pytest tests -q` reports **363 passed, 5 deselected**.
 - `ruff check .` clean.
 
 ---
