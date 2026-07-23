@@ -2,87 +2,89 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-21 (session 34 — IMP-05 impact endpoint + on-demand generation)
-**Progress:** 41/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01, CHAT-01). DATA-06 (frontend UI) + REL-07 (frontend news feed) + IMP-06 (frontend impact card) still pending — all frontend-blocked; backend continues.
+**Last updated:** 2026-07-21 (session 35 — BRIEF-02 + CHAT-02 + EVAL-02, all in-session after subagents stalled)
+**Progress:** 44/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01..BRIEF-02, CHAT-01..CHAT-02, EVAL-02). DATA-06 (frontend UI) + REL-07 (frontend news feed) + IMP-06 (frontend impact card) still pending — all frontend-blocked.
 
 ---
 
 ## Next module
 
-**ID:** `BRIEF-02`
-**Title:** Briefing synthesizer agent
-**Depends on:** IMP-05 (now live), BRIEF-01.
-**Read:** `BUILD.md` → the `BRIEF-02` block at ~line 1109. Builds `backend/app/agents/briefing/graph.py` + `backend/app/agents/briefing/prompts.py`. Consumes today's most-relevant impact rows for a user + active portfolio and synthesizes a `BriefingContent` (three sections: `top_movers`, `watchlist`, `what_would_change_my_thinking` + `generated_summary`). Persists a `briefings` row.
+**ID:** `BRIEF-03`
+**Title:** Scheduled briefing generation
+**Depends on:** BRIEF-02 (now live), DATA-05.
+**Read:** `BUILD.md` → the `BRIEF-03` block at ~line 1135. Builds `backend/app/pipelines/briefing_scheduler.py`. APScheduler job runs every 15 minutes; queries `user_preferences` for users whose local `briefing_hour == current local hour` AND who don't already have a briefing for today (per `Briefing.briefing_date` unique key). Enqueues `synthesize_briefing_for_user()` for each, bounded at concurrency=5.
 
-After BRIEF-02, the next parallelizable trio: **BRIEF-03** (scheduled generation — wires APScheduler for the user-configured briefing hour), **CHAT-02** (three chat retrieval tools: `retrieve_recent_impacts`, `retrieve_news`, `get_portfolio_summary`), and — trickier — **EVAL-02** (LangSmith wiring). BRIEF-03 depends on BRIEF-02. CHAT-02 depends on IMP-05 + ING-07 (both live). EVAL-02 depends only on BOOT-06 (live) and extends `app/utils/langsmith.py` (does not yet exist — create it).
+**Parallelizable siblings unblocked after BRIEF-03:**
+- `CHAT-03` (chat agent LangGraph) — depends on CHAT-02 (live), GRD-01/02/03 (live). Directly runnable in parallel with BRIEF-03 right now (different files entirely).
+- `BRIEF-04` (briefing endpoints + streaming) — depends on BRIEF-02 (live). Also directly runnable in parallel.
+- Consider spawning BRIEF-03 + CHAT-03 + BRIEF-04 as the next parallel trio (or hold BRIEF-04 to pair with CHAT-04 in a later round — CHAT-04 depends on CHAT-03).
 
 **Branch state:**
-- IMP-05 is live behind auth. `GET /api/news/clusters/{id}/impact` returns cached (200) or 202 + `poll_url`; `POST /impact/generate` forces regeneration. Threshold gate: relevance score ≥ 0.3 for the caller (default; override via `Config.IMPACT_MIN_SCORE`). Below-threshold or absent-relevance clusters return 404. Cross-user isolated — a user never observes another user's impact row.
-- `ClusterDetailRead.impact` now typed `ImpactRead | None` (no more placeholder `Any`). REL-06's cluster detail endpoint fills it from the caller's own impact row via a scoped query — same isolation rule.
-- The impact-generation enqueue is a fire-and-forget `asyncio.create_task` in `app/routes/impact.py::_default_enqueue`. Uses a fresh `AsyncSession` from `get_session_factory()`, constructs its own `LLMClient` / `EmbeddingClient` / `VectorStore("historical_analogs")`. Tests override via `app.dependency_overrides[get_impact_enqueue]` — a `_EnqueueRecorder` test double records calls and (optionally) fires a callback to synchronously seed the cached row.
+- `synthesize_briefing_for_user(user_id, portfolio_id, *, session, llm, briefing_date=None, lookback_hours=24, force=False) -> Briefing | None` in `app.agents.briefing.graph`. Idempotent on `(user_id, portfolio_id, briefing_date)`. Returns None when guardrails fire OR no candidates qualify.
+- Three chat retrieval tools live: `retrieve_recent_impacts`, `retrieve_news`, `get_portfolio_summary` in `app.agents.chat.retrievers`. Non-LLM. Ready to plug into CHAT-03's tool-calling graph.
+- `app.utils.langsmith`: `project_name(env)`, `is_tracing_enabled()`, `run_metadata(*, agent_name, user_id, git_sha, extra)`, `mark_public(run_id)`. Callers spread `run_metadata(...)` into `graph.ainvoke(state, config=...)` to auto-tag runs. Not yet wired into IMP-04 / REL-04 / BRIEF-02 graphs — that's a small follow-up.
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows IMP-05 on top.
+- `git log --oneline -5` shows the BRIEF-02 / CHAT-02 / EVAL-02 trio on top.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **293 passed, 5 deselected**.
+- `cd backend && python -m pytest tests -q` reports **335 passed, 5 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Ship IMP-05 solo — no independent parallel candidate was cleanly available (BRIEF-02/CHAT-02 both need IMP-05; DATA-06 is a full frontend build; EVAL-01 requires human labeling). Also fold in the "tighten `ClusterDetailRead.impact: Any` → `ImpactRead | None`" cleanup queued from IMP-04's HANDOFF.
+- **Session goal:** Ship BRIEF-02 + CHAT-02 + EVAL-02 in parallel. First attempt via three background subagents; one failed with an API stall mid-response, the other two never returned a completion record (likely stopped when the parent process cycled). Only the empty `__init__.py` markers the parent pre-created survived. Second attempt: rebuilt all three sequentially in-session in the same worktree.
 - **Completed:**
-  - `IMP-05` ✅ — Impact endpoint + on-demand generation.
-    - `backend/app/routes/impact.py` — new router at `/api/news/clusters/{cluster_id}/impact` + `/impact/generate`.
-    - `GET /api/news/clusters/{cluster_id}/impact`:
-      1. Loads caller's active portfolio (404 if none, matches other routes' "no-portfolio → 404" pattern).
-      2. 404 on unknown `cluster_id`.
-      3. Probes for a cached `ImpactAssessment` row on `(cluster, user, portfolio)`. On hit → 200 with `ImpactRead` body.
-      4. On miss, loads the caller's `RelevanceScore` for the cluster. Score below `_IMPACT_MIN_SCORE` (default `Decimal("0.3")`, `Config.IMPACT_MIN_SCORE` overrides) or missing → 404 with a "cluster relevance is below the impact threshold" message.
-      5. Otherwise enqueues via the injected `EnqueueFn` (default: fire-and-forget `asyncio.create_task`) and returns 202 with `{"status": "generating", "poll_url": <this-same-endpoint>}`.
-    - `POST /api/news/clusters/{cluster_id}/impact/generate` — same threshold gate; always enqueues with `force=True`. Skips the cached-row probe (that's the point of force).
-    - Enqueue is a FastAPI dependency (`get_impact_enqueue`) so tests can override it — the real default calls `analyze_impact_for_user()` in a background task with its own fresh session + `LLMClient` + `EmbeddingClient` + `VectorStore("historical_analogs")`.
-    - IMP-04 idempotency (unique on `(cluster, user, portfolio)`) means duplicate enqueues on the GET path are safe: whichever generation wins, the loser observes the cached row on re-invocation.
-  - **Schema tightening (folded from IMP-04's follow-ups):**
-    - `app/schemas/news.py::ClusterDetailRead.impact` moved from `Any = None` to `ImpactRead | None = None`. Docstring updated to reference IMP-05.
-    - `app/routes/news.py::cluster_detail` now issues a scoped `SELECT ImpactAssessment WHERE cluster_id=? AND user_id=<caller> AND portfolio_id=<active>` and serializes the row into the response (same cross-user isolation rule as `relevance`).
-    - Restored `Any` in the `typing` import — `NewsItemIn.raw_payload: dict[str, Any]` and `NewsItemIn.hints: dict[str, Any]` still need it. Missed on the first edit; caught by 27 unrelated normalizer/orchestrator test failures on the first full-suite pass.
-  - `backend/tests/routes/test_impact.py` — 11 hermetic tests:
-    - Cached-200 (with a `_EnqueueRecorder` test double asserting `enqueue.calls == []`).
-    - Above-threshold-202 (asserts `poll_url` ends with the GET endpoint URL; asserts `enqueue.calls == [(cluster, user, pf, False)]`).
-    - Below-threshold-404, no-relevance-row-404, no-active-portfolio-404, unknown-cluster-404.
-    - Cross-user isolation on GET — Bob's cached row on the same cluster is invisible to Alice, and her above-threshold relevance still triggers her own enqueue.
-    - POST force with cached row present — still returns 202 and enqueues with `force=True`.
-    - POST below-threshold 404.
-    - `test_cluster_detail_serializes_impact_row` — REL-06's `/clusters/{id}` returns the `ImpactRead` body when a row exists for the caller.
-    - `test_cluster_detail_impact_null_when_caller_has_no_row` — only Bob has a row → Alice's detail response returns `impact: null`.
-  - `app/main.py` — registered `impact_routes.router`.
+  - `EVAL-02` ✅ — LangSmith setup + tracing helpers.
+    - `backend/app/utils/langsmith.py`:
+      - `project_name(env=None) -> str` — maps `Config.FLASK_ENV` (`development`/`staging`/`production`) → `lumen-dev`/`lumen-staging`/`lumen-prod`; unknown → `lumen-dev`; explicit `env` overrides. Idempotent, no side effects.
+      - `is_tracing_enabled() -> bool` — reads `os.environ`, not `Config` (LangSmith SDK reads env directly); requires BOTH `LANGSMITH_TRACING` truthy (`true`/`1`/`yes`/`on`) AND `LANGSMITH_API_KEY` non-empty.
+      - `run_metadata(*, agent_name, user_id=None, git_sha=None, extra=None) -> dict` — returns `{"tags": [...], "metadata": {...}}`. Tags: `agent_name`, `env:<short>`, 7-char short sha. Metadata: `agent_name`, `git_sha` (full), optional `user_id` (as str), and any extras (extras cannot clobber reserved keys — attempts are logged + dropped). `git_sha` defaults to `os.environ["GIT_SHA"]` or `"dev"`.
+      - `mark_public(run_id) -> str | None` — best-effort. Returns `None` if tracing disabled, if the `langsmith` SDK isn't importable, or if `Client.share_run(run_id)` raises. Never raises to the caller.
+    - `backend/tests/utils/test_langsmith.py` — 20 hermetic tests. Uses `monkeypatch.setenv`/`delenv` for env vars, `unittest.mock.patch("langsmith.Client", ...)` for the share_run path, `sys.modules["langsmith"] = None` to simulate missing SDK.
+    - No changes to `Config` — `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_TRACING` were already declared in BOOT-06. This module composes on top.
+  - `CHAT-02` ✅ — Three chat retrieval tools.
+    - `backend/app/agents/chat/retrievers.py`:
+      - `retrieve_recent_impacts(user_id, portfolio_id, *, session, lookback_days=7, k=5) -> list[ImpactRead]` — SQL query filtered by `user_id` + `portfolio_id` + `created_at >= now - lookback_days`; ordered `confidence DESC, created_at DESC`. **Skips rows with non-empty `guardrail_violations`** (they represent failed generations and aren't useful chat context). Over-fetches k*3 to keep the after-filter count near k.
+      - `retrieve_news(query, user_id, portfolio_id, *, session, news_store, embed, k=5, since_days=30, min_similarity=0.35) -> list[ChatNewsSnippet]` — RAG over `news_items` Chroma collection. Loads the caller's tickers from `positions.ticker`; over-fetches from Chroma (k*4), then filters each hit by (a) freshness within `since_days`, (b) cluster intersection with the caller's ticker set (via `NewsCluster.entity_tickers`), (c) `similarity >= min_similarity`. Snippet is `body[:500]` (or title if body absent). Empty ticker set → returns `[]` immediately.
+      - `get_portfolio_summary(user_id, portfolio_id, *, session) -> PortfolioSummary | None` — one-shot: portfolio (with cross-user check — returns `None` if not the caller's), positions (ticker/asset_type/quantity/currency), themes (description/weight), and the most-recent `Briefing`'s `structured_content["generated_summary"]` + `briefing_date`.
+    - `backend/tests/agents/test_chat_retrievers.py` — 12 hermetic tests. Uses the sqlite + Chroma tempdir env fixture from `tests/agents/test_relevance_prefilter.py`. Deterministic `_FakeEmbed` (3D vectors: `fed`/`aapl`/`rate` → axis 0, `pharma` → axis 1, else axis 2).
+  - `BRIEF-02` ✅ — Briefing synthesizer LangGraph.
+    - `backend/app/agents/briefing/graph.py` — compiled at import as `BRIEFING_GRAPH`. Nodes: `gather_impacts` → `rank_top_movers` → `rank_watchlist` → `synthesize_falsifiability` → `compose_summary` → `validate` → `persist`. All-linear graph (no conditional edges — validation failure just refuses persistence).
+    - Public entry: `async synthesize_briefing_for_user(user_id, portfolio_id, *, session, llm, briefing_date=None, lookback_hours=24, force=False) -> Briefing | None`. Idempotent on the `(user_id, portfolio_id, briefing_date)` unique key.
+    - Structured LLM outputs (Pydantic): `_RankPick(picks: list[UUID], one_line_summaries: dict[UUID, str])` for both ranking stages; `_FalsifiabilityList(items: list[str] max_length=5)`; `_Summary(text: str max_length=800)`.
+    - `_gather_impacts_node` filters `confidence >= 0.5`, skips rows with `guardrail_violations`, ranks by `confidence * novelty` (novelty = `1 / (1 + hours_since_created)`), keeps top 15.
+    - `_rank_top_movers_node` + `_rank_watchlist_node`: LLM picks are intersected with the actual candidate set (hallucination guardrail). Watchlist LLM is skipped when `remaining` is empty (all candidates went to top movers) — this is a small optimization and made two tests need a second seed impact to exercise both stages.
+    - `_validate_node`: GRD-01 lexical on the summary, every top/watch `one_line_summary` + `mechanism_summary`, and every falsifiability item. Any violation blocks persistence (`row=None`). Deviation-from-BUILD: `skip_llm=True` mirrors IMP-04's rationale.
+    - `_persist_node`: writes `Briefing.structured_content` via `BriefingContent(...).model_dump(mode="json")`; `cited_impact_ids = [str(id) for id in top+watch]`; `generation_duration_ms = int((monotonic - start) * 1000)`.
+    - `backend/app/agents/briefing/prompts.py` — four SYSTEM constants, three `build_*_prompt(...)` helpers. All prompts enforce PRD principle #2 (no directional language) inline.
+    - `backend/tests/agents/test_briefing_graph.py` — 10 hermetic tests: compile-at-import, happy path (5 impacts, 3 top + 2 watch), confidence-filter (all sub-0.5 → None + 0 LLM calls), idempotency (2 impacts so watchlist runs), force replaces row, hallucinated-id filter, guardrail violation blocks persistence, `affected_positions` → ticker resolution, skip-impacts-with-guardrail-violations, lookback-hours honored.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **293 passed, 5 deselected** (+11 new hermetic tests for IMP-05).
+  - `python -m pytest tests -q` → **335 passed, 5 deselected** (+42 new: 20 EVAL-02 + 12 CHAT-02 + 10 BRIEF-02).
   - `ruff check .` clean.
-  - Manual: `curl -s /api/news/clusters/<id>/impact` returns 202 on above-threshold uncached clusters, 200 on cached, 404 on below-threshold or unknown cluster.
-- **Files touched:** created `backend/app/routes/impact.py`, `backend/tests/routes/test_impact.py`. Modified `backend/app/schemas/news.py` (typed `impact: ImpactRead | None`), `backend/app/routes/news.py` (cluster detail now serializes caller's impact row), `backend/app/main.py` (router include), `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Files touched:** 6 new modules (`utils/langsmith.py`, `agents/chat/retrievers.py`, `agents/briefing/graph.py`, `agents/briefing/prompts.py`, plus two `__init__.py` package markers created earlier this session for `app/agents/briefing/` and `app/agents/chat/`) + 3 new test files. Ticked BRIEF-02, CHAT-02, EVAL-02 in `BUILD.md`. Rewrote this HANDOFF.
 - **Migrations added:** none.
-- **Tests added:** 11 hermetic.
+- **Tests added:** 42 hermetic.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **BUILD.md's spec left the polling protocol implicit** — the response body includes `poll_url`, and we chose to make `poll_url` the same GET endpoint that returned the 202 (a client polls until they get 200). No separate "job" resource. Simpler and matches the IMP-04 idempotency model — duplicate enqueues don't multiply rows.
-  - **Enqueue uses `asyncio.create_task` from within the request handler**, not FastAPI `BackgroundTasks`. Reason: `BackgroundTasks` runs after the response but before the connection closes, holding the client until the LLM call finishes; `create_task` returns immediately. The background coroutine opens its own session from `get_session_factory()` because the request-scoped session dies with the response.
-  - **Enqueue is a FastAPI dependency (`get_impact_enqueue`), overridable via `app.dependency_overrides`** — the test double `_EnqueueRecorder` records calls without touching the real graph. In production it defaults to the fire-and-forget task. This was already the shape used for `get_db_session` and `require_auth` in earlier route tests.
-  - **Below-threshold + no-relevance-row are both 404 with the same message.** BUILD says "Below-threshold returns 404 with a clear message." — extended to no-relevance-row (structurally identical: caller has no reason to see this cluster's analyst output).
-- **Bug caught mid-session:** first full-suite run showed 27 unrelated test failures across the normalizer and orchestrator. Root cause: I dropped `Any` from `from typing import Any, Literal` in `app/schemas/news.py` when tightening `ClusterDetailRead.impact`, but `NewsItemIn.raw_payload: dict[str, Any]` and `NewsItemIn.hints: dict[str, Any]` still needed it — pydantic couldn't finish class construction. Restored the import; the rest of the suite went green immediately.
+  - **BRIEF-02 uses `check_directional(..., skip_llm=True)`** — lexical-only guardrail inside the graph. Same rationale as IMP-04: a shared scripted LLM feeding both `compose_summary` and GRD-01's YES/NO would be untestable.
+  - **BRIEF-02 skips the watchlist LLM call when `remaining` is empty** (all candidates chosen for top movers). Small optimization; test coverage adjusted (`test_idempotent_*` and `test_force_replaces_row` seed 2 impacts).
+  - **BRIEF-02 returns `None` on guardrail violation** rather than persisting a "failed" row. Unlike IMP-04 (per-item, individually salvageable), a briefing is a single aggregate artifact — a leaked directional phrase in ANY section should block the whole thing.
+  - **CHAT-02 filters news by `NewsCluster.entity_tickers` intersection with the caller's tickers.** BUILD says "filtered to items touching the user's tickers" without spelling out the mechanism. Using cluster metadata is clean and index-friendly on Postgres.
+  - **EVAL-02 doesn't yet wire `run_metadata()` into the existing graphs** (REL-04, IMP-04, BRIEF-02). Deferred as a one-line addition per graph — should land alongside CHAT-03 or in a small "wire tracing metadata everywhere" cleanup.
+- **Session mechanics recap:** Initial parallel-subagent attempt failed (BRIEF-02 stalled mid-response; CHAT-02 + EVAL-02 lost their completion records — likely process cycle). Diagnosed cleanly: only the empty `__init__.py` markers survived. Restarted sequentially in-session — EVAL-02 (smallest) → CHAT-02 → BRIEF-02 (biggest). Two BRIEF-02 tests needed a second seed impact after the first `pytest -v` revealed the "watchlist skipped when remaining empty" optimization. Full suite green on the retry.
 
 ---
 
 ## Environment state
 
-- Backend: impact analyst is live end-to-end AND exposed via HTTP. The `/api/news/clusters/{id}/impact` GET + POST/generate pair completes the retrieve → reason → validate → persist → serve loop. `ClusterDetailRead.impact` is now a real typed field.
+- Backend: briefing synthesizer + chat retrieval tools + LangSmith tagging helpers all live. Ready for BRIEF-03 (scheduled generation) and CHAT-03 (agent that composes the retrieval tools).
 - Frontend: unchanged.
 - Database: Alembic head `e5b02c8f6a39` (CHAT-01). No new migrations this session.
-- Vectors: unchanged. Remember `python -m app.evals.seed_analogs` before smoke-testing the endpoint against real Chroma (the enqueue calls the real graph, which needs the analog corpus seeded).
-- Tests: **293 hermetic, 5 opt-in.**
+- Vectors: unchanged. `historical_analogs` still needs a `python -m app.evals.seed_analogs` run before end-to-end smoke tests of IMP-04 / IMP-05 / BRIEF-02.
+- Tests: **335 hermetic, 5 opt-in.**
 - CI: REL-03..this-batch pending push through CI.
 - Docs: unchanged.
 
@@ -90,15 +92,16 @@ Before starting, verify:
 
 ## Open questions / blockers
 
-- **None for BRIEF-02.** BRIEF-01 schema, IMP-05 endpoint, and the whole impact pipeline underneath are all live. BRIEF-02 composes a thorough-tier LLM over today's impact rows.
-- **Follow-ups queued (do not fold into BRIEF-02 unless it's convenient):**
-  - **`analyze_impact_for_user` returns `None` on hard failure** — IMP-05 currently swallows this in the background task (log-only). If the client polls and never gets a row, they'll see 202-forever. Consider a `impact_failures` table or a "last_attempt_at" column so the endpoint can eventually surface "generation failed, try again" instead of "still generating."
+- **None for BRIEF-03.** APScheduler already in place (see `main.py::_build_default_orchestrator` for the pattern). BRIEF-03 adds a second scheduled job; the existing `_ingest_and_fanout` wrapper is the recipe.
+- **Follow-ups queued (do not fold into BRIEF-03 unless it's convenient):**
+  - Wire `app.utils.langsmith.run_metadata(...)` into every LangGraph invocation site (REL-04, IMP-04, BRIEF-02) — 3 one-line changes: pass `config=run_metadata(agent_name=..., user_id=..., extra={"cluster_id": ...})` to `graph.ainvoke(state, config=...)`.
+  - `analyze_impact_for_user` returns `None` on hard failure — IMP-05 currently swallows this. Consider a `impact_failures` table so the endpoint can surface "generation failed" instead of "still generating" forever.
   - Refresh `yfinance` pin in `requirements.txt` (0.2.44 → 1.5.x).
   - Expand `analogs.json` from 37 → ~150 events.
   - Tighten GRD-03 lexical patterns (`audit`, `will`) if UX testing shows over-refusal.
-  - Consider wiring GRD-01's LLM stage into IMP-04 via a separate `LLMClient` instance in the endpoint construction. Not blocking; ergonomic hardening for prod.
-  - Surface `langsmith_run_id` from `LLMResponse` — currently always `None` on persisted impact rows.
-  - Add a `Config.IMPACT_MIN_SCORE` env var (currently the code defaults to `Decimal("0.3")` and reads `getattr(Config, "IMPACT_MIN_SCORE", 0.3)` — Config doesn't declare it explicitly yet).
+  - Wire GRD-01's LLM stage into IMP-04 and BRIEF-02 endpoints via a separate `LLMClient` instance (not inside the graph). Ergonomic, not blocking.
+  - Surface `langsmith_run_id` from `LLMResponse` onto persisted impact + briefing rows.
+  - Add a `Config.IMPACT_MIN_SCORE` env var (currently the code defaults to `Decimal("0.3")` via `getattr(Config, "IMPACT_MIN_SCORE", 0.3)`).
 
 ---
 

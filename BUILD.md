@@ -1106,7 +1106,7 @@ Aggregate the day's impact assessments into a personalized briefing.
 - **Acceptance:** migration clean.
 - **Depends on:** IMP-01.
 
-### BRIEF-02 — Briefing synthesizer agent
+### BRIEF-02 — Briefing synthesizer agent ✅
 
 - **Files:** `backend/app/agents/briefing/graph.py`, `backend/app/agents/briefing/prompts.py`.
 - **Action:**
@@ -1214,7 +1214,7 @@ RAG over the user's news + assessments + portfolio, with streaming responses.
 - **Acceptance:** migration clean.
 - **Depends on:** BOOT-05.
 
-### CHAT-02 — Chat retrieval tools
+### CHAT-02 — Chat retrieval tools ✅
 
 - **Files:** `backend/app/agents/chat/retrievers.py`.
 - **Action:** Three retrievers callable as tools:
@@ -1413,7 +1413,7 @@ The resume-worthy differentiator. Real labeled dataset, LangSmith runs, publishe
   - `evals/README.md` documents provenance, labeling protocol, and known limitations.
 - **Depends on:** IMP-04.
 
-### EVAL-02 — LangSmith setup + tracing
+### EVAL-02 — LangSmith setup + tracing ✅
 
 - **Files:** `backend/app/utils/langsmith.py` (extend), CI env vars.
 - **Action:**
