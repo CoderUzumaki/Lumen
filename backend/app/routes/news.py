@@ -28,9 +28,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import get_db_session
+from app.db.models.impact import ImpactAssessment
 from app.db.models.news import NewsCluster, NewsItem
 from app.db.models.portfolio import Portfolio
 from app.db.models.relevance import RelevanceScore
+from app.schemas.impact import ImpactRead
 from app.schemas.news import (
     ClusterDetailRead,
     NewsClusterRead,
@@ -123,6 +125,7 @@ async def cluster_detail(
     )
 
     relevance: RelevanceScore | None = None
+    impact_row: ImpactAssessment | None = None
     portfolio = await _active_portfolio(user.user_id, db)
     if portfolio is not None:
         relevance = (
@@ -134,9 +137,18 @@ async def cluster_detail(
                 )
             )
         ).scalar_one_or_none()
+        impact_row = (
+            await db.execute(
+                select(ImpactAssessment).where(
+                    ImpactAssessment.cluster_id == cluster_id,
+                    ImpactAssessment.user_id == user.user_id,
+                    ImpactAssessment.portfolio_id == portfolio.id,
+                )
+            )
+        ).scalar_one_or_none()
 
     return ClusterDetailRead(
         cluster=_to_cluster_read(cluster, items),
         relevance=RelevanceRead.model_validate(relevance) if relevance else None,
-        impact=None,
+        impact=ImpactRead.model_validate(impact_row) if impact_row else None,
     )

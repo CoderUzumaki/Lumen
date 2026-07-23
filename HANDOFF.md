@@ -2,82 +2,87 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-21 (session 33 — IMP-04 + BRIEF-01 + CHAT-01, run in parallel)
-**Progress:** 40/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-04, GRD-01..GRD-03, BRIEF-01, CHAT-01). DATA-06 (frontend UI) + REL-07 (frontend news feed) + IMP-06 (frontend impact card) still pending — all frontend-blocked; backend continues.
+**Last updated:** 2026-07-21 (session 34 — IMP-05 impact endpoint + on-demand generation)
+**Progress:** 41/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01, CHAT-01). DATA-06 (frontend UI) + REL-07 (frontend news feed) + IMP-06 (frontend impact card) still pending — all frontend-blocked; backend continues.
 
 ---
 
 ## Next module
 
-**ID:** `IMP-05`
-**Title:** Impact endpoint + on-demand generation
-**Depends on:** IMP-04 (now live), REL-06 (news endpoints).
-**Read:** `BUILD.md` → the `IMP-05` block at ~line 1032. Wires the impact analyst behind a FastAPI endpoint (probably `POST /api/impact/generate/{cluster_id}` or similar — check the block for exact shape) and updates `ClusterDetailRead.impact` in `app/schemas/news.py` from the placeholder `Any = None` to `ImpactRead | None`.
+**ID:** `BRIEF-02`
+**Title:** Briefing synthesizer agent
+**Depends on:** IMP-05 (now live), BRIEF-01.
+**Read:** `BUILD.md` → the `BRIEF-02` block at ~line 1109. Builds `backend/app/agents/briefing/graph.py` + `backend/app/agents/briefing/prompts.py`. Consumes today's most-relevant impact rows for a user + active portfolio and synthesizes a `BriefingContent` (three sections: `top_movers`, `watchlist`, `what_would_change_my_thinking` + `generated_summary`). Persists a `briefings` row.
 
-After IMP-05: BRIEF-02 (briefing synthesizer agent), CHAT-02 (chat retrieval tools), and BRIEF-03 (scheduled briefing generation) become the next parallelizable trio. BRIEF-02 depends on IMP-05 + BRIEF-01. CHAT-02 depends on IMP-05 + ING-07. BRIEF-03 depends on BRIEF-02.
+After BRIEF-02, the next parallelizable trio: **BRIEF-03** (scheduled generation — wires APScheduler for the user-configured briefing hour), **CHAT-02** (three chat retrieval tools: `retrieve_recent_impacts`, `retrieve_news`, `get_portfolio_summary`), and — trickier — **EVAL-02** (LangSmith wiring). BRIEF-03 depends on BRIEF-02. CHAT-02 depends on IMP-05 + ING-07 (both live). EVAL-02 depends only on BOOT-06 (live) and extends `app/utils/langsmith.py` (does not yet exist — create it).
 
 **Branch state:**
-- IMP-04 is fully live and exercised by 8 hermetic tests. `analyze_impact_for_user(cluster_id, user_id, portfolio_id, *, session, analogs_store, embed, llm, fetch_prices=..., force=False)` in `app.agents.impact.graph` — same shape as REL-04's entry point. Returns `ImpactAssessment | None` (None on hard LLM parse failure with no salvageable content).
-- The graph's `validate` node passes `skip_llm=True` to `check_directional` — only the lexical stage runs INSIDE the graph. Rationale: sharing one scripted `LLMClient` between `reason_mechanism` and GRD-01's YES/NO stage would make the repair loop non-deterministic under test doubles. Production still gets the strict lexical rule; if you want GRD-01's LLM stage too, wire it via a separate `LLMClient` instance in IMP-05's endpoint construction (not inside the graph).
-- `Briefing`, `ChatSession`, `ChatMessage` tables + Pydantic schemas are live. Alembic head is `e5b02c8f6a39` (CHAT-01).
-- `ClusterDetailRead.impact` is STILL typed `Any = None` in `app/schemas/news.py`. IMP-05 should tighten this to `ImpactRead | None` and wire the actual serialization from a persisted row.
+- IMP-05 is live behind auth. `GET /api/news/clusters/{id}/impact` returns cached (200) or 202 + `poll_url`; `POST /impact/generate` forces regeneration. Threshold gate: relevance score ≥ 0.3 for the caller (default; override via `Config.IMPACT_MIN_SCORE`). Below-threshold or absent-relevance clusters return 404. Cross-user isolated — a user never observes another user's impact row.
+- `ClusterDetailRead.impact` now typed `ImpactRead | None` (no more placeholder `Any`). REL-06's cluster detail endpoint fills it from the caller's own impact row via a scoped query — same isolation rule.
+- The impact-generation enqueue is a fire-and-forget `asyncio.create_task` in `app/routes/impact.py::_default_enqueue`. Uses a fresh `AsyncSession` from `get_session_factory()`, constructs its own `LLMClient` / `EmbeddingClient` / `VectorStore("historical_analogs")`. Tests override via `app.dependency_overrides[get_impact_enqueue]` — a `_EnqueueRecorder` test double records calls and (optionally) fires a callback to synchronously seed the cached row.
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows the BRIEF-01 / CHAT-01 / IMP-04 trio on top.
+- `git log --oneline -5` shows IMP-05 on top.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **282 passed, 5 deselected**.
+- `cd backend && python -m pytest tests -q` reports **293 passed, 5 deselected**.
 - `ruff check .` clean.
-- `DATABASE_URL="sqlite:///./_scratch.db" alembic upgrade head` → `downgrade -2` → `upgrade head` clean (delete the scratch db afterward). Verified end-to-end this session.
 
 ---
 
 ## Last session
 
-- **Session goal:** Ship three modules in parallel — IMP-04 (impact analyst LangGraph, biggest agent module so far), BRIEF-01 (briefings table + migration), CHAT-01 (chat_sessions + chat_messages tables + migration). Three subagents in the shared v2 worktree; parent pre-assigned migration revision IDs so BRIEF-01 → CHAT-01 chained linearly on top of IMP-01's head (`c3b8f4e1d7a2`).
+- **Session goal:** Ship IMP-05 solo — no independent parallel candidate was cleanly available (BRIEF-02/CHAT-02 both need IMP-05; DATA-06 is a full frontend build; EVAL-01 requires human labeling). Also fold in the "tighten `ClusterDetailRead.impact: Any` → `ImpactRead | None`" cleanup queued from IMP-04's HANDOFF.
 - **Completed:**
-  - `IMP-04` ✅ — Impact analyst LangGraph.
-    - `backend/app/agents/impact/graph.py` — compiled at import time as `IMPACT_GRAPH`. Nodes: `load_context` (cluster + touched positions from most-recent classifier row + source stubs from news items) → `retrieve_analogs` (via IMP-02) → `fetch_price_context` (via IMP-03, wrapped in `asyncio.to_thread`) → `reason_mechanism` (thorough-tier LLM → `ImpactAssessmentPayload`) → `validate` (GRD-01 lexical + GRD-02 citations) → conditional `repair_prompt` → 2nd `reason_mechanism` → `persist` → END.
-    - `backend/app/agents/impact/prompts.py` — `_SYSTEM_PROMPT`, `build_reason_prompt(state)`, `build_repair_prompt(state)`. Body verbatim from BUILD.md IMP-04 with the "no directional language" enforcement list embedded.
-    - Public entry: `async analyze_impact_for_user(cluster_id, user_id, portfolio_id, *, session, analogs_store, embed, llm, fetch_prices=get_recent_price_action, force=False) -> ImpactAssessment | None`. Idempotency mirrors REL-04's `score_cluster_for_user`.
-    - `backend/tests/agents/test_impact_graph.py` — 8 hermetic tests: graph compiles at import; happy path persists row; idempotency (cache hit skips LLM); `force=True` re-runs; guardrail violation → repair succeeds; persistent violation → row persists with `guardrail_violations` populated; citation validator catches hallucinated URL; yfinance-None wraps gracefully. Uses `_ScriptedLLM(LLMClient)` that returns a queue of canned `ImpactAssessmentPayload` responses.
-    - **Design choice logged:** the graph passes `skip_llm=True` to `check_directional` — LLM-stage of GRD-01 is deliberately out-of-graph to keep the test LLM queue deterministic (a shared scripted LLM feeding both the reasoning and the guardrail's YES/NO would be untestable).
-  - `BRIEF-01` ✅ — Briefings table + Alembic migration + Pydantic schemas.
-    - `backend/app/db/models/briefing.py` — `Briefing(IdMixin, Base)`. Fields per BUILD.md's DDL: `user_id`, `portfolio_id`, `briefing_date` (Date), `structured_content` (`JSONB.with_variant(JSON, sqlite)`), `cited_impact_ids` (`ARRAY(UUID).with_variant(JSON, sqlite)` — wire type `list[str]`), `generated_at` (explicit `server_default=func.now()`), `generation_duration_ms`, `langsmith_run_id`. Unique `(user_id, portfolio_id, briefing_date)`. Index `(user_id, briefing_date DESC)`.
-    - `backend/alembic/versions/d4a91b7f5e28_brief01_briefings.py` — revision `d4a91b7f5e28`, down_revision `c3b8f4e1d7a2` (IMP-01 head). Postgres-only `auth.users` FK via `_is_postgres()`. `cited_impact_ids` server default `'{}'::uuid[]` on Postgres, `'[]'` on sqlite.
-    - `backend/app/schemas/briefing.py` — `BriefingItem` (`impact_id`, `cluster_title`, `one_line_summary`, `affected_positions: list[str]`, `mechanism_summary`, `confidence`), `BriefingContent` (three lists capped at 5 + `generated_summary`), `BriefingRead` (from-attributes response schema).
-    - `backend/tests/db/test_briefing.py` — 10 tests: ORM roundtrip, unique constraint, cascade on portfolio delete, Pydantic cap enforcement per list, confidence bounds, migration head assertion + roundtrip (with the alembic `fileConfig` logger re-enable pattern from IMP-01).
-  - `CHAT-01` ✅ — chat_sessions + chat_messages tables + Pydantic schemas.
-    - `backend/app/db/models/chat.py` — `ChatSession(IdMixin, TimestampsMixin, Base)` and `ChatMessage(IdMixin, CreatedAtMixin, Base)`. Session: `user_id`, `portfolio_id`, `title`, `seed_cluster_id` (nullable FK to `news_clusters`). Message: `session_id`, `role` (CHECK `role IN ('user','assistant','system')`), `content`, `citations` (JSONB variant, default `[]`), `tokens_used`, `langsmith_run_id`, `guardrail_violations` (JSONB variant, default `[]`). Indexes: `(user_id, updated_at DESC)` on sessions, `(session_id, created_at)` on messages.
-    - `backend/alembic/versions/e5b02c8f6a39_chat01_chat_sessions_messages.py` — revision `e5b02c8f6a39`, down_revision `d4a91b7f5e28` (BRIEF-01 head). Two tables in one migration. Postgres-only `auth.users` FK on sessions.
-    - `backend/app/schemas/chat.py` — `ChatSessionCreate`, `ChatSessionRead` (embeds messages), `ChatMessageIn`, `ChatMessageRead`. Reuses `Citation` from `app.schemas.impact`.
-    - `backend/tests/db/test_chat.py` — 8 tests: two-table ORM roundtrip, role CHECK rejects bad values, session→messages cascade, portfolio→sessions cascade, `seed_cluster_id` FK enforcement, migration head assertion, Pydantic `ChatMessageIn.content` bounds.
-  - `backend/app/db/models/__init__.py` — registered `Briefing`, `ChatMessage`, `ChatSession` alphabetically alongside the existing entries. Split across commits so each intermediate SHA imports cleanly.
+  - `IMP-05` ✅ — Impact endpoint + on-demand generation.
+    - `backend/app/routes/impact.py` — new router at `/api/news/clusters/{cluster_id}/impact` + `/impact/generate`.
+    - `GET /api/news/clusters/{cluster_id}/impact`:
+      1. Loads caller's active portfolio (404 if none, matches other routes' "no-portfolio → 404" pattern).
+      2. 404 on unknown `cluster_id`.
+      3. Probes for a cached `ImpactAssessment` row on `(cluster, user, portfolio)`. On hit → 200 with `ImpactRead` body.
+      4. On miss, loads the caller's `RelevanceScore` for the cluster. Score below `_IMPACT_MIN_SCORE` (default `Decimal("0.3")`, `Config.IMPACT_MIN_SCORE` overrides) or missing → 404 with a "cluster relevance is below the impact threshold" message.
+      5. Otherwise enqueues via the injected `EnqueueFn` (default: fire-and-forget `asyncio.create_task`) and returns 202 with `{"status": "generating", "poll_url": <this-same-endpoint>}`.
+    - `POST /api/news/clusters/{cluster_id}/impact/generate` — same threshold gate; always enqueues with `force=True`. Skips the cached-row probe (that's the point of force).
+    - Enqueue is a FastAPI dependency (`get_impact_enqueue`) so tests can override it — the real default calls `analyze_impact_for_user()` in a background task with its own fresh session + `LLMClient` + `EmbeddingClient` + `VectorStore("historical_analogs")`.
+    - IMP-04 idempotency (unique on `(cluster, user, portfolio)`) means duplicate enqueues on the GET path are safe: whichever generation wins, the loser observes the cached row on re-invocation.
+  - **Schema tightening (folded from IMP-04's follow-ups):**
+    - `app/schemas/news.py::ClusterDetailRead.impact` moved from `Any = None` to `ImpactRead | None = None`. Docstring updated to reference IMP-05.
+    - `app/routes/news.py::cluster_detail` now issues a scoped `SELECT ImpactAssessment WHERE cluster_id=? AND user_id=<caller> AND portfolio_id=<active>` and serializes the row into the response (same cross-user isolation rule as `relevance`).
+    - Restored `Any` in the `typing` import — `NewsItemIn.raw_payload: dict[str, Any]` and `NewsItemIn.hints: dict[str, Any]` still need it. Missed on the first edit; caught by 27 unrelated normalizer/orchestrator test failures on the first full-suite pass.
+  - `backend/tests/routes/test_impact.py` — 11 hermetic tests:
+    - Cached-200 (with a `_EnqueueRecorder` test double asserting `enqueue.calls == []`).
+    - Above-threshold-202 (asserts `poll_url` ends with the GET endpoint URL; asserts `enqueue.calls == [(cluster, user, pf, False)]`).
+    - Below-threshold-404, no-relevance-row-404, no-active-portfolio-404, unknown-cluster-404.
+    - Cross-user isolation on GET — Bob's cached row on the same cluster is invisible to Alice, and her above-threshold relevance still triggers her own enqueue.
+    - POST force with cached row present — still returns 202 and enqueues with `force=True`.
+    - POST below-threshold 404.
+    - `test_cluster_detail_serializes_impact_row` — REL-06's `/clusters/{id}` returns the `ImpactRead` body when a row exists for the caller.
+    - `test_cluster_detail_impact_null_when_caller_has_no_row` — only Bob has a row → Alice's detail response returns `impact: null`.
+  - `app/main.py` — registered `impact_routes.router`.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **282 passed, 5 deselected** (+26 new: 8 IMP-04 + 10 BRIEF-01 + 8 CHAT-01).
+  - `python -m pytest tests -q` → **293 passed, 5 deselected** (+11 new hermetic tests for IMP-05).
   - `ruff check .` clean.
-  - `alembic upgrade head → downgrade -2 → upgrade head` clean on sqlite (traverses both new migrations both ways).
-- **Files touched:** 12 new files (4 per module: model + migration + schema + tests for the DB modules; graph + prompts + package `__init__` + tests for IMP-04). Modified `backend/app/db/models/__init__.py` (three entries added). Ticked IMP-04, BRIEF-01, CHAT-01 in `BUILD.md`. Rewrote this `HANDOFF.md`.
-- **Migrations added:** 2 (`d4a91b7f5e28_brief01_briefings`, `e5b02c8f6a39_chat01_chat_sessions_messages`).
-- **Tests added:** 26 hermetic.
+  - Manual: `curl -s /api/news/clusters/<id>/impact` returns 202 on above-threshold uncached clusters, 200 on cached, 404 on below-threshold or unknown cluster.
+- **Files touched:** created `backend/app/routes/impact.py`, `backend/tests/routes/test_impact.py`. Modified `backend/app/schemas/news.py` (typed `impact: ImpactRead | None`), `backend/app/routes/news.py` (cluster detail now serializes caller's impact row), `backend/app/main.py` (router include), `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Migrations added:** none.
+- **Tests added:** 11 hermetic.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **IMP-04 `validate` node uses `check_directional(text, skip_llm=True)`** — only the lexical stage runs in-graph. Rationale documented in `graph.py`'s module docstring and above.
-  - **IMP-04 returns `None` on hard failure** (LLM parse error with no salvageable draft), not a placeholder row. Callers (IMP-05 endpoint) must handle the None case.
-  - **IMP-04 `langsmith_run_id` is always `None`** in persisted rows — `LLMResponse` doesn't surface it yet. Fill in when BOOT-06-adjacent LangSmith wiring exposes the id.
-  - **BRIEF-01 migration head test targets revision `d4a91b7f5e28`** explicitly rather than `head` (which is downstream after CHAT-01's chain). The test stays invariant to further chained migrations.
-  - **CHAT-01 `guardrail_violations` typed `list[dict]`** on `ChatMessageRead` — BUILD.md doesn't specify a shape, so we kept it loose (mirrors the JSON stored server-side).
-- **Session mechanics recap:** Three subagents ran in parallel in the shared v2 worktree. Parent pre-assigned migration revisions (BRIEF-01: `d4a91b7f5e28`, CHAT-01: `e5b02c8f6a39` chaining after BRIEF-01) so alembic history stays linear. Both agents also concurrently edited `backend/app/db/models/__init__.py` — the file ended in a 3-way-stacked state (Briefing + ChatMessage/ChatSession + ImpactAssessment). Parent split commits surgically: BRIEF-01 commit's `__init__.py` has only Briefing added; CHAT-01 commit's `__init__.py` adds Chat entries on top; IMP-04 commit doesn't touch `__init__.py`. Each intermediate SHA imports cleanly (bisect-safe). Commits (in order): BRIEF-01 → CHAT-01 → IMP-04 (which carries the BUILD.md ticks for all three + this HANDOFF).
+  - **BUILD.md's spec left the polling protocol implicit** — the response body includes `poll_url`, and we chose to make `poll_url` the same GET endpoint that returned the 202 (a client polls until they get 200). No separate "job" resource. Simpler and matches the IMP-04 idempotency model — duplicate enqueues don't multiply rows.
+  - **Enqueue uses `asyncio.create_task` from within the request handler**, not FastAPI `BackgroundTasks`. Reason: `BackgroundTasks` runs after the response but before the connection closes, holding the client until the LLM call finishes; `create_task` returns immediately. The background coroutine opens its own session from `get_session_factory()` because the request-scoped session dies with the response.
+  - **Enqueue is a FastAPI dependency (`get_impact_enqueue`), overridable via `app.dependency_overrides`** — the test double `_EnqueueRecorder` records calls without touching the real graph. In production it defaults to the fire-and-forget task. This was already the shape used for `get_db_session` and `require_auth` in earlier route tests.
+  - **Below-threshold + no-relevance-row are both 404 with the same message.** BUILD says "Below-threshold returns 404 with a clear message." — extended to no-relevance-row (structurally identical: caller has no reason to see this cluster's analyst output).
+- **Bug caught mid-session:** first full-suite run showed 27 unrelated test failures across the normalizer and orchestrator. Root cause: I dropped `Any` from `from typing import Any, Literal` in `app/schemas/news.py` when tightening `ClusterDetailRead.impact`, but `NewsItemIn.raw_payload: dict[str, Any]` and `NewsItemIn.hints: dict[str, Any]` still needed it — pydantic couldn't finish class construction. Restored the import; the rest of the suite went green immediately.
 
 ---
 
 ## Environment state
 
-- Backend: impact analyst is live end-to-end (retrieve analogs → fetch prices → reason → validate → repair? → persist). Briefing + chat schema layers ready for their agent/endpoint modules.
+- Backend: impact analyst is live end-to-end AND exposed via HTTP. The `/api/news/clusters/{id}/impact` GET + POST/generate pair completes the retrieve → reason → validate → persist → serve loop. `ClusterDetailRead.impact` is now a real typed field.
 - Frontend: unchanged.
-- Database: Alembic head `e5b02c8f6a39` (CHAT-01). Two new tables (`briefings`, `chat_sessions`, `chat_messages`).
-- Vectors: unchanged. Remember `python -m app.evals.seed_analogs` before smoke-testing IMP-04 or IMP-05 locally against real Chroma.
-- Tests: **282 hermetic, 5 opt-in.**
+- Database: Alembic head `e5b02c8f6a39` (CHAT-01). No new migrations this session.
+- Vectors: unchanged. Remember `python -m app.evals.seed_analogs` before smoke-testing the endpoint against real Chroma (the enqueue calls the real graph, which needs the analog corpus seeded).
+- Tests: **293 hermetic, 5 opt-in.**
 - CI: REL-03..this-batch pending push through CI.
 - Docs: unchanged.
 
@@ -85,14 +90,15 @@ Before starting, verify:
 
 ## Open questions / blockers
 
-- **None for IMP-05.** IMP-04 return-type is `ImpactAssessment | None` — the endpoint must handle the `None` case (either return a 502-shaped envelope or persist a placeholder-with-error and 200; recommend the former).
-- **Follow-ups queued (do not fold into IMP-05 unless it's convenient):**
-  - Tighten `ClusterDetailRead.impact: Any` to `ImpactRead | None` — actually **IMP-05 IS the natural home for this**. Do it there.
+- **None for BRIEF-02.** BRIEF-01 schema, IMP-05 endpoint, and the whole impact pipeline underneath are all live. BRIEF-02 composes a thorough-tier LLM over today's impact rows.
+- **Follow-ups queued (do not fold into BRIEF-02 unless it's convenient):**
+  - **`analyze_impact_for_user` returns `None` on hard failure** — IMP-05 currently swallows this in the background task (log-only). If the client polls and never gets a row, they'll see 202-forever. Consider a `impact_failures` table or a "last_attempt_at" column so the endpoint can eventually surface "generation failed, try again" instead of "still generating."
   - Refresh `yfinance` pin in `requirements.txt` (0.2.44 → 1.5.x).
   - Expand `analogs.json` from 37 → ~150 events.
   - Tighten GRD-03 lexical patterns (`audit`, `will`) if UX testing shows over-refusal.
-  - Consider wiring GRD-01's LLM stage into IMP-04 via a separate `LLMClient` instance in the endpoint construction (not in the graph itself). Not blocking; ergonomic hardening for prod.
+  - Consider wiring GRD-01's LLM stage into IMP-04 via a separate `LLMClient` instance in the endpoint construction. Not blocking; ergonomic hardening for prod.
   - Surface `langsmith_run_id` from `LLMResponse` — currently always `None` on persisted impact rows.
+  - Add a `Config.IMPACT_MIN_SCORE` env var (currently the code defaults to `Decimal("0.3")` and reads `getattr(Config, "IMPACT_MIN_SCORE", 0.3)` — Config doesn't declare it explicitly yet).
 
 ---
 

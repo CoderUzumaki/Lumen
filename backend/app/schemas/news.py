@@ -14,6 +14,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
+from app.schemas.impact import ImpactRead
+
 
 NewsSource = Literal["newsapi", "marketaux", "gdelt", "edgar", "rss"]
 
@@ -115,12 +117,11 @@ class RelevantClusterRead(BaseModel):
 class ClusterDetailRead(BaseModel):
     """Response shape for `/api/news/clusters/{cluster_id}`.
 
-    `impact` is `None` until the IMP-* modules add impact assessments; the
-    field is present so the frontend contract is stable.
+    `impact` is null when no impact assessment exists for the caller's active
+    portfolio yet (see IMP-05 — the impact endpoint enqueues generation on
+    demand).
     """
 
     cluster: NewsClusterRead
     relevance: RelevanceRead | None = None
-    # Placeholder until IMP-01 lands an `ImpactRead` schema. Using `Any` keeps
-    # the wire contract stable now without leaking a fake type upstream.
-    impact: Any | None = None
+    impact: ImpactRead | None = None

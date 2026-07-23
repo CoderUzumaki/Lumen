@@ -1029,7 +1029,7 @@ The core AI-engineering showcase: multi-step reasoning agent that turns a releva
   - `pytest backend/tests/agents/test_impact_graph.py` covers happy path + guardrail-violation-then-repair.
 - **Depends on:** IMP-01, IMP-02, IMP-03, REL-04, GRD-01, GRD-02, GRD-03.
 
-### IMP-05 — Impact endpoint + on-demand generation
+### IMP-05 — Impact endpoint + on-demand generation ✅
 
 - **Files:** `backend/app/routes/impact.py`.
 - **Action:**
