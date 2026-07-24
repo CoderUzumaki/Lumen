@@ -868,7 +868,7 @@ Given a news cluster + a user's portfolio + themes, decide relevance. First Lang
   - Cross-user: user can never see relevance rows scoped to another user.
 - **Depends on:** REL-01, DATA-03.
 
-### REL-07 — Frontend news feed page
+### REL-07 — Frontend news feed page ✅
 
 - **Files:** `frontend/src/app/news/page.tsx`, `frontend/src/components/news/*`.
 - **Action:** Feed view. Each row: cluster title, source chips, "affects: NVDA, VOO" badges, relevance score bar, "Analyze impact" button (enabled only when impact assessment exists or on-demand generation is triggered).
