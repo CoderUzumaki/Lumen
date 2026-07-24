@@ -1165,7 +1165,7 @@ Aggregate the day's impact assessments into a personalized briefing.
   - Frontend can consume the stream and progressively render sections.
 - **Depends on:** BRIEF-02.
 
-### BRIEF-05 — Frontend briefing page
+### BRIEF-05 — Frontend briefing page ✅
 
 - **Files:** `frontend/src/app/briefing/page.tsx`, `frontend/src/components/briefing/*`, `frontend/src/hooks/use-sse.ts`.
 - **Action:** Full briefing page. Three sections. Each item card shows title, one-line summary, mechanism (expandable), affected positions, confidence bar, "view full analysis" link → the impact detail page. A "Generate live" button that streams a fresh briefing via SSE for demo purposes.

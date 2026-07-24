@@ -2,79 +2,84 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-24 (session 39 — DATA-06 frontend UI foundation)
-**Progress:** 52/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-06, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01..BRIEF-04, CHAT-01..CHAT-04, SIM-01..SIM-03, EVAL-02). REL-07 (news feed) + IMP-06 (impact card) + BRIEF-05 (briefing page) + CHAT-05 (chat UI) + SIM-04 (scenario page) all pending — all remaining frontend modules now unblocked by DATA-06.
+**Last updated:** 2026-07-24 (session 40 — REL-07 + IMP-06 + BRIEF-05 frontend trio via 2 parallel subagents)
+**Progress:** 55/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-06, ING-01..ING-10, REL-01..REL-07, IMP-01..IMP-06, GRD-01..GRD-03, BRIEF-01..BRIEF-05, CHAT-01..CHAT-04, SIM-01..SIM-03, EVAL-02). CHAT-05 (chat UI) + SIM-04 (scenario page) are the only remaining frontend modules; DEPLOY-01 + DEPLOY-02 + EVAL-01 + OPT-* still open.
 
 ---
 
 ## Next module
 
-DATA-06 unblocked 5 downstream frontend modules. Natural next-parallel-trio candidates (all frontend, all unblocked):
+The five-frontend-page arc from DATA-06 collapsed by three this session; the natural next pair is:
 
-- **REL-07** (frontend news feed) — depends on REL-06 (live) + DATA-06 (now live). Pattern-copies `/portfolios` list.
-- **IMP-06** (frontend impact card) — depends on IMP-05 (live) + DATA-06 (live). Deep detail page.
-- **BRIEF-05** (frontend briefing page) — depends on BRIEF-04 (live). Includes SSE stream consumption.
-- **CHAT-05** (frontend chat UI) — depends on CHAT-04 (live). Also SSE.
-- **SIM-04** (frontend scenario page) — depends on SIM-03 (live). Chip UI + SSE.
+- **CHAT-05** (frontend chat UI) — depends on CHAT-04 (live) + DATA-06 (live). SSE-driven; can reuse `useSse` from BRIEF-05.
+- **SIM-04** (frontend scenario page) — depends on SIM-03 (live) + DATA-06 (live). Chip UI over `GET /api/scenarios/presets` + SSE-driven simulate via `POST /api/scenarios/simulate` (also reusable via `useSse`).
 
-Recommended next parallel trio: **REL-07 + IMP-06 + BRIEF-05** (three that pair naturally — feed → detail → briefing). Then CHAT-05 + SIM-04 as a follow-up pair.
+Recommended pair: **CHAT-05 + SIM-04** in parallel via 2 subagents. Both consume SSE and both can lean on `hooks/use-sse.ts` (added this session).
 
-**Alternative if the goal is production shipping:**
-- **DEPLOY-02 (Fly.io backend deploy)** — shippable now.
-- **DEPLOY-01 (Vercel frontend deploy)** — shippable now that DATA-06 lands (though the app is thin without REL-07 + IMP-06 + BRIEF-05).
+**Alternative production tracks (both shippable now — app is a real product with these three pages landing):**
+- **DEPLOY-02 (Fly.io backend)** — deploy the FastAPI service so the frontend can talk to a real backend. Highest-value move for a portfolio demo URL.
+- **DEPLOY-01 (Vercel frontend)** — with `/onboarding/portfolio`, `/portfolios`, `/portfolios/[id]`, `/news`, `/news/[id]`, `/briefing` all live, the app is thick enough to demo. Chat + scenario pages can follow.
 
-Ask the user which direction they want.
+**EVAL-01 (golden dataset labeling)** — still available but is labeling work, not implementation; ask before picking it up.
+
+**Ask the user which direction they want.**
 
 **Branch state:**
-- Frontend `/onboarding/portfolio`, `/portfolios`, `/portfolios/[id]` all live behind `<AuthGuard>` + Suspense. Typed TanStack Query hooks in `lib/api/portfolios.ts`. Sample-portfolio seed button. Playwright e2e spec scaffolded but opt-in (not gated in CI — Playwright not in devDeps yet).
-- Every backend agent + endpoint is live. No new migrations this session.
+- Frontend now has 8 routes: `/`, `/signin`, `/onboarding/portfolio`, `/portfolios`, `/portfolios/[id]`, `/news`, `/news/[id]`, `/briefing`. Every authed page uses the `<Suspense><AuthGuard>…</AuthGuard></Suspense>` + `export const dynamic = "force-dynamic"` shell.
+- Shared API scaffolding lives in `frontend/src/lib/api/client.ts` — `apiFetch` (throws on non-2xx), `apiFetchRaw` (return raw Response — needed for IMP-06's 200/202 branch), `openBackendStream` (fetch-driven SSE with Bearer auth — EventSource can't set headers). All four API modules (`portfolios.ts`, `news.ts`, `impact.ts`, `briefings.ts`) route through it.
+- New reusable hook: `frontend/src/hooks/use-sse.ts` — manual-start SSE hook wrapping `openBackendStream`; auto-aborts on unmount; handles terminal `complete`/`error` frames; CHAT-05 and SIM-04 can consume this directly.
+- Backend untouched.
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows DATA-06 on top.
+- `git log --oneline -6` shows this session's commits on top: `BRIEF-05` → `IMP-06` → `REL-07` → `scaffold: lib/api/client.ts` → `DATA-06`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **393 passed, 5 deselected**.
-- `cd frontend && NEXT_PUBLIC_BACKEND_URL=http://localhost:8000 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=x npm run build && npm run lint` clean.
-- `ruff check backend/` clean.
+- `cd backend && python -m pytest tests -q` reports **393 passed, 5 deselected** (backend unchanged — no need to re-run unless suspicious).
+- `cd frontend && NEXT_PUBLIC_BACKEND_URL=http://localhost:8000 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=x npm run build && npm run lint` clean (8 routes compile, no lint warnings).
 
 ---
 
 ## Last session
 
-- **Session goal:** Ship DATA-06 — the frontend portfolio setup UI. First frontend module of the session; user picked this over deploy / eval-labeling.
+- **Session goal:** Ship the recommended frontend trio — REL-07 + IMP-06 + BRIEF-05 — via parallel subagents.
 - **Completed:**
-  - `DATA-06` ✅ — Frontend portfolio setup UI (onboarding + list + detail).
-    - `frontend/src/lib/api/portfolios.ts`:
-      - Typed shapes (`Portfolio`, `Position`, `PortfolioCreateInput`, `PositionCreateInput`, etc.) mirroring `backend/app/schemas/portfolio.py`.
-      - `apiFetch<T>()` — fetch helper that grabs the current Supabase session's `access_token` and attaches it as `Bearer`. Backend URL from `NEXT_PUBLIC_BACKEND_URL`. Envelope-aware error extraction (`body.error.message` or `body.detail`).
-      - Query key namespace: `portfolioKeys.all` / `.lists()` / `.detail(id)`.
-      - TanStack Query v5 hooks: `useListPortfolios`, `usePortfolio(id)`, `useCreatePortfolio`, `useUpdatePortfolio`, `useDeletePortfolio`, `useActivatePortfolio`, `useAddPosition`, `useUpdatePosition`, `useDeletePosition`. Every mutation invalidates `portfolioKeys.all` on success.
-      - `SAMPLE_PORTFOLIO_TICKERS`: AAPL, MSFT, NVDA, GOOGL, VOO, BND (plausible tech-heavy portfolio for the "load sample" button).
-    - `frontend/src/app/onboarding/portfolio/page.tsx`: portfolio name + repeating position rows (ticker / type / qty / currency / exchange / remove). "Load sample portfolio" button seeds the 6 tickers. Submit → creates portfolio (`is_active=true`) → sequentially adds each position → redirects to `/portfolios`. Client-side validation (at least one ticker, non-empty name). `data-testid` hooks on load-sample, ticker rows, and submit for the Playwright spec.
-    - `frontend/src/app/portfolios/page.tsx`: card grid. Each portfolio card shows name, position count, "Active" badge (if active), "View details" link, "Set active" button (when inactive), delete button (with `confirm()` prompt). Empty-list redirect: `useEffect` → `router.replace("/onboarding/portfolio")` when `query.data?.length === 0`. "New portfolio" CTA in the header.
-    - `frontend/src/app/portfolios/[id]/page.tsx`: detail view. Positions table with inline edit (row → pencil → editable inputs → save/cancel). Add-new-position form at the bottom. Uses Next 15's `use(params)` for the async params shape.
-    - Every auth-guarded page wraps `<AuthGuard>` in a `<Suspense fallback={<PageSkeleton />}>` boundary — Next 15 refuses to prerender pages whose descendants call `useSearchParams()` (which `AuthGuard` does internally). Also `export const dynamic = "force-dynamic"` on each (client-only shape).
-    - `frontend/e2e/onboarding.spec.ts` + `frontend/playwright.config.ts`: Playwright e2e scaffold covering the sample-portfolio path. Marked `test.skip(!process.env.LUMEN_TEST_USER_JWT, ...)` — a real Supabase session (or an injected JWT mock) is required to bypass sign-in; wiring that mock is a future step. Not in CI yet (Playwright not in devDeps).
-    - `frontend/tsconfig.json`: excluded `e2e/` and `playwright.config.ts` from the TS project (Playwright deps aren't installed).
+  - **scaffold** — extracted shared `apiFetch` + `apiFetchRaw` + `openBackendStream` (fetch-driven SSE with Bearer auth) into `frontend/src/lib/api/client.ts`. `portfolios.ts` now imports from it; the three new API modules use it too.
+  - `REL-07` ✅ — `/news` feed. Suspense + AuthGuard + `dynamic = "force-dynamic"`. Rows: canonical title, deduped source chips, entity-ticker badges, `ScoreBar` (0..1 → % on a `bg-primary`/`bg-secondary` track), "Analyze impact" affordance gated at `IMPACT_MIN_SCORE = 0.3` with a tooltip explaining the disable. Header shows "Feed for: <active portfolio name>". Empty state handles both "no active portfolio" and "no relevant news yet" via the same copy path (backend returns `[]` for both). Files: `lib/api/news.ts`, `app/news/page.tsx`, `components/news/{feed-row,score-bar,source-chip}.tsx`.
+  - `IMP-06` ✅ — `/news/[cluster_id]` detail. Three impact states:
+    - Cached (200) → `ImpactCard` with mechanism prose, magnitude bar (fractional Decimals rendered on a fixed -25/+25% axis, "Range not established" when both endpoints null), timeframe pill, confidence bar, falsifiability Alert, citation chips (click → Sheet side panel with the full quote + "Open source" external link), historical-analog cards, `Affects N positions` count, generated-at timestamp, optional Regenerate button.
+    - Generating (202) → auto-polling `useClusterImpact` (3s interval, 60s timeout, then fallback message).
+    - 404 → explanation + link to `/news`.
+    - Files: `lib/api/impact.ts`, `app/news/[id]/page.tsx`, `components/impact/{impact-card,magnitude-bar,citation-panel,analog-card}.tsx`.
+  - `BRIEF-05` ✅ — `/briefing`. Three sections (top movers / watchlist / what would change my thinking) rendered as visually distinct groups. Header: portfolio badge + date + "Regenerate" (POST → 1s-interval refetch loop, 15s cap) + "Generate live" (SSE stream via `useSse` → `openBackendStream("/api/briefings/stream")`, updates progressively). Each `BriefingItem` card: cluster title (link — see deviation), one-line summary, `<Collapsible>` mechanism, ticker badges, confidence bar. Empty state: 404 → "no briefing yet — generate one" with a CTA that triggers the SSE. Files: `lib/api/briefings.ts`, `hooks/use-sse.ts`, `app/briefing/page.tsx`, `components/briefing/{briefing-item-card,stream-status}.tsx`.
 - **Acceptance verified locally:**
-  - `NEXT_PUBLIC_* npm run build` → 5 routes compiled cleanly, 7 static pages generated.
+  - `NEXT_PUBLIC_* npm run build` → 9 pages generated, 8 routes (`/news`, `/news/[id]`, `/briefing` added).
   - `NEXT_PUBLIC_* npm run lint` → no ESLint warnings or errors.
-  - Backend suite untouched — still **393 passed, 5 deselected** (I didn't run it this session; no backend files touched).
-- **Files touched:** 4 new frontend files (`api/portfolios.ts`, 3 pages), 2 e2e scaffolding files (`onboarding.spec.ts`, `playwright.config.ts`), `tsconfig.json` (exclude e2e), `BUILD.md` (tick), `HANDOFF.md` (this file).
+  - Backend suite untouched — verified once at session start: **393 passed, 5 deselected**.
+- **Files touched:** 4 commits split surgically —
+  - `scaffold`: `lib/api/client.ts` (new, 198L), `lib/api/portfolios.ts` (60L → 1L: dropped duplicated fetch helpers, imports from client.ts).
+  - `REL-07`: `lib/api/news.ts`, `app/news/page.tsx`, `components/news/{feed-row,score-bar,source-chip}.tsx`, `BUILD.md` tick.
+  - `IMP-06`: `lib/api/impact.ts`, `app/news/[id]/page.tsx`, `components/impact/{impact-card,magnitude-bar,citation-panel,analog-card}.tsx`, `BUILD.md` tick.
+  - `BRIEF-05`: `lib/api/briefings.ts`, `hooks/use-sse.ts`, `app/briefing/page.tsx`, `components/briefing/{briefing-item-card,stream-status}.tsx`, `BUILD.md` tick, `HANDOFF.md`.
 - **Migrations added:** none.
-- **Tests added:** 1 Playwright spec (scaffolded, opt-in).
+- **Tests added:** none (Playwright still opt-in via `LUMEN_TEST_USER_JWT` from session 39; no new e2e coverage).
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **Onboarding submit redirects to `/portfolios`, not `/briefing`.** BUILD says "lands on `/briefing` (placeholder)"; `/briefing` isn't wired yet (BRIEF-05). `/portfolios` is a valid landing that shows what the user just created. Update to `/briefing` when BRIEF-05 lands.
-  - **Playwright spec is opt-in via `LUMEN_TEST_USER_JWT`.** BUILD acceptance says "Playwright test `frontend/e2e/onboarding.spec.ts` covers the sample-portfolio path." — the spec exists and exercises the path, but requires a real Supabase JWT (or a future mock) to bypass sign-in. Not gated in CI; Playwright itself isn't in devDeps (would add ~200MB of Chromium on `npm install`).
-  - **TanStack Query v5 typing collision.** The `onSuccess` callback in mutation options has a 4-arg signature (`data, variables, context, meta`) but wrapping user-supplied `onSuccess` while forwarding args cleanly requires an `unknown[]` spread cast. Local to `useCreatePortfolio` etc.; documented via inline comment.
-  - **All three pages have `export const dynamic = "force-dynamic"`** to avoid static-prerender bailout on `useSearchParams()` inside `AuthGuard`. Combined with a `<Suspense>` boundary wrapping `<AuthGuard>`.
-- **Session mechanics recap:** In-session build. Two round-trips through `npm run build` needed — first for the TanStack Query v5 signature issue, second for the Next 15 Suspense-around-useSearchParams rule. Both landed clean once diagnosed.
+  - **REL-07: no per-portfolio filter.** The `/api/news/relevant` endpoint scopes to the caller's active portfolio and takes no `portfolio_id` param. The page shows "Feed for: <active portfolio name>" instead. Adding a filter would require a backend change.
+  - **IMP-06: `affected_positions` rendered as count, not tickers.** The impact table stores position UUIDs and has no ticker join; the mechanism paragraph already names positions inline. Cheap follow-up: add `positions` (joined) to `ImpactRead`.
+  - **BRIEF-05: `BriefingItem` title link points to `/news` (feed), not `/news/[cluster_id]`.** The briefing schema exposes `impact_id` but not `cluster_id`, so we can't route to the detail page. Tooltip on the title explains this. Fix: add `cluster_id` to `BriefingItem` in a follow-up.
+  - **`news.ts`'s `ClusterDetailRead.impact` is typed `unknown`** to avoid a cross-module import from `impact.ts`. The detail page reads impact via `useClusterImpact` (impact.ts) separately, so no consumer is affected. Documented inline.
+  - **`ImpactCard`'s magnitude bar uses a fixed -25%/+25% axis.** Not spec'd — chosen so the bar has a stable visual meaning across different assessments. Values outside that range clip visually (the numeric label still shows the true value).
+- **Session mechanics recap:**
+  - Two parallel subagents, per HANDOFF's "safer than 3" recipe. Agent A owned REL-07 + IMP-06 (news arc); Agent B owned BRIEF-05 (SSE hook + briefing page). Both landed clean on first build.
+  - Pre-flight scaffolding (`client.ts` + `portfolios.ts` refactor) done in-session before spawning agents — the shared `apiFetch` / SSE helpers are needed by every downstream module so extracting them once removes coordination cost.
+  - Post-agent: `news.ts` had a `import type { ImpactRead } from "@/lib/api/impact"` — coupled REL-07 and IMP-06 at compile time, so REL-07 wouldn't build in isolation. Fixed by loosening `ClusterDetailRead.impact: ImpactRead | null` → `impact: unknown` (the detail page reads impact from `useClusterImpact`, never from `useClusterDetail`, so the type was dead weight). Now each commit is standalone-buildable — bisect-clean.
+  - Commits split into 4 surgical drops (scaffold + REL-07 + IMP-06 + BRIEF-05) with BUILD.md ticks in the module commits they belong to and HANDOFF folded into the BRIEF-05 commit.
 
 ---
 
 ## Older last-session snapshots (short)
 
+- **Session 39:** DATA-06 in-session — first frontend module. 5 routes compile clean.
 - **Session 38:** SIM-01 + SIM-03 in-session. 393 passed. Deviations: SSE pseudo-node; presets endpoint bundled into SIM-01's router.
 - **Session 37:** CHAT-04 + SIM-02 in parallel via 2 subagents. 383 passed.
 - **Session 36:** BRIEF-03 (in-session) + BRIEF-04 & CHAT-03 (parallel). 363 passed.
