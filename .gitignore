@@ -26,6 +26,7 @@ __pycache__/
 !backend/app/pipelines/sources/data/*.json
 !backend/app/evals/data/*.json
 !backend/alembic/versions/*.json
+!frontend/vercel.json
 google-credentials.json
 *-credentials.json
 

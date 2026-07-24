@@ -1,0 +1,91 @@
+# Vercel frontend deploy (DEPLOY-01).
+#
+# This workflow is OPTIONAL — Vercel's native git integration already deploys
+# `v2/intelligence-agent` on every push (production) and every PR (preview).
+# Enable this workflow ONLY if you want CI to control deploys instead of the
+# Vercel webhook (e.g. you're gating deploys on the backend CI job passing).
+#
+# Trigger is `workflow_dispatch` (manual) by default. To make it run on push:
+# uncomment the `push:` block below AND disable the Vercel → Git integration
+# in the Vercel dashboard, or the same deploy will fire twice.
+#
+# Prerequisites (do these once):
+#   1. `npm i -g vercel && vercel login`.
+#   2. `cd frontend && vercel link` — creates `.vercel/project.json` with
+#      the project + org id. DO NOT commit `.vercel/`.
+#   3. Read the linked ids: `cat frontend/.vercel/project.json`.
+#   4. Add three repo secrets in GitHub → Settings → Secrets → Actions:
+#      - VERCEL_TOKEN     (generate at vercel.com/account/tokens)
+#      - VERCEL_ORG_ID    (from step 3)
+#      - VERCEL_PROJECT_ID (from step 3)
+name: Deploy frontend to Vercel (opt-in)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deploy target"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - preview
+  # Uncomment ONLY after disabling Vercel's native git integration in the
+  # Vercel dashboard — otherwise every push fires twice.
+  # push:
+  #   branches:
+  #     - v2/intelligence-agent
+  #   paths:
+  #     - "frontend/**"
+  #     - ".github/workflows/deploy-frontend.yml"
+
+concurrency:
+  group: deploy-frontend-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: vercel deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        working-directory: frontend
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Build
+        working-directory: frontend
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel build --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Deploy prebuilt artifacts
+        working-directory: frontend
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+          fi

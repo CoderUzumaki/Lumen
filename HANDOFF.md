@@ -2,29 +2,44 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-24 (session 42 — DEPLOY-02 config artifacts; deploy pending user's `fly` credentials)
-**Progress:** 57/60 modules complete + DEPLOY-02 config landed (unverified — `fly deploy` still owed by the user). Modules: HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-06, ING-01..ING-10, REL-01..REL-07, IMP-01..IMP-06, GRD-01..GRD-03, BRIEF-01..BRIEF-05, CHAT-01..CHAT-05, SIM-01..SIM-04, EVAL-02. Remaining: DEPLOY-01, DEPLOY-02 tick (once verified), EVAL-01, OPT-*.
+**Last updated:** 2026-07-24 (session 42 — DEPLOY-02 + DEPLOY-01 config artifacts; both deploys pending user's platform credentials)
+**Progress:** 57/60 modules complete + DEPLOY-01/DEPLOY-02 config landed (both unverified — the actual `fly deploy` / Vercel import steps are owed by the user). Modules: HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-06, ING-01..ING-10, REL-01..REL-07, IMP-01..IMP-06, GRD-01..GRD-03, BRIEF-01..BRIEF-05, CHAT-01..CHAT-05, SIM-01..SIM-04, EVAL-02. Remaining: DEPLOY-01 + DEPLOY-02 ticks (once verified), EVAL-01, OPT-*.
 
 ---
 
 ## Next module
 
-**DEPLOY-02 config is on disk but not tick-verified.** Complete the user-side deploy steps (below) → verify `/health` returns 200 → tick DEPLOY-02 in BUILD.md. Then move to DEPLOY-01 (Vercel frontend).
+**Both DEPLOY-01 and DEPLOY-02 have their config artifacts committed. Neither is tick-verified — both wait on the user completing the platform-side deploy.**
+
+Complete DEPLOY-02 first (backend must be live before the frontend can talk to it). Then DEPLOY-01. Then tick both.
 
 **To finish DEPLOY-02 (user's runbook — full detail in `backend/DEPLOY.md`):**
 
 1. Install `flyctl` + `flyctl auth login`.
 2. `cd backend && flyctl launch --no-deploy --copy-config --name lumen-backend --region <region>` (pick the region closest to your Supabase Postgres).
-3. `flyctl volumes create lumen_data --size 1 --region <region>` (Chroma + yfinance cache persistence).
-4. `flyctl secrets set SECRET_KEY=… OPENROUTER_API_KEY=… SUPABASE_URL=… DATABASE_URL=postgresql+asyncpg://… ALLOWED_ORIGINS=…` — batch these into ONE call so the machine only restarts once. Optional: `NEWSAPI_KEY`, `MARKETAUX_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGFUSE_*`.
-5. `flyctl deploy --remote-only`. First deploy runs Alembic migrations via the container ENTRYPOINT.
-6. `curl https://<app-name>.fly.dev/health` should return `{"status":"ok","commit":"<git sha>"}`.
-7. For CI-driven deploys on every push to `v2/intelligence-agent` that touches `backend/**`: `flyctl auth token`, then add it as `FLY_API_TOKEN` in GitHub → Settings → Secrets → Actions. The `.github/workflows/deploy-backend.yml` workflow uses this to run `flyctl deploy` automatically.
-8. Once `/health` is green, tick `DEPLOY-02 — Backend on Fly.io ✅` in `BUILD.md`.
+3. `flyctl volumes create lumen_data --size 1 --region <region>`.
+4. Batch-set secrets: `SECRET_KEY`, `OPENROUTER_API_KEY`, `SUPABASE_URL`, `DATABASE_URL` (Supabase Postgres URL, prefixed `postgresql+asyncpg://`), `ALLOWED_ORIGINS` (initially `http://localhost:3000`, updated to the Vercel URL after DEPLOY-01).
+5. `flyctl deploy --remote-only`.
+6. `curl https://<app-name>.fly.dev/health` → `{"status":"ok","commit":"<sha>"}`.
+7. Add `FLY_API_TOKEN` to GitHub secrets so `.github/workflows/deploy-backend.yml` can CI-deploy on push.
+8. Tick `DEPLOY-02 — Backend on Fly.io ✅` in `BUILD.md`.
 
-**Remaining after DEPLOY-02:**
+**To finish DEPLOY-01 (user's runbook — full detail in `frontend/DEPLOY.md`):**
 
-- **DEPLOY-01** (Vercel frontend) — depends on the live backend URL. Once you have `https://<app>.fly.dev`, set `NEXT_PUBLIC_BACKEND_URL` in Vercel + deploy `frontend/`. Straightforward `vercel.json` + a GitHub Actions workflow.
+1. In Vercel dashboard: **Add New… → Project → Import Git Repository** → this repo. **Root Directory: `frontend`**. Vercel auto-detects Next.js 15.
+2. Set env vars (all three tiers — Production, Preview, Development):
+   - `NEXT_PUBLIC_BACKEND_URL` = the Fly URL from DEPLOY-02.
+   - `NEXT_PUBLIC_SUPABASE_URL` = `https://<project-ref>.supabase.co`.
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = the anon key from Supabase.
+3. **Production branch:** set to `v2/intelligence-agent` in Project Settings → Git.
+4. Click **Deploy**. First deploy ~2 minutes.
+5. Update backend CORS with the new Vercel URL: `flyctl secrets set ALLOWED_ORIGINS="https://<vercel-domain>.vercel.app" && flyctl deploy`.
+6. Smoke-test: visit the URL, sign in, land on `/portfolios`, watch dev-tools Network to confirm API calls hit the Fly backend (not localhost).
+7. Tick `DEPLOY-01 — Frontend on Vercel ✅` in `BUILD.md`.
+8. (Optional) The `.github/workflows/deploy-frontend.yml` workflow is opt-in — Vercel's native git integration already deploys on every push. Only enable the Actions workflow if you want CI to gate deploys instead of the Vercel webhook. See `frontend/DEPLOY.md` for the setup.
+
+**Remaining after DEPLOY-01/02:**
+
 - **EVAL-01** (golden dataset labeling) — 200 labeled tuples of `(news, portfolio, expected relevance/impact)`. Labeling work, not implementation. EVAL-02's harness is already live and waiting for this dataset. **Human-labeling task — ask before picking up.**
 - **OPT-01+** (optimizations — rerankers, prompt cache, etc.) — polish; not blocking a working demo.
 
@@ -46,38 +61,44 @@ Before starting, verify:
 
 ## Last session
 
-- **Session goal:** Ship DEPLOY-02 backend config (Dockerfile / fly.toml / entrypoint / CI workflow / runbook). Cannot run `fly deploy` from this session (no `flyctl` credentials); handed the deploy step to the user with a full runbook.
-- **Completed:**
-  - `backend/Dockerfile` — python:3.11-slim base, system deps (build-essential, libpq-dev, libgomp1 for torch, curl for /health), pip install `requirements.txt`, `SentenceTransformer('all-MiniLM-L6-v2')` baked in at build time so first-request latency skips the ~90MB model pull, non-root `app` user (uid 1001), exposes 8080, `HEALTHCHECK` on `/health`, `ENTRYPOINT ["/app/scripts/entrypoint.sh"]`.
+- **Session goal:** Ship DEPLOY-02 (Fly.io backend) + DEPLOY-01 (Vercel frontend) config artifacts. Cannot run the actual `fly deploy` / Vercel import steps from this session (no cloud credentials); both deploys are handed to the user with runbooks.
+- **Completed — DEPLOY-02 config (backend/Fly.io):**
+  - `backend/Dockerfile` — python:3.11-slim base, system deps (build-essential, libpq-dev, libgomp1 for torch, curl for /health), pip install `requirements.txt`, `SentenceTransformer('all-MiniLM-L6-v2')` baked in at build time so the first request skips the ~90MB model pull, non-root `app` user (uid 1001), exposes 8080, `HEALTHCHECK` on `/health`, `ENTRYPOINT ["/app/scripts/entrypoint.sh"]`.
   - `backend/.dockerignore` — excludes `__pycache__`, tests, local sqlite / scratch DBs, `chroma_data/` + `price_cache/` (Fly volume replaces them), `.env*`, `.git/`, `.github/`.
   - `backend/scripts/entrypoint.sh` (executable bit set via `git update-index --chmod=+x`) — `mkdir -p` the Chroma + yfinance subdirs under `/app/data`, `python -m alembic upgrade head`, then `exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 2 --proxy-headers --forwarded-allow-ips=*`.
   - `backend/fly.toml` — app `lumen-backend`, region `ord` (change before first launch), `[http_service]` modern syntax with `auto_stop_machines = "stop"` + `min_machines_running = 0` for free-tier hibernation, HTTP check on `/health` every 30s with a 45s grace period, single `[[vm]]` at `shared-cpu-1x` / `512mb`. `[[mounts]]` binds `lumen_data` → `/app/data`; `[env]` points `CHROMA_PATH` and `YFINANCE_CACHE_PATH` under it so persistence survives redeploys.
   - `.github/workflows/deploy-backend.yml` — runs `flyctl deploy --remote-only` on every push to `v2/intelligence-agent` touching `backend/**`. Also `workflow_dispatch` for manual runs. Requires `FLY_API_TOKEN` repo secret; documents that in the file header + `DEPLOY.md`.
-  - `backend/DEPLOY.md` — one-time setup runbook (`fly launch`, `fly volumes create`, `fly secrets set`, first deploy, CI wiring) + day-2 ops (rollback, memory scale, secret updates, cache reset). Includes an explicit warning about the free-tier hibernation cold-start and the `ALLOWED_ORIGINS` step that pairs with DEPLOY-01.
-- **Deploy status:** **not deployed.** Files are on disk + committed. User needs to run steps 1–7 from `backend/DEPLOY.md` (or from the "Next module" section above) to actually stand the backend up. Once `/health` is green, tick `DEPLOY-02 — Backend on Fly.io ✅` in `BUILD.md`.
+  - `backend/DEPLOY.md` — one-time setup runbook (`fly launch`, `fly volumes create`, `fly secrets set`, first deploy, CI wiring) + day-2 ops (rollback, memory scale, secret updates, cache reset). Includes the free-tier hibernation caveat and the `ALLOWED_ORIGINS` step that pairs with DEPLOY-01.
+- **Completed — DEPLOY-01 config (frontend/Vercel):**
+  - `frontend/vercel.json` — pinned to `nextjs` framework, `npm ci` install, `next build` build, `iad1` region, security headers (X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy: strict-origin-when-cross-origin, Permissions-Policy).
+  - `.github/workflows/deploy-frontend.yml` — opt-in Vercel deploy via `vercel build` + `vercel deploy --prebuilt` (production or preview). Triggers only on `workflow_dispatch` by default because Vercel's native git integration already handles push→deploy — the workflow header documents that enabling both fires every push twice.
+  - `frontend/DEPLOY.md` — runbook: (1) Vercel dashboard → Add New Project → Root Directory `frontend`; (2) set three `NEXT_PUBLIC_*` env vars across Production/Preview/Development; (3) Production branch = `v2/intelligence-agent`; (4) after first deploy, update backend `ALLOWED_ORIGINS` on Fly. Also covers the opt-in Actions path (disconnect Vercel's git integration first).
+  - `.gitignore` fix — repo root had a blanket `*.json` ignore that swallowed `frontend/vercel.json`. Added `!frontend/vercel.json` to the existing exceptions list.
+- **Deploy status:** **neither is deployed.** Files are committed for both. See "Next module" section above for the exact user-side commands. Neither BUILD.md heading is ticked — the module acceptance criteria ("live URL reachable", "/health returns 200") can only be verified after the platform-side deploy.
 - **Acceptance verified locally:**
-  - No backend code changed. `pytest` not re-run — no Python files touched.
-  - Dockerfile / fly.toml not built locally (no Docker / no flyctl on the session host). Syntax has been eyeballed against Fly's current schema (modern `[http_service]` block, `auto_stop_machines` string, `[[mounts]]` without deprecated `initial_size`).
-- **Files touched:** 6 new files —
-  - `backend/Dockerfile`
-  - `backend/.dockerignore`
-  - `backend/scripts/entrypoint.sh` (git mode 100755)
-  - `backend/fly.toml`
-  - `backend/DEPLOY.md`
-  - `.github/workflows/deploy-backend.yml`
+  - No backend or frontend code changed. `pytest` not re-run — no Python files touched. Frontend build not re-run — no source files touched (only `vercel.json`, which Vercel reads at deploy time, not `next build` time).
+  - Dockerfile / fly.toml / vercel.json not exercised against their real platforms. Syntax eyeballed against current schemas.
+- **Files touched:** 10 new files + 2 modifications —
+  - Backend (6 new): `Dockerfile`, `.dockerignore`, `scripts/entrypoint.sh` (mode 100755), `fly.toml`, `DEPLOY.md`, `.github/workflows/deploy-backend.yml`.
+  - Frontend (3 new): `vercel.json`, `DEPLOY.md`, `.github/workflows/deploy-frontend.yml`.
+  - Modified: `.gitignore` (un-ignore for `frontend/vercel.json`), `HANDOFF.md` (this file).
 - **Migrations added:** none. (Alembic runs at container startup via ENTRYPOINT — no schema changes this session.)
 - **Tests added:** none.
-- **In-flight work:** DEPLOY-02 deploy step is owed by the user. See "Next module" section above for the exact commands.
+- **In-flight work:** both DEPLOY steps owed by the user. See "Next module" for the exact commands.
 - **Deviations from BUILD.md:**
-  - **DEPLOY-02 tick is deferred until the user verifies `/health` on the live URL.** BUILD.md's acceptance criterion is "backend URL reachable, /health returns 200, ingest runs successfully" — none of which can be checked without cloud credentials. Files are committed on the assumption that the user will complete the deploy step in a follow-up.
-  - **Volume mount destination is `/app/data`, not `/app/chroma_data` + `/app/price_cache`** (BUILD.md doesn't specify the exact path; PRD says a single volume). The two env vars point at subdirs under `/app/data` so both Chroma and yfinance cache share one Fly volume rather than paying for two.
-  - **Alembic runs inside the container ENTRYPOINT**, not as a Fly `release_command`. Release VMs don't share the mounted volume, and there's no schema work that requires an isolated release step here — running at container boot is cheaper and always keeps schema in sync with the deployed image.
-  - **`[http_service]` block, not the older `[[services]]`** — matches what `fly launch` currently emits, so `fly launch --copy-config` will merge cleanly.
+  - **DEPLOY-02 tick deferred** until the user verifies `/health` on the live Fly URL.
+  - **DEPLOY-01 tick deferred** until the user verifies the Vercel URL loads + can reach the backend.
+  - **Backend volume mount destination is `/app/data`,** not `/app/chroma_data` + `/app/price_cache` — BUILD.md doesn't specify a path and one volume is cheaper than two. Env vars point at subdirs.
+  - **Alembic runs inside the container ENTRYPOINT**, not as a Fly `release_command`. Release VMs don't share the mounted volume, and boot-time migrations keep schema in sync with the deployed image.
+  - **`[http_service]` block in fly.toml**, not the older `[[services]]` — matches what `fly launch` currently emits, so `fly launch --copy-config` merges cleanly.
+  - **The frontend deploy workflow is opt-in (`workflow_dispatch` only).** Vercel's native git integration handles push→deploy natively — enabling both fires every push twice.
+  - **`vercel.json` lives at `frontend/vercel.json`** (Vercel expects it inside the Root Directory, not at the monorepo root). Required an un-ignore in the repo-root `.gitignore` because line 20 has a blanket `*.json` ignore.
 - **Session mechanics recap:**
-  - In-session (no subagents). DEPLOY-02 is 6 files totaling ~330 lines — small enough that spawning wasn't worth the overhead.
-  - Fixed one path mismatch mid-session: initial fly.toml had `CHROMA_PATH=/app/chroma_data` but the mount was `/app/data` — Chroma would have written to an unmounted path and lost persistence. Aligned to `/app/data/chroma` + `/app/data/price_cache`, entrypoint ensures the subdirs exist.
-  - Modernized the fly.toml to `[http_service]` after realizing the initial `[[services]]` shape would clash with `fly launch --copy-config`.
-  - Executable bit stored in git (`git update-index --chmod=+x`) so `scripts/entrypoint.sh` runs directly on Fly's builder without needing a chmod inside the Dockerfile — belt-and-braces, the Dockerfile also runs `chmod +x` before switching users.
+  - Two DEPLOY modules in one in-session pass (no subagents — small file counts, mostly-config work, no runtime code changes). Total ~530 lines across 10 files + docs.
+  - Path bug caught mid-session: initial fly.toml had `CHROMA_PATH=/app/chroma_data` but the mount was `/app/data`. Fixed by aligning both env vars to subdirs under the mount (`/app/data/chroma` + `/app/data/price_cache`) with entrypoint ensuring the subdirs exist.
+  - Modernized fly.toml to `[http_service]` shape after realizing the older `[[services]]` block would clash with `fly launch --copy-config`.
+  - Executable bit stored in git for the entrypoint (`git update-index --chmod=+x`) so it runs directly on Fly's builder — belt-and-braces, the Dockerfile also `chmod +x`s before switching users.
+  - `.gitignore` gotcha found by `git check-ignore -v` after `git status` initially didn't show `vercel.json` as untracked. Blanket `*.json` at line 20 with explicit `!path/*.json` exceptions.
 
 ---
 
