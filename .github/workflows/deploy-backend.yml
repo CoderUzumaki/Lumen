@@ -1,0 +1,51 @@
+# Fly.io backend deploy (DEPLOY-02).
+#
+# Triggers on:
+#   - Push to v2/intelligence-agent that touches backend/ (production deploy).
+#   - Manual `workflow_dispatch` (first-run + emergency redeploys).
+#
+# Prerequisites (do these once, per the runbook in backend/DEPLOY.md):
+#   1. `fly launch --no-deploy` from backend/ to create the app + volume.
+#   2. `fly secrets set …` for SECRET_KEY, OPENROUTER_API_KEY, SUPABASE_URL,
+#      DATABASE_URL, ALLOWED_ORIGINS, plus optional NEWSAPI_KEY / MARKETAUX_KEY
+#      / LANGSMITH_API_KEY / LANGFUSE_* / etc.
+#   3. Add `FLY_API_TOKEN` to GitHub → Settings → Secrets → Actions.
+#      Generate with:  fly auth token
+name: Deploy backend to Fly.io
+
+on:
+  push:
+    branches:
+      - v2/intelligence-agent
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: fly deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: fly deploy (backend/)
+        working-directory: backend
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          # Pass the commit SHA so /health can echo it back — helpful when
+          # verifying that a redeploy actually rolled.
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          flyctl deploy \
+            --remote-only \
+            --build-arg GIT_SHA=${GIT_SHA} \
+            --strategy rolling

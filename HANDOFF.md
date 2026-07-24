@@ -2,23 +2,31 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-24 (session 41 — CHAT-05 + SIM-04 pair via 2 parallel subagents)
-**Progress:** 57/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-06, ING-01..ING-10, REL-01..REL-07, IMP-01..IMP-06, GRD-01..GRD-03, BRIEF-01..BRIEF-05, CHAT-01..CHAT-05, SIM-01..SIM-04, EVAL-02). **All frontend modules complete.** DEPLOY-01 + DEPLOY-02 + EVAL-01 + OPT-* still open.
+**Last updated:** 2026-07-24 (session 42 — DEPLOY-02 config artifacts; deploy pending user's `fly` credentials)
+**Progress:** 57/60 modules complete + DEPLOY-02 config landed (unverified — `fly deploy` still owed by the user). Modules: HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-06, ING-01..ING-10, REL-01..REL-07, IMP-01..IMP-06, GRD-01..GRD-03, BRIEF-01..BRIEF-05, CHAT-01..CHAT-05, SIM-01..SIM-04, EVAL-02. Remaining: DEPLOY-01, DEPLOY-02 tick (once verified), EVAL-01, OPT-*.
 
 ---
 
 ## Next module
 
-**All 20 core-product modules (data + agents + endpoints + frontend) are complete.** The frontend is a full 12-route app. Remaining work is deployment, evals, and optional optimization.
+**DEPLOY-02 config is on disk but not tick-verified.** Complete the user-side deploy steps (below) → verify `/health` returns 200 → tick DEPLOY-02 in BUILD.md. Then move to DEPLOY-01 (Vercel frontend).
 
-Options ranked by portfolio-piece impact:
+**To finish DEPLOY-02 (user's runbook — full detail in `backend/DEPLOY.md`):**
 
-- **DEPLOY-02** (Fly.io backend) — **highest ROI.** BUILD.md's block is at line 1560ish. Blocks the demo URL entirely. Do this first if the goal is a shareable link.
-- **DEPLOY-01** (Vercel frontend) — deploys the 12-route app to Vercel. Depends on DEPLOY-02 (frontend needs a real backend URL). Pair naturally with DEPLOY-02.
-- **EVAL-01** (golden dataset labeling) — 200 labeled tuples of `(news, portfolio, expected relevance/impact)`. Labeling work, not implementation. The eval harness (EVAL-02) already exists; EVAL-01 fills its dataset. **This is a human-labeling task.** Ask before picking it up.
+1. Install `flyctl` + `flyctl auth login`.
+2. `cd backend && flyctl launch --no-deploy --copy-config --name lumen-backend --region <region>` (pick the region closest to your Supabase Postgres).
+3. `flyctl volumes create lumen_data --size 1 --region <region>` (Chroma + yfinance cache persistence).
+4. `flyctl secrets set SECRET_KEY=… OPENROUTER_API_KEY=… SUPABASE_URL=… DATABASE_URL=postgresql+asyncpg://… ALLOWED_ORIGINS=…` — batch these into ONE call so the machine only restarts once. Optional: `NEWSAPI_KEY`, `MARKETAUX_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, `LANGFUSE_*`.
+5. `flyctl deploy --remote-only`. First deploy runs Alembic migrations via the container ENTRYPOINT.
+6. `curl https://<app-name>.fly.dev/health` should return `{"status":"ok","commit":"<git sha>"}`.
+7. For CI-driven deploys on every push to `v2/intelligence-agent` that touches `backend/**`: `flyctl auth token`, then add it as `FLY_API_TOKEN` in GitHub → Settings → Secrets → Actions. The `.github/workflows/deploy-backend.yml` workflow uses this to run `flyctl deploy` automatically.
+8. Once `/health` is green, tick `DEPLOY-02 — Backend on Fly.io ✅` in `BUILD.md`.
+
+**Remaining after DEPLOY-02:**
+
+- **DEPLOY-01** (Vercel frontend) — depends on the live backend URL. Once you have `https://<app>.fly.dev`, set `NEXT_PUBLIC_BACKEND_URL` in Vercel + deploy `frontend/`. Straightforward `vercel.json` + a GitHub Actions workflow.
+- **EVAL-01** (golden dataset labeling) — 200 labeled tuples of `(news, portfolio, expected relevance/impact)`. Labeling work, not implementation. EVAL-02's harness is already live and waiting for this dataset. **Human-labeling task — ask before picking up.**
 - **OPT-01+** (optimizations — rerankers, prompt cache, etc.) — polish; not blocking a working demo.
-
-**Recommended path: DEPLOY-02 → DEPLOY-01 in that order.** Then the demo URL is live and every downstream module (evals, calibration) can be exercised against production.
 
 **Ask the user which direction they want.**
 
@@ -37,6 +45,49 @@ Before starting, verify:
 ---
 
 ## Last session
+
+- **Session goal:** Ship DEPLOY-02 backend config (Dockerfile / fly.toml / entrypoint / CI workflow / runbook). Cannot run `fly deploy` from this session (no `flyctl` credentials); handed the deploy step to the user with a full runbook.
+- **Completed:**
+  - `backend/Dockerfile` — python:3.11-slim base, system deps (build-essential, libpq-dev, libgomp1 for torch, curl for /health), pip install `requirements.txt`, `SentenceTransformer('all-MiniLM-L6-v2')` baked in at build time so first-request latency skips the ~90MB model pull, non-root `app` user (uid 1001), exposes 8080, `HEALTHCHECK` on `/health`, `ENTRYPOINT ["/app/scripts/entrypoint.sh"]`.
+  - `backend/.dockerignore` — excludes `__pycache__`, tests, local sqlite / scratch DBs, `chroma_data/` + `price_cache/` (Fly volume replaces them), `.env*`, `.git/`, `.github/`.
+  - `backend/scripts/entrypoint.sh` (executable bit set via `git update-index --chmod=+x`) — `mkdir -p` the Chroma + yfinance subdirs under `/app/data`, `python -m alembic upgrade head`, then `exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 2 --proxy-headers --forwarded-allow-ips=*`.
+  - `backend/fly.toml` — app `lumen-backend`, region `ord` (change before first launch), `[http_service]` modern syntax with `auto_stop_machines = "stop"` + `min_machines_running = 0` for free-tier hibernation, HTTP check on `/health` every 30s with a 45s grace period, single `[[vm]]` at `shared-cpu-1x` / `512mb`. `[[mounts]]` binds `lumen_data` → `/app/data`; `[env]` points `CHROMA_PATH` and `YFINANCE_CACHE_PATH` under it so persistence survives redeploys.
+  - `.github/workflows/deploy-backend.yml` — runs `flyctl deploy --remote-only` on every push to `v2/intelligence-agent` touching `backend/**`. Also `workflow_dispatch` for manual runs. Requires `FLY_API_TOKEN` repo secret; documents that in the file header + `DEPLOY.md`.
+  - `backend/DEPLOY.md` — one-time setup runbook (`fly launch`, `fly volumes create`, `fly secrets set`, first deploy, CI wiring) + day-2 ops (rollback, memory scale, secret updates, cache reset). Includes an explicit warning about the free-tier hibernation cold-start and the `ALLOWED_ORIGINS` step that pairs with DEPLOY-01.
+- **Deploy status:** **not deployed.** Files are on disk + committed. User needs to run steps 1–7 from `backend/DEPLOY.md` (or from the "Next module" section above) to actually stand the backend up. Once `/health` is green, tick `DEPLOY-02 — Backend on Fly.io ✅` in `BUILD.md`.
+- **Acceptance verified locally:**
+  - No backend code changed. `pytest` not re-run — no Python files touched.
+  - Dockerfile / fly.toml not built locally (no Docker / no flyctl on the session host). Syntax has been eyeballed against Fly's current schema (modern `[http_service]` block, `auto_stop_machines` string, `[[mounts]]` without deprecated `initial_size`).
+- **Files touched:** 6 new files —
+  - `backend/Dockerfile`
+  - `backend/.dockerignore`
+  - `backend/scripts/entrypoint.sh` (git mode 100755)
+  - `backend/fly.toml`
+  - `backend/DEPLOY.md`
+  - `.github/workflows/deploy-backend.yml`
+- **Migrations added:** none. (Alembic runs at container startup via ENTRYPOINT — no schema changes this session.)
+- **Tests added:** none.
+- **In-flight work:** DEPLOY-02 deploy step is owed by the user. See "Next module" section above for the exact commands.
+- **Deviations from BUILD.md:**
+  - **DEPLOY-02 tick is deferred until the user verifies `/health` on the live URL.** BUILD.md's acceptance criterion is "backend URL reachable, /health returns 200, ingest runs successfully" — none of which can be checked without cloud credentials. Files are committed on the assumption that the user will complete the deploy step in a follow-up.
+  - **Volume mount destination is `/app/data`, not `/app/chroma_data` + `/app/price_cache`** (BUILD.md doesn't specify the exact path; PRD says a single volume). The two env vars point at subdirs under `/app/data` so both Chroma and yfinance cache share one Fly volume rather than paying for two.
+  - **Alembic runs inside the container ENTRYPOINT**, not as a Fly `release_command`. Release VMs don't share the mounted volume, and there's no schema work that requires an isolated release step here — running at container boot is cheaper and always keeps schema in sync with the deployed image.
+  - **`[http_service]` block, not the older `[[services]]`** — matches what `fly launch` currently emits, so `fly launch --copy-config` will merge cleanly.
+- **Session mechanics recap:**
+  - In-session (no subagents). DEPLOY-02 is 6 files totaling ~330 lines — small enough that spawning wasn't worth the overhead.
+  - Fixed one path mismatch mid-session: initial fly.toml had `CHROMA_PATH=/app/chroma_data` but the mount was `/app/data` — Chroma would have written to an unmounted path and lost persistence. Aligned to `/app/data/chroma` + `/app/data/price_cache`, entrypoint ensures the subdirs exist.
+  - Modernized the fly.toml to `[http_service]` after realizing the initial `[[services]]` shape would clash with `fly launch --copy-config`.
+  - Executable bit stored in git (`git update-index --chmod=+x`) so `scripts/entrypoint.sh` runs directly on Fly's builder without needing a chmod inside the Dockerfile — belt-and-braces, the Dockerfile also runs `chmod +x` before switching users.
+
+---
+
+## Older last-session snapshots (short)
+
+- **Session 41:** CHAT-05 + SIM-04 pair via 2 parallel subagents. 12 frontend routes compile.
+
+## Prior-session detail (kept for continuity — no longer authoritative)
+
+### Session 41 — CHAT-05 + SIM-04
 
 - **Session goal:** Ship CHAT-05 + SIM-04 in parallel via 2 subagents — the last remaining frontend pair.
 - **Completed:**

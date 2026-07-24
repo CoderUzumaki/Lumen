@@ -1,0 +1,78 @@
+# Fly.io deploy config for the Lumen backend (DEPLOY-02).
+#
+# Region: pick the one nearest your Supabase Postgres to minimize RTT.
+# Default here is `ord` (Chicago) — swap to your region before first deploy.
+# The app name is a placeholder — `fly launch` will prompt to pick one.
+#
+# Machines: one primary VM. Ingest + briefing schedulers run in-process via
+# APScheduler (per PRD "One FastAPI process, one scheduled worker (same
+# process)"). DEPLOY-03 splits schedulers into a second machine if the
+# in-process pair starves the HTTP handler.
+
+app = "lumen-backend"
+primary_region = "ord"
+
+kill_signal = "SIGTERM"
+kill_timeout = "20s"
+
+[build]
+  # Explicit — Fly picks up ./Dockerfile by default but being explicit
+  # means `fly deploy --dockerfile backend/Dockerfile` from the repo root
+  # works the same way as from the backend dir.
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  FLASK_ENV = "production"
+  LOG_LEVEL = "INFO"
+  # Chroma and yfinance both write inside the Fly volume mounted at /app/data
+  # (see [[mounts]] below) so a redeploy or VM restart doesn't wipe
+  # embeddings or the price cache. The entrypoint script ensures both
+  # subdirectories exist before uvicorn boots.
+  CHROMA_PATH = "/app/data/chroma"
+  YFINANCE_CACHE_PATH = "/app/data/price_cache"
+
+# Persisted volume for Chroma collections and the yfinance price cache.
+# Create with:  fly volumes create lumen_data --size 1 --region ord
+[[mounts]]
+  source = "lumen_data"
+  destination = "/app/data"
+
+# HTTP service. auto_stop_machines="stop" + min_machines_running=0 keeps
+# free-tier costs minimal — Fly hibernates the VM when idle and restores it
+# on the next request (2–5s cold-start; the /health check re-warms it).
+# Flip min_machines_running=1 if you need a permanently warm demo.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 200
+    soft_limit = 150
+
+# Liveness — /health returns {"status":"ok"} once uvicorn is up + Alembic
+# has finished migrations.
+[[http_service.checks]]
+  grace_period = "45s"
+  interval = "30s"
+  method = "get"
+  path = "/health"
+  protocol = "http"
+  timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[deploy]
+  # Alembic migrations run inside the container's ENTRYPOINT, so no
+  # release_command is set — a release VM can't reach the same volume and
+  # sentence-transformers doesn't need a warm-up either.
+  strategy = "rolling"

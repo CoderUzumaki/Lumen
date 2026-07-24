@@ -1,0 +1,42 @@
+# Build hygiene for the Fly.io deploy image (DEPLOY-02).
+# Keep the build context small so `fly deploy` uploads quickly.
+
+# Python caches / build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local dev DBs and scratch files
+*.db
+_scratch*
+_ci.db
+_test.db
+
+# Local Chroma / price caches (Fly volumes replace these at runtime)
+chroma_data/
+price_cache/
+.cache/
+
+# Tests + evals shipped separately from the runtime image
+tests/
+
+# Editor + OS junk
+.venv/
+venv/
+.env
+.env.local
+.env.*.local
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Git metadata (Fly builder ignores this anyway)
+.git/
+.gitignore
+.github/
