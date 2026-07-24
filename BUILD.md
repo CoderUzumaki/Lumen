@@ -1491,7 +1491,7 @@ The resume-worthy differentiator. Real labeled dataset, LangSmith runs, publishe
 
 User picks or defines a scenario; agent walks through impact on portfolio.
 
-### SIM-01 — Scenario schema + endpoint
+### SIM-01 — Scenario schema + endpoint ✅
 
 - **Files:** `backend/app/routes/scenarios.py`, `backend/app/schemas/scenario.py`.
 - **Action:**

@@ -22,6 +22,7 @@ from app.routes import me as me_routes
 from app.routes import news as news_routes
 from app.routes import portfolios as portfolios_routes
 from app.routes import positions as positions_routes
+from app.routes import scenarios as scenarios_routes
 from app.routes import themes as themes_routes
 from app.utils.config import Config
 from app.utils.logging_config import configure_logging
@@ -259,3 +260,4 @@ app.include_router(news_routes.router)
 app.include_router(impact_routes.router)
 app.include_router(briefings_routes.router)
 app.include_router(chat_routes.router)
+app.include_router(scenarios_routes.router)

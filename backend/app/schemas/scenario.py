@@ -16,9 +16,18 @@ schema as the wire response type. SIM-02 imports it as the LLM
 """
 from __future__ import annotations
 
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 from app.schemas.impact import Citation, HistoricalAnalog
+
+
+class ScenarioSimulateRequest(BaseModel):
+    """Request body for POST /api/scenarios/simulate (SIM-01)."""
+
+    scenario_text: str = Field(min_length=1, max_length=2000)
+    portfolio_id: UUID | None = None
 
 
 class PositionImpact(BaseModel):

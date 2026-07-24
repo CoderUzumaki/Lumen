@@ -2,52 +2,85 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-21 (session 37 — CHAT-04 + SIM-02 in parallel via subagents)
-**Progress:** 49/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01..BRIEF-04, CHAT-01..CHAT-04, SIM-02, EVAL-02). DATA-06 (frontend UI) + REL-07 (news feed) + IMP-06 (impact card) + BRIEF-05 (briefing page) + CHAT-05 (chat UI) + SIM-04 (scenario page) all pending — every frontend module.
+**Last updated:** 2026-07-21 (session 38 — SIM-01 + SIM-03 in-session pair)
+**Progress:** 51/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01..BRIEF-04, CHAT-01..CHAT-04, SIM-01..SIM-03, EVAL-02). DATA-06 (frontend UI) + REL-07 (news feed) + IMP-06 (impact card) + BRIEF-05 (briefing page) + CHAT-05 (chat UI) + SIM-04 (scenario page) all pending — every frontend module.
 
 ---
 
 ## Next module
 
-**ID:** `SIM-01`
-**Title:** Scenario schema + endpoint
-**Depends on:** IMP-04 (live), SIM-02 (now live).
-**Read:** `BUILD.md` → the `SIM-01` block at ~line 1494. Builds `backend/app/routes/scenarios.py`. One endpoint:
+The backend spine is now DONE for the "MVP + Phase 4/5/6/7 + Scenario Simulator" columns. Remaining backend modules — every one of them — is either:
 
-```
-POST /api/scenarios/simulate
-     body: { scenario_text: string, portfolio_id?: UUID }
-     response: SSE stream of scenario analysis (similar to impact analyst)
-```
+- **frontend** (DATA-06, REL-07, IMP-06, BRIEF-05, CHAT-05, SIM-04),
+- **labeled-eval work** (EVAL-01 needs human labeling → then EVAL-03/04/05/06),
+- **optimization chain** (OPT-01..06 — mostly depend on EVAL work), or
+- **benchmarks / deployment / design** (BENCH-01..04, DEPLOY-01..06, DESIGN-01..03).
 
-Note: `backend/app/schemas/scenario.py` **already exists** — SIM-02 preemptively landed the `PositionImpact` + `ScenarioSimulation` Pydantic shapes there (documented deviation in that module's docstring). SIM-01 just needs the route file + tests.
+**Recommended next call — escalate to user:** the natural next step forks into three plausible directions, each with different scope:
 
-Endpoint semantics:
-- Auth via `require_auth`.
-- Body validated via a `ScenarioSimulateRequest(BaseModel)` in `app.schemas.scenario` — `scenario_text: str (min 1, max 2000)`, `portfolio_id: UUID | None`.
-- If `portfolio_id` is omitted, use caller's active portfolio; 404 if no active portfolio.
-- Cross-user check: if `portfolio_id` is provided but not the caller's → 404.
-- Emit SSE pseudo-node envelope: `event: node_started`, then invoke `simulate_scenario(...)` on the injected runner, then emit `event: partial_content` with the serialized `ScenarioSimulation`, then `event: complete`. On error, emit `event: error`. (Same pattern used by BRIEF-04's `/api/briefings/stream`.)
-- Persistence: none — matches SIM-02's shape.
-- Injectable dependency `get_scenario_runner` for tests (mirror `get_impact_enqueue`, `get_briefing_enqueue`, `get_chat_turn_runner`).
+1. **DATA-06 (frontend UI foundation)** — the big frontend module that unblocks REL-07 / IMP-06 / BRIEF-05 / CHAT-05 / SIM-04. Substantial (Next.js 15 + TanStack Query + Playwright), single-session sized. Ideal if the goal is a full end-to-end demo.
+2. **EVAL-01 (golden dataset construction)** — a data-authoring module. BUILD's aspirational target is 200 relevance examples + 50 impact examples with double-labeling. A pragmatic first cut (20 examples each with single labels + a clear "known limitation" note in the README) would unblock EVAL-03/04/05/06 quickly.
+3. **OPT-01 (formalize the two-stage relevance win)** — depends on EVAL-03 (blocked by EVAL-01). Not runnable yet.
+4. **DEPLOY-01/02 (Vercel + Fly.io deploy)** — Vercel frontend depends on DATA-06+; Fly backend is technically shippable now (no frontend prereq). Interesting stopping point.
 
-**After SIM-01:** SIM-03 (preset scenarios — a curated JSON list + tiny helper) becomes trivial follow-up. Then only frontend + EVAL-01 (human labeling) + OPT chain remain in the backend spine.
+Ask the user which direction they want.
 
-**Branch state:**
-- `simulate_scenario(user_id, portfolio_id, scenario_text, *, session, analogs_store, embed, llm, fetch_prices=...) -> ScenarioSimulation | None` in `app.agents.scenario.graph`. Pure function; no persistence.
-- CHAT-04 exposes 5 endpoints under `/api/chat/sessions/*`. SSE emits a single synthetic `token` frame (BUILD's `tool_call`/`tool_result` events omitted pending a CHAT-03 refactor exposing `astream_events`).
-- No new migrations this session (head is still `e5b02c8f6a39`, CHAT-01).
+**Branch state (backend):**
+- Scenario simulator complete: `POST /api/scenarios/simulate` (SSE) + `GET /api/scenarios/presets` (curated chip list from SIM-03). Both authed.
+- Every backend agent + endpoint is live: relevance (REL-*), impact (IMP-*), briefing (BRIEF-*), chat (CHAT-*), scenario (SIM-01/02/03), guardrails (GRD-*). LangSmith helper (EVAL-02) ready to wire into graphs.
+- No new migrations this session (Alembic head still `e5b02c8f6a39`, CHAT-01).
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows the CHAT-04 / SIM-02 pair on top.
+- `git log --oneline -5` shows the SIM-03 / SIM-01 pair on top.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **383 passed, 5 deselected**.
+- `cd backend && python -m pytest tests -q` reports **393 passed, 5 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
+
+- **Session goal:** Ship SIM-01 (scenario endpoint) + SIM-03 (preset chip list) in-session — both small enough that spawning subagents wasn't worth the coordination cost.
+- **Completed:**
+  - `SIM-03` ✅ — Curated preset scenarios.
+    - `backend/app/agents/scenario/presets.py`: `Preset` frozen dataclass (`id`, `title`, `scenario_text`, `category`). `_PRESETS` tuple of 10 curated scenarios spanning monetary (Fed hikes/cuts, RBI), macro (US recession Q3), commodity (oil to $120), thematic (AI capex boom + slowdown), geopolitical (China stimulus, US tariff escalation), and crypto (spot ETF flows). Each preset has a stable kebab-case `id` so the UI can round-trip selections.
+    - Public API: `list_presets() -> list[Preset]` (display order), `get_preset(preset_id) -> Preset | None`.
+  - `SIM-01` ✅ — Scenario endpoint + presets endpoint.
+    - `backend/app/routes/scenarios.py`:
+      - `POST /api/scenarios/simulate` — body `ScenarioSimulateRequest(scenario_text, portfolio_id?)`. If `portfolio_id` is omitted → uses caller's active portfolio; 404 if none. If `portfolio_id` is provided → cross-user check via `_owned_portfolio`; 404 if not caller's (never leak existence). Returns `StreamingResponse(text/event-stream)` with the frames: `node_started` → `node_completed` (duration_ms) → `result` (serialized `ScenarioSimulation`) → `complete`. On runner exception → `error` frame. On runner returning None → `error` frame.
+      - `GET /api/scenarios/presets` — authed. Returns the SIM-03 list serialized as dicts (`id`, `title`, `scenario_text`, `category`).
+      - Injectable `ScenarioRunnerFn = (user_id, portfolio_id, scenario_text) -> Awaitable[ScenarioSimulation | None]` via `get_scenario_runner`. Default constructs its own session/analogs_store/embed/llm (request-scoped session dies before SSE finishes — same reason CHAT-04's turn runner is self-contained).
+    - `backend/app/schemas/scenario.py`: added `ScenarioSimulateRequest(scenario_text: str (1..2000), portfolio_id: UUID | None)`.
+    - `backend/app/main.py`: router wired.
+    - `backend/tests/routes/test_scenarios.py` — 10 hermetic tests: preset list shape + auth, SSE frame ordering, explicit-portfolio-id honored, no-portfolio 404, cross-user 404, runner-raises → error frame, runner-returns-None → error frame, body length validation (empty + >2000), SIM-03 `get_preset` roundtrip.
+- **Acceptance verified locally:**
+  - `python -m pytest tests -q` → **393 passed, 5 deselected** (+10 new — a single test file covers both SIM-01 and SIM-03).
+  - `ruff check .` clean.
+- **Files touched:** created `backend/app/routes/scenarios.py`, `backend/app/agents/scenario/presets.py`, `backend/tests/routes/test_scenarios.py`. Modified `backend/app/schemas/scenario.py` (added `ScenarioSimulateRequest`), `backend/app/main.py` (router include), `BUILD.md` (both ticks), `HANDOFF.md` (this file).
+- **Migrations added:** none.
+- **Tests added:** 10 hermetic.
+- **In-flight work:** none.
+- **Deviations from BUILD.md:**
+  - **SIM-01 SSE emits a single `simulator` pseudo-node envelope.** Mirrors BRIEF-04's approach — per-node streaming waits on SIM-02 gaining `astream_events` support.
+  - **`GET /api/scenarios/presets` bundled into SIM-01** — BUILD.md scopes SIM-03 to `app/agents/scenario/presets.py` only, but the presets need HTTP exposure for the frontend chip UI (SIM-04). Adding the endpoint at SIM-01's router location keeps the concerns local.
+  - **`ScenarioSimulateRequest` lives in `schemas/scenario.py`, not the router file** — matches how other request bodies are colocated with their read schemas.
+- **Session mechanics recap:** In-session sequential (no subagents). Small pair, small blast radius. Both landed clean on first pytest run.
+
+---
+
+## Prior sessions (short refs)
+
+- **Session 37:** CHAT-04 + SIM-02 parallel via 2 subagents. 383 passed.
+- **Session 36:** BRIEF-03 (in-session) + BRIEF-04 & CHAT-03 (parallel). 363 passed.
+- **Session 35:** BRIEF-02 + CHAT-02 + EVAL-02 in-session after subagent stall. 335 passed.
+- **Session 34:** IMP-05. 293 passed.
+
+---
+
+## Older `## Last session` block preserved below for continuity — no longer authoritative.
+
+## OLD Last session (CHAT-04 + SIM-02 shipment)
 
 - **Session goal:** Ship CHAT-04 + SIM-02 in parallel via two subagents (tighter risk profile after the earlier 3-agent stall).
 - **Completed:**
