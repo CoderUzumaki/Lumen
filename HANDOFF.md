@@ -2,83 +2,75 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-24 (session 40 — REL-07 + IMP-06 + BRIEF-05 frontend trio via 2 parallel subagents)
-**Progress:** 55/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-06, ING-01..ING-10, REL-01..REL-07, IMP-01..IMP-06, GRD-01..GRD-03, BRIEF-01..BRIEF-05, CHAT-01..CHAT-04, SIM-01..SIM-03, EVAL-02). CHAT-05 (chat UI) + SIM-04 (scenario page) are the only remaining frontend modules; DEPLOY-01 + DEPLOY-02 + EVAL-01 + OPT-* still open.
+**Last updated:** 2026-07-24 (session 41 — CHAT-05 + SIM-04 pair via 2 parallel subagents)
+**Progress:** 57/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-06, ING-01..ING-10, REL-01..REL-07, IMP-01..IMP-06, GRD-01..GRD-03, BRIEF-01..BRIEF-05, CHAT-01..CHAT-05, SIM-01..SIM-04, EVAL-02). **All frontend modules complete.** DEPLOY-01 + DEPLOY-02 + EVAL-01 + OPT-* still open.
 
 ---
 
 ## Next module
 
-The five-frontend-page arc from DATA-06 collapsed by three this session; the natural next pair is:
+**All 20 core-product modules (data + agents + endpoints + frontend) are complete.** The frontend is a full 12-route app. Remaining work is deployment, evals, and optional optimization.
 
-- **CHAT-05** (frontend chat UI) — depends on CHAT-04 (live) + DATA-06 (live). SSE-driven; can reuse `useSse` from BRIEF-05.
-- **SIM-04** (frontend scenario page) — depends on SIM-03 (live) + DATA-06 (live). Chip UI over `GET /api/scenarios/presets` + SSE-driven simulate via `POST /api/scenarios/simulate` (also reusable via `useSse`).
+Options ranked by portfolio-piece impact:
 
-Recommended pair: **CHAT-05 + SIM-04** in parallel via 2 subagents. Both consume SSE and both can lean on `hooks/use-sse.ts` (added this session).
+- **DEPLOY-02** (Fly.io backend) — **highest ROI.** BUILD.md's block is at line 1560ish. Blocks the demo URL entirely. Do this first if the goal is a shareable link.
+- **DEPLOY-01** (Vercel frontend) — deploys the 12-route app to Vercel. Depends on DEPLOY-02 (frontend needs a real backend URL). Pair naturally with DEPLOY-02.
+- **EVAL-01** (golden dataset labeling) — 200 labeled tuples of `(news, portfolio, expected relevance/impact)`. Labeling work, not implementation. The eval harness (EVAL-02) already exists; EVAL-01 fills its dataset. **This is a human-labeling task.** Ask before picking it up.
+- **OPT-01+** (optimizations — rerankers, prompt cache, etc.) — polish; not blocking a working demo.
 
-**Alternative production tracks (both shippable now — app is a real product with these three pages landing):**
-- **DEPLOY-02 (Fly.io backend)** — deploy the FastAPI service so the frontend can talk to a real backend. Highest-value move for a portfolio demo URL.
-- **DEPLOY-01 (Vercel frontend)** — with `/onboarding/portfolio`, `/portfolios`, `/portfolios/[id]`, `/news`, `/news/[id]`, `/briefing` all live, the app is thick enough to demo. Chat + scenario pages can follow.
-
-**EVAL-01 (golden dataset labeling)** — still available but is labeling work, not implementation; ask before picking it up.
+**Recommended path: DEPLOY-02 → DEPLOY-01 in that order.** Then the demo URL is live and every downstream module (evals, calibration) can be exercised against production.
 
 **Ask the user which direction they want.**
 
 **Branch state:**
-- Frontend now has 8 routes: `/`, `/signin`, `/onboarding/portfolio`, `/portfolios`, `/portfolios/[id]`, `/news`, `/news/[id]`, `/briefing`. Every authed page uses the `<Suspense><AuthGuard>…</AuthGuard></Suspense>` + `export const dynamic = "force-dynamic"` shell.
-- Shared API scaffolding lives in `frontend/src/lib/api/client.ts` — `apiFetch` (throws on non-2xx), `apiFetchRaw` (return raw Response — needed for IMP-06's 200/202 branch), `openBackendStream` (fetch-driven SSE with Bearer auth — EventSource can't set headers). All four API modules (`portfolios.ts`, `news.ts`, `impact.ts`, `briefings.ts`) route through it.
-- New reusable hook: `frontend/src/hooks/use-sse.ts` — manual-start SSE hook wrapping `openBackendStream`; auto-aborts on unmount; handles terminal `complete`/`error` frames; CHAT-05 and SIM-04 can consume this directly.
-- Backend untouched.
+- Frontend has **12 routes**: `/`, `/signin`, `/onboarding/portfolio`, `/portfolios`, `/portfolios/[id]`, `/news`, `/news/[id]`, `/briefing`, `/chat`, `/chat/[id]`, `/scenarios`. Every authed page uses `<Suspense><AuthGuard>…</AuthGuard></Suspense>` + `export const dynamic = "force-dynamic"`. **There is no top-nav yet** — every page is a direct URL. Adding a nav is out of scope for any current BUILD.md module; if you want one, add a new module ID.
+- Shared API scaffolding: `frontend/src/lib/api/client.ts` — `apiFetch`, `apiFetchRaw`, `openBackendStream` (fetch-driven SSE with Bearer auth). All six API modules (`portfolios`, `news`, `impact`, `briefings`, `chat`, `scenarios`) route through it. `frontend/src/hooks/use-sse.ts` supports GET + POST + JSON body; consumed by BRIEF-05, CHAT-05, SIM-04.
+- Backend untouched this session.
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -6` shows this session's commits on top: `BRIEF-05` → `IMP-06` → `REL-07` → `scaffold: lib/api/client.ts` → `DATA-06`.
+- `git log --oneline -3` shows this session's commits on top: `SIM-04` → `CHAT-05`.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **393 passed, 5 deselected** (backend unchanged — no need to re-run unless suspicious).
-- `cd frontend && NEXT_PUBLIC_BACKEND_URL=http://localhost:8000 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=x npm run build && npm run lint` clean (8 routes compile, no lint warnings).
+- `cd backend && python -m pytest tests -q` reports **393 passed, 5 deselected** (backend unchanged — skip unless suspicious).
+- `cd frontend && NEXT_PUBLIC_BACKEND_URL=http://localhost:8000 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=x npm run build && npm run lint` clean (12 routes compile, no lint warnings).
 
 ---
 
 ## Last session
 
-- **Session goal:** Ship the recommended frontend trio — REL-07 + IMP-06 + BRIEF-05 — via parallel subagents.
+- **Session goal:** Ship CHAT-05 + SIM-04 in parallel via 2 subagents — the last remaining frontend pair.
 - **Completed:**
-  - **scaffold** — extracted shared `apiFetch` + `apiFetchRaw` + `openBackendStream` (fetch-driven SSE with Bearer auth) into `frontend/src/lib/api/client.ts`. `portfolios.ts` now imports from it; the three new API modules use it too.
-  - `REL-07` ✅ — `/news` feed. Suspense + AuthGuard + `dynamic = "force-dynamic"`. Rows: canonical title, deduped source chips, entity-ticker badges, `ScoreBar` (0..1 → % on a `bg-primary`/`bg-secondary` track), "Analyze impact" affordance gated at `IMPACT_MIN_SCORE = 0.3` with a tooltip explaining the disable. Header shows "Feed for: <active portfolio name>". Empty state handles both "no active portfolio" and "no relevant news yet" via the same copy path (backend returns `[]` for both). Files: `lib/api/news.ts`, `app/news/page.tsx`, `components/news/{feed-row,score-bar,source-chip}.tsx`.
-  - `IMP-06` ✅ — `/news/[cluster_id]` detail. Three impact states:
-    - Cached (200) → `ImpactCard` with mechanism prose, magnitude bar (fractional Decimals rendered on a fixed -25/+25% axis, "Range not established" when both endpoints null), timeframe pill, confidence bar, falsifiability Alert, citation chips (click → Sheet side panel with the full quote + "Open source" external link), historical-analog cards, `Affects N positions` count, generated-at timestamp, optional Regenerate button.
-    - Generating (202) → auto-polling `useClusterImpact` (3s interval, 60s timeout, then fallback message).
-    - 404 → explanation + link to `/news`.
-    - Files: `lib/api/impact.ts`, `app/news/[id]/page.tsx`, `components/impact/{impact-card,magnitude-bar,citation-panel,analog-card}.tsx`.
-  - `BRIEF-05` ✅ — `/briefing`. Three sections (top movers / watchlist / what would change my thinking) rendered as visually distinct groups. Header: portfolio badge + date + "Regenerate" (POST → 1s-interval refetch loop, 15s cap) + "Generate live" (SSE stream via `useSse` → `openBackendStream("/api/briefings/stream")`, updates progressively). Each `BriefingItem` card: cluster title (link — see deviation), one-line summary, `<Collapsible>` mechanism, ticker badges, confidence bar. Empty state: 404 → "no briefing yet — generate one" with a CTA that triggers the SSE. Files: `lib/api/briefings.ts`, `hooks/use-sse.ts`, `app/briefing/page.tsx`, `components/briefing/{briefing-item-card,stream-status}.tsx`.
+  - `CHAT-05` ✅ — `/chat` (index) + `/chat/[id]` (session view). Two-column layout: sidebar (newest-first sessions, New / Delete with `confirm()`) on the left, messages area on the right. `/chat` empty state prompts pick-or-start (first-time users get a big "Start your first chat" CTA). `/chat/[id]` renders history chronologically; on send, the user message appears immediately + a placeholder assistant bubble spinner-ticks until the first `token` frame; `citations` attaches numbered chips (hover → Tooltip; click → Sheet side panel with source / quote / external link); `done` invalidates the session query so the persisted UUID + `created_at` hydrate; `error` swaps to a destructive bubble with Retry. Assistant content renders through `react-markdown` (^9.0.1, already installed); user content stays plain text. Composer: native multi-line textarea, 4000-char cap with counter, Enter to send / Shift+Enter for newline. Deep-link `/chat?seed=<cluster_id>` fires once (ref guard), POSTs a new session with `seed_cluster_id`, then `router.replace`s to `/chat/<id>`. Session-title fallback: `title` → first 60 chars of first user message → "Untitled chat".
+    - Files: `lib/api/chat.ts`, `app/chat/page.tsx`, `app/chat/[id]/page.tsx`, `components/chat/{session-sidebar,message-list,message-bubble,chat-composer,citation-chips,tool-badge}.tsx`.
+  - `SIM-04` ✅ — `/scenarios`. Composer at top (native textarea, 1..2000 char validation, live counter, Cmd/Ctrl+Enter shortcut). Category-grouped preset chips row below the composer (categories come from the backend response — no hardcoded categories). Streaming result area: idle hint → spinner + "Simulating…" during stream → `node_completed` timestamp → full `SimulationView` on `result` frame → destructive alert with Retry on `error`. `SimulationView` renders portfolio_summary, per-position cards (mechanism prose, magnitude bar mirrored from IMP-06 in `number` mode on a fixed -25/+25% axis, confidence bar), key_assumptions bullets, falsifiability Alert, historical-analog cards, and citations chips (or the "hypothetical — grounded in historical analogs" copy when empty, matching the PRD deviation in `schemas/scenario.py`). History side panel in a `Sheet`: sessionStorage-backed at `lumen:scenario:history`, capped at 20 entries; each entry stores the full simulation so Reload restores results without a re-run.
+    - Files: `lib/api/scenarios.ts`, `app/scenarios/page.tsx`, `components/scenarios/{preset-chips,scenario-composer,simulation-view,position-impact-card,history-panel}.tsx`.
 - **Acceptance verified locally:**
-  - `NEXT_PUBLIC_* npm run build` → 9 pages generated, 8 routes (`/news`, `/news/[id]`, `/briefing` added).
+  - `NEXT_PUBLIC_* npm run build` → **12 routes**, all compile cleanly (`/chat` static 7.49 kB, `/chat/[id]` dynamic 41 kB, `/scenarios` static 8.64 kB added).
   - `NEXT_PUBLIC_* npm run lint` → no ESLint warnings or errors.
-  - Backend suite untouched — verified once at session start: **393 passed, 5 deselected**.
-- **Files touched:** 4 commits split surgically —
-  - `scaffold`: `lib/api/client.ts` (new, 198L), `lib/api/portfolios.ts` (60L → 1L: dropped duplicated fetch helpers, imports from client.ts).
-  - `REL-07`: `lib/api/news.ts`, `app/news/page.tsx`, `components/news/{feed-row,score-bar,source-chip}.tsx`, `BUILD.md` tick.
-  - `IMP-06`: `lib/api/impact.ts`, `app/news/[id]/page.tsx`, `components/impact/{impact-card,magnitude-bar,citation-panel,analog-card}.tsx`, `BUILD.md` tick.
-  - `BRIEF-05`: `lib/api/briefings.ts`, `hooks/use-sse.ts`, `app/briefing/page.tsx`, `components/briefing/{briefing-item-card,stream-status}.tsx`, `BUILD.md` tick, `HANDOFF.md`.
+  - Backend suite untouched — no runs this session.
+- **Files touched:** 2 commits, one per module —
+  - `CHAT-05`: `lib/api/chat.ts`, `app/chat/page.tsx` + `[id]/page.tsx`, `components/chat/*` (6 files), `BUILD.md` tick.
+  - `SIM-04`: `lib/api/scenarios.ts`, `app/scenarios/page.tsx`, `components/scenarios/*` (5 files), `BUILD.md` tick, `HANDOFF.md`.
 - **Migrations added:** none.
-- **Tests added:** none (Playwright still opt-in via `LUMEN_TEST_USER_JWT` from session 39; no new e2e coverage).
+- **Tests added:** none.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **REL-07: no per-portfolio filter.** The `/api/news/relevant` endpoint scopes to the caller's active portfolio and takes no `portfolio_id` param. The page shows "Feed for: <active portfolio name>" instead. Adding a filter would require a backend change.
-  - **IMP-06: `affected_positions` rendered as count, not tickers.** The impact table stores position UUIDs and has no ticker join; the mechanism paragraph already names positions inline. Cheap follow-up: add `positions` (joined) to `ImpactRead`.
-  - **BRIEF-05: `BriefingItem` title link points to `/news` (feed), not `/news/[cluster_id]`.** The briefing schema exposes `impact_id` but not `cluster_id`, so we can't route to the detail page. Tooltip on the title explains this. Fix: add `cluster_id` to `BriefingItem` in a follow-up.
-  - **`news.ts`'s `ClusterDetailRead.impact` is typed `unknown`** to avoid a cross-module import from `impact.ts`. The detail page reads impact via `useClusterImpact` (impact.ts) separately, so no consumer is affected. Documented inline.
-  - **`ImpactCard`'s magnitude bar uses a fixed -25%/+25% axis.** Not spec'd — chosen so the bar has a stable visual meaning across different assessments. Values outside that range clip visually (the numeric label still shows the true value).
+  - **CHAT-05: `tool_call` / `tool_result` frames parsed + `console.debug`'d + ignored.** Not a deviation from CHAT-05 (BUILD.md requests the events); it's the pre-flagged backend deviation from CHAT-04 (SSE emits only `token` / `citations` / `done` / `error`). Client is forward-compat with a future CHAT-03 refactor.
+  - **CHAT-05: `useSse` invoked with a `?_=${sendCounter}` cache-buster suffix per send** so the hook's memo-key changes each turn and the closure re-forms with the new body. FastAPI ignores unknown query params on `POST /messages`. Alternative would be modifying `use-sse.ts` to accept a `key` prop — cache-buster keeps the hook untouched.
+  - **CHAT-05: no `@tailwindcss/typography`,** so `MessageBubble` uses a plain wrapper class instead of `prose`. Markdown still renders — headings / lists / code get react-markdown's default HTML and inherit body typography.
+  - **SIM-04: no shadcn `Textarea` component in this repo,** so the composer uses a native `<textarea>` styled to match the `Input` component's tokens.
+  - **SIM-04: history is client-only in `sessionStorage`.** The scenarios endpoint doesn't persist simulations; the "history side panel" acceptance line is honored via a 20-entry sessionStorage cache, not a backend table. Cleanup or persistence would be a new module (SIM-05 territory).
+  - **SIM-04: Retry after an error re-submits the current composer text.** If the user edited the composer between failure and retry, Retry restores `activeScenario` to the composer and prompts them to press Simulate — avoids a React-batching pitfall where `sse.start()` would use stale body from the current render.
 - **Session mechanics recap:**
-  - Two parallel subagents, per HANDOFF's "safer than 3" recipe. Agent A owned REL-07 + IMP-06 (news arc); Agent B owned BRIEF-05 (SSE hook + briefing page). Both landed clean on first build.
-  - Pre-flight scaffolding (`client.ts` + `portfolios.ts` refactor) done in-session before spawning agents — the shared `apiFetch` / SSE helpers are needed by every downstream module so extracting them once removes coordination cost.
-  - Post-agent: `news.ts` had a `import type { ImpactRead } from "@/lib/api/impact"` — coupled REL-07 and IMP-06 at compile time, so REL-07 wouldn't build in isolation. Fixed by loosening `ClusterDetailRead.impact: ImpactRead | null` → `impact: unknown` (the detail page reads impact from `useClusterImpact`, never from `useClusterDetail`, so the type was dead weight). Now each commit is standalone-buildable — bisect-clean.
-  - Commits split into 4 surgical drops (scaffold + REL-07 + IMP-06 + BRIEF-05) with BUILD.md ticks in the module commits they belong to and HANDOFF folded into the BRIEF-05 commit.
+  - Two parallel subagents per HANDOFF's "safer than 3" recipe. Agent A owned CHAT-05 (9 files); Agent B owned SIM-04 (7 files). Both landed clean on first `npm run build` — no cherry-picking, no post-agent fixes required. No cross-module import coupling (SIM-04 mirrors IMP-06's magnitude bar visual instead of importing the component, since the impact one takes `Decimal | null` strings and scenarios have `number | null` floats).
+  - Commits split cleanly along module boundaries. BUILD.md ticks split across the two commits. HANDOFF folded into SIM-04 (the last commit).
+  - Both agents had all API contracts + type shapes + gotchas in-brief, and both leaned on the DATA-06 / REL-07 / IMP-06 / BRIEF-05 patterns already in the tree (Suspense + AuthGuard + dynamic-force, TanStack Query v5 keys, `useSse` hook, Sheet side-panel citation pattern from IMP-06). Extracting `client.ts` in session 40 paid off — no fetch-wrapper duplication this session.
 
 ---
 
 ## Older last-session snapshots (short)
 
+- **Session 40:** REL-07 + IMP-06 + BRIEF-05 trio via 2 parallel subagents. 8 routes compile. Extracted `lib/api/client.ts`.
 - **Session 39:** DATA-06 in-session — first frontend module. 5 routes compile clean.
 - **Session 38:** SIM-01 + SIM-03 in-session. 393 passed. Deviations: SSE pseudo-node; presets endpoint bundled into SIM-01's router.
 - **Session 37:** CHAT-04 + SIM-02 in parallel via 2 subagents. 383 passed.

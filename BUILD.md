@@ -1530,7 +1530,7 @@ User picks or defines a scenario; agent walks through impact on portfolio.
 - **Acceptance:** presets load, click generates a full simulation.
 - **Depends on:** SIM-02.
 
-### SIM-04 — Frontend scenario page
+### SIM-04 — Frontend scenario page ✅
 
 - **Files:** `frontend/src/app/scenarios/page.tsx`.
 - **Action:** Text input for freeform scenario, preset chips, streaming result display. Simulation history in a side panel.
