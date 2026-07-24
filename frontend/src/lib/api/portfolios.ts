@@ -19,7 +19,7 @@ import {
 	type UseMutationOptions,
 } from "@tanstack/react-query";
 
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 
 // ---------------------------------------------------------------------------
 // Types — mirror `backend/app/schemas/portfolio.py`.
@@ -68,65 +68,6 @@ export type PositionCreateInput = {
 };
 
 export type PositionUpdateInput = Partial<PositionCreateInput>;
-
-// ---------------------------------------------------------------------------
-// Fetch helpers
-// ---------------------------------------------------------------------------
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-if (!BACKEND_URL) {
-	// Fail fast at module load — next.config validates env at build time,
-	// but a defensive check here catches misconfigured dev runs.
-	console.warn(
-		"NEXT_PUBLIC_BACKEND_URL is not set; portfolios API calls will fail.",
-	);
-}
-
-async function currentAccessToken(): Promise<string> {
-	const supabase = getSupabaseBrowserClient();
-	const { data } = await supabase.auth.getSession();
-	const token = data.session?.access_token;
-	if (!token) {
-		throw new Error("Not signed in — no Supabase session.");
-	}
-	return token;
-}
-
-async function apiFetch<T>(
-	path: string,
-	init: RequestInit & { parseJson?: boolean } = {},
-): Promise<T> {
-	const token = await currentAccessToken();
-	const { parseJson = true, headers, ...rest } = init;
-	const res = await fetch(`${BACKEND_URL}${path}`, {
-		...rest,
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${token}`,
-			...headers,
-		},
-	});
-	if (!res.ok) {
-		let detail: string | undefined;
-		try {
-			const body = await res.json();
-			detail = body?.error?.message ?? body?.detail;
-		} catch {
-			// non-JSON body — fall through
-		}
-		throw new Error(
-			`API ${init.method ?? "GET"} ${path} → ${res.status}${
-				detail ? `: ${detail}` : ""
-			}`,
-		);
-	}
-	if (!parseJson || res.status === 204) {
-		// void — caller doesn't want a body (DELETE, etc.).
-		return undefined as T;
-	}
-	return (await res.json()) as T;
-}
 
 // ---------------------------------------------------------------------------
 // Query keys
