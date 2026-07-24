@@ -1523,7 +1523,7 @@ User picks or defines a scenario; agent walks through impact on portfolio.
 - **Acceptance:** produces valid `ScenarioSimulation`.
 - **Depends on:** IMP-04.
 
-### SIM-03 — Preset scenarios
+### SIM-03 — Preset scenarios ✅
 
 - **Files:** `backend/app/agents/scenario/presets.py`.
 - **Action:** A set of 10 curated preset scenarios: "Fed cuts 50bps at next FOMC", "US recession Q3", "Oil to $120", "AI capex boom continues 12 months", "India rate cuts by 100bps", etc. UI shows these as one-click chips.
