@@ -1049,7 +1049,7 @@ The core AI-engineering showcase: multi-step reasoning agent that turns a releva
   - Below-threshold returns 404 with a clear message.
 - **Depends on:** IMP-04, REL-05.
 
-### IMP-06 — Frontend impact card
+### IMP-06 — Frontend impact card ✅
 
 - **Files:** `frontend/src/app/news/[id]/page.tsx`, `frontend/src/components/impact/*`.
 - **Action:** Full impact view: mechanism paragraph, magnitude bar (low → high), timeframe pill, confidence bar, falsifiability callout, citation chips (click → source news in side panel), historical analog cards, "affects" position list with per-position price context.
