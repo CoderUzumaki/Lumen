@@ -1250,7 +1250,7 @@ RAG over the user's news + assessments + portfolio, with streaming responses.
   - Question "explain what happened to interest rates this week" retrieves recent news and impacts.
 - **Depends on:** CHAT-01, CHAT-02, GRD-01, GRD-02, GRD-03.
 
-### CHAT-04 — Chat endpoints + streaming
+### CHAT-04 — Chat endpoints + streaming ✅
 
 - **Files:** `backend/app/routes/chat.py`.
 - **Action:**
