@@ -1516,7 +1516,7 @@ User picks or defines a scenario; agent walks through impact on portfolio.
 - **Acceptance:** endpoint accepts and streams a simulation.
 - **Depends on:** IMP-04.
 
-### SIM-02 — Scenario agent (LangGraph)
+### SIM-02 — Scenario agent (LangGraph) ✅
 
 - **Files:** `backend/app/agents/scenario/graph.py`.
 - **Action:** Reuses the impact analyst's tools (analog retrieval, price context) but with a scenario prompt instead of a news cluster. Explicitly stateful — user can iterate ("what if we also assume oil stays flat?").

@@ -2,104 +2,101 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-21 (session 36 — BRIEF-03 in-session + BRIEF-04 & CHAT-03 in parallel via subagents)
-**Progress:** 47/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01..BRIEF-04, CHAT-01..CHAT-03, EVAL-02). DATA-06 (frontend UI) + REL-07 (news feed) + IMP-06 (impact card) + BRIEF-05 (briefing page) + CHAT-05 (chat UI) all pending — every frontend module.
+**Last updated:** 2026-07-21 (session 37 — CHAT-04 + SIM-02 in parallel via subagents)
+**Progress:** 49/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01..BRIEF-04, CHAT-01..CHAT-04, SIM-02, EVAL-02). DATA-06 (frontend UI) + REL-07 (news feed) + IMP-06 (impact card) + BRIEF-05 (briefing page) + CHAT-05 (chat UI) + SIM-04 (scenario page) all pending — every frontend module.
 
 ---
 
 ## Next module
 
-**ID:** `CHAT-04`
-**Title:** Chat endpoints + streaming
-**Depends on:** CHAT-03 (now live).
-**Read:** `BUILD.md` → the `CHAT-04` block at ~line 1253. Builds `backend/app/routes/chat.py`. Five endpoints:
+**ID:** `SIM-01`
+**Title:** Scenario schema + endpoint
+**Depends on:** IMP-04 (live), SIM-02 (now live).
+**Read:** `BUILD.md` → the `SIM-01` block at ~line 1494. Builds `backend/app/routes/scenarios.py`. One endpoint:
 
 ```
-POST   /api/chat/sessions                   body: { seed_cluster_id? } → ChatSessionRead
-GET    /api/chat/sessions                    → list[ChatSessionRead]
-GET    /api/chat/sessions/{id}               → ChatSessionRead + messages
-DELETE /api/chat/sessions/{id}               → 204
-POST   /api/chat/sessions/{id}/messages      body: { content: str } → SSE stream
+POST /api/scenarios/simulate
+     body: { scenario_text: string, portfolio_id?: UUID }
+     response: SSE stream of scenario analysis (similar to impact analyst)
 ```
 
-SSE events for the message-post endpoint: `token`, `tool_call`, `tool_result`, `citations`, `done`. Ordered strictly.
+Note: `backend/app/schemas/scenario.py` **already exists** — SIM-02 preemptively landed the `PositionImpact` + `ScenarioSimulation` Pydantic shapes there (documented deviation in that module's docstring). SIM-01 just needs the route file + tests.
 
-Pattern-copy `app/routes/briefings.py` (BRIEF-04) for the SSE machinery — same trick: run the graph and emit pseudo-node events around it (proper LangGraph streaming is a future refactor). Cross-user access to a session returns 404.
+Endpoint semantics:
+- Auth via `require_auth`.
+- Body validated via a `ScenarioSimulateRequest(BaseModel)` in `app.schemas.scenario` — `scenario_text: str (min 1, max 2000)`, `portfolio_id: UUID | None`.
+- If `portfolio_id` is omitted, use caller's active portfolio; 404 if no active portfolio.
+- Cross-user check: if `portfolio_id` is provided but not the caller's → 404.
+- Emit SSE pseudo-node envelope: `event: node_started`, then invoke `simulate_scenario(...)` on the injected runner, then emit `event: partial_content` with the serialized `ScenarioSimulation`, then `event: complete`. On error, emit `event: error`. (Same pattern used by BRIEF-04's `/api/briefings/stream`.)
+- Persistence: none — matches SIM-02's shape.
+- Injectable dependency `get_scenario_runner` for tests (mirror `get_impact_enqueue`, `get_briefing_enqueue`, `get_chat_turn_runner`).
 
-**Parallelizable siblings after CHAT-04:**
-- `EVAL-03` (relevance eval runner) — depends on EVAL-01 (needs a labeled dataset, human work) + REL-04. Not independent — needs EVAL-01 first, which is human labeling work.
-- `EVAL-04` (impact + faithfulness runner) — same problem.
-- `OPT-*` (optimization phase) — most depend on OPT chain built up; check individually.
-
-Practically, after CHAT-04, the next parallel trio isn't obvious. Options: (a) tackle the EVAL-01 labeled-dataset problem head-on with a small pragmatic corpus (10-20 examples instead of the aspirational 200/50), (b) start wiring `run_metadata(...)` into the graphs (small cleanup — REL-04, IMP-04, BRIEF-02 each get one line), (c) begin the frontend chain with DATA-06 (single-session, big module). Escalate to user if unsure.
+**After SIM-01:** SIM-03 (preset scenarios — a curated JSON list + tiny helper) becomes trivial follow-up. Then only frontend + EVAL-01 (human labeling) + OPT chain remain in the backend spine.
 
 **Branch state:**
-- `run_chat_turn(session_id, user_id, user_message, *, session, llm, news_store, embed) -> ChatMessage` in `app.agents.chat.graph`. Persists both user + assistant rows in one commit. Raises `PermissionError` on cross-user session access — the CHAT-04 endpoint must map this to HTTP 404 (matches BUILD.md's cross-user rule).
-- BRIEF-04 exposes `/api/briefings/{latest,by-date,regenerate,stream}` — the stream endpoint emits SSE with a single pseudo-node envelope (documented deviation).
-- BRIEF-03 wired into APScheduler at 15-minute intervals; runs `run_briefing_scheduler(...)` which is idempotent via BRIEF-02's unique key.
+- `simulate_scenario(user_id, portfolio_id, scenario_text, *, session, analogs_store, embed, llm, fetch_prices=...) -> ScenarioSimulation | None` in `app.agents.scenario.graph`. Pure function; no persistence.
+- CHAT-04 exposes 5 endpoints under `/api/chat/sessions/*`. SSE emits a single synthetic `token` frame (BUILD's `tool_call`/`tool_result` events omitted pending a CHAT-03 refactor exposing `astream_events`).
 - No new migrations this session (head is still `e5b02c8f6a39`, CHAT-01).
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows the BRIEF-03 / BRIEF-04 / CHAT-03 trio on top.
+- `git log --oneline -5` shows the CHAT-04 / SIM-02 pair on top.
 - `git status` is clean.
-- `cd backend && python -m pytest tests -q` reports **363 passed, 5 deselected**.
+- `cd backend && python -m pytest tests -q` reports **383 passed, 5 deselected**.
 - `ruff check .` clean.
 
 ---
 
 ## Last session
 
-- **Session goal:** Ship BRIEF-02 + CHAT-02 + EVAL-02 in parallel. First attempt via three background subagents; one failed with an API stall mid-response, the other two never returned a completion record (likely stopped when the parent process cycled). Only the empty `__init__.py` markers the parent pre-created survived. Second attempt: rebuilt all three sequentially in-session in the same worktree.
+- **Session goal:** Ship CHAT-04 + SIM-02 in parallel via two subagents (tighter risk profile after the earlier 3-agent stall).
 - **Completed:**
-  - `EVAL-02` ✅ — LangSmith setup + tracing helpers.
-    - `backend/app/utils/langsmith.py`:
-      - `project_name(env=None) -> str` — maps `Config.FLASK_ENV` (`development`/`staging`/`production`) → `lumen-dev`/`lumen-staging`/`lumen-prod`; unknown → `lumen-dev`; explicit `env` overrides. Idempotent, no side effects.
-      - `is_tracing_enabled() -> bool` — reads `os.environ`, not `Config` (LangSmith SDK reads env directly); requires BOTH `LANGSMITH_TRACING` truthy (`true`/`1`/`yes`/`on`) AND `LANGSMITH_API_KEY` non-empty.
-      - `run_metadata(*, agent_name, user_id=None, git_sha=None, extra=None) -> dict` — returns `{"tags": [...], "metadata": {...}}`. Tags: `agent_name`, `env:<short>`, 7-char short sha. Metadata: `agent_name`, `git_sha` (full), optional `user_id` (as str), and any extras (extras cannot clobber reserved keys — attempts are logged + dropped). `git_sha` defaults to `os.environ["GIT_SHA"]` or `"dev"`.
-      - `mark_public(run_id) -> str | None` — best-effort. Returns `None` if tracing disabled, if the `langsmith` SDK isn't importable, or if `Client.share_run(run_id)` raises. Never raises to the caller.
-    - `backend/tests/utils/test_langsmith.py` — 20 hermetic tests. Uses `monkeypatch.setenv`/`delenv` for env vars, `unittest.mock.patch("langsmith.Client", ...)` for the share_run path, `sys.modules["langsmith"] = None` to simulate missing SDK.
-    - No changes to `Config` — `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_TRACING` were already declared in BOOT-06. This module composes on top.
-  - `CHAT-02` ✅ — Three chat retrieval tools.
-    - `backend/app/agents/chat/retrievers.py`:
-      - `retrieve_recent_impacts(user_id, portfolio_id, *, session, lookback_days=7, k=5) -> list[ImpactRead]` — SQL query filtered by `user_id` + `portfolio_id` + `created_at >= now - lookback_days`; ordered `confidence DESC, created_at DESC`. **Skips rows with non-empty `guardrail_violations`** (they represent failed generations and aren't useful chat context). Over-fetches k*3 to keep the after-filter count near k.
-      - `retrieve_news(query, user_id, portfolio_id, *, session, news_store, embed, k=5, since_days=30, min_similarity=0.35) -> list[ChatNewsSnippet]` — RAG over `news_items` Chroma collection. Loads the caller's tickers from `positions.ticker`; over-fetches from Chroma (k*4), then filters each hit by (a) freshness within `since_days`, (b) cluster intersection with the caller's ticker set (via `NewsCluster.entity_tickers`), (c) `similarity >= min_similarity`. Snippet is `body[:500]` (or title if body absent). Empty ticker set → returns `[]` immediately.
-      - `get_portfolio_summary(user_id, portfolio_id, *, session) -> PortfolioSummary | None` — one-shot: portfolio (with cross-user check — returns `None` if not the caller's), positions (ticker/asset_type/quantity/currency), themes (description/weight), and the most-recent `Briefing`'s `structured_content["generated_summary"]` + `briefing_date`.
-    - `backend/tests/agents/test_chat_retrievers.py` — 12 hermetic tests. Uses the sqlite + Chroma tempdir env fixture from `tests/agents/test_relevance_prefilter.py`. Deterministic `_FakeEmbed` (3D vectors: `fed`/`aapl`/`rate` → axis 0, `pharma` → axis 1, else axis 2).
-  - `BRIEF-02` ✅ — Briefing synthesizer LangGraph.
-    - `backend/app/agents/briefing/graph.py` — compiled at import as `BRIEFING_GRAPH`. Nodes: `gather_impacts` → `rank_top_movers` → `rank_watchlist` → `synthesize_falsifiability` → `compose_summary` → `validate` → `persist`. All-linear graph (no conditional edges — validation failure just refuses persistence).
-    - Public entry: `async synthesize_briefing_for_user(user_id, portfolio_id, *, session, llm, briefing_date=None, lookback_hours=24, force=False) -> Briefing | None`. Idempotent on the `(user_id, portfolio_id, briefing_date)` unique key.
-    - Structured LLM outputs (Pydantic): `_RankPick(picks: list[UUID], one_line_summaries: dict[UUID, str])` for both ranking stages; `_FalsifiabilityList(items: list[str] max_length=5)`; `_Summary(text: str max_length=800)`.
-    - `_gather_impacts_node` filters `confidence >= 0.5`, skips rows with `guardrail_violations`, ranks by `confidence * novelty` (novelty = `1 / (1 + hours_since_created)`), keeps top 15.
-    - `_rank_top_movers_node` + `_rank_watchlist_node`: LLM picks are intersected with the actual candidate set (hallucination guardrail). Watchlist LLM is skipped when `remaining` is empty (all candidates went to top movers) — this is a small optimization and made two tests need a second seed impact to exercise both stages.
-    - `_validate_node`: GRD-01 lexical on the summary, every top/watch `one_line_summary` + `mechanism_summary`, and every falsifiability item. Any violation blocks persistence (`row=None`). Deviation-from-BUILD: `skip_llm=True` mirrors IMP-04's rationale.
-    - `_persist_node`: writes `Briefing.structured_content` via `BriefingContent(...).model_dump(mode="json")`; `cited_impact_ids = [str(id) for id in top+watch]`; `generation_duration_ms = int((monotonic - start) * 1000)`.
-    - `backend/app/agents/briefing/prompts.py` — four SYSTEM constants, three `build_*_prompt(...)` helpers. All prompts enforce PRD principle #2 (no directional language) inline.
-    - `backend/tests/agents/test_briefing_graph.py` — 10 hermetic tests: compile-at-import, happy path (5 impacts, 3 top + 2 watch), confidence-filter (all sub-0.5 → None + 0 LLM calls), idempotency (2 impacts so watchlist runs), force replaces row, hallucinated-id filter, guardrail violation blocks persistence, `affected_positions` → ticker resolution, skip-impacts-with-guardrail-violations, lookback-hours honored.
+  - `CHAT-04` ✅ — Chat endpoints + streaming.
+    - `backend/app/routes/chat.py`: five endpoints — `POST /api/chat/sessions`, `GET /api/chat/sessions`, `GET /api/chat/sessions/{id}`, `DELETE /api/chat/sessions/{id}`, `POST /api/chat/sessions/{id}/messages` (SSE).
+    - Session list orders by `updated_at DESC`. Detail includes messages `created_at ASC`. Every read cross-user-checked (`user_id=caller`); other-user access returns 404.
+    - `POST /messages` streams `text/event-stream`. Emits `event: token` (one synthetic frame with the full content — CHAT-03 isn't token-streaming), `event: citations`, `event: done`. On `PermissionError` (cross-user race) or any other exception, emits `event: error`.
+    - Injectable `TurnRunnerFn = (session_id, user_id, content) -> ChatMessage` via `get_chat_turn_runner`; tests substitute a stub that persists a canned assistant message.
+    - Default runner constructs its own `AsyncSession` + `LLMClient` + `VectorStore("news_items")` + `EmbeddingClient()` per POST (request-scoped session dies before the SSE finishes; the runner needs its own).
+    - `backend/tests/routes/test_chat.py`: 13 hermetic tests.
+  - `SIM-02` ✅ — Scenario agent (LangGraph).
+    - `backend/app/schemas/scenario.py`: `PositionImpact`, `ScenarioSimulation` (from BUILD's SIM-01 block — pre-emptively landed here since SIM-02 needs the type; SIM-01 will add `ScenarioSimulateRequest` on top).
+    - `backend/app/agents/scenario/graph.py`: compiled at import as `SCENARIO_GRAPH`. Nodes: `load_portfolio_context` → `retrieve_analogs` → `fetch_price_context` → `reason_scenario` (thorough tier → `ScenarioSimulation`) → `validate` (GRD-01 lexical on `portfolio_summary` + each `PositionImpact.mechanism`) → END. **No persistence, no repair loop** — a scenario is a one-shot response. Documented in the module docstring.
+    - Public entry: `async simulate_scenario(user_id, portfolio_id, scenario_text, *, session, analogs_store, embed, llm, fetch_prices=get_recent_price_action) -> ScenarioSimulation | None`. Returns None when the portfolio isn't the caller's, when the LLM parse fails, or when guardrails reject.
+    - `backend/app/agents/scenario/prompts.py`: `SCENARIO_SYSTEM` + `build_reason_prompt(state)`.
+    - `backend/tests/agents/test_scenario_graph.py`: 7 hermetic tests. Uses `_ScriptedLLM` mirror.
+  - `backend/app/main.py`: added `chat_routes` import + `app.include_router(chat_routes.router)`.
 - **Acceptance verified locally:**
-  - `python -m pytest tests -q` → **335 passed, 5 deselected** (+42 new: 20 EVAL-02 + 12 CHAT-02 + 10 BRIEF-02).
+  - `python -m pytest tests -q` → **383 passed, 5 deselected** (+20 new: 13 CHAT-04 + 7 SIM-02).
   - `ruff check .` clean.
-- **Files touched:** 6 new modules (`utils/langsmith.py`, `agents/chat/retrievers.py`, `agents/briefing/graph.py`, `agents/briefing/prompts.py`, plus two `__init__.py` package markers created earlier this session for `app/agents/briefing/` and `app/agents/chat/`) + 3 new test files. Ticked BRIEF-02, CHAT-02, EVAL-02 in `BUILD.md`. Rewrote this HANDOFF.
+- **Files touched:** 6 new files (2 routes/tests for CHAT-04; graph + prompts + schema + tests for SIM-02) + `main.py` router include. Ticked CHAT-04 and SIM-02 in `BUILD.md`. Rewrote this HANDOFF.
 - **Migrations added:** none.
-- **Tests added:** 42 hermetic.
+- **Tests added:** 20 hermetic.
 - **In-flight work:** none.
 - **Deviations from BUILD.md:**
-  - **BRIEF-02 uses `check_directional(..., skip_llm=True)`** — lexical-only guardrail inside the graph. Same rationale as IMP-04: a shared scripted LLM feeding both `compose_summary` and GRD-01's YES/NO would be untestable.
-  - **BRIEF-02 skips the watchlist LLM call when `remaining` is empty** (all candidates chosen for top movers). Small optimization; test coverage adjusted (`test_idempotent_*` and `test_force_replaces_row` seed 2 impacts).
-  - **BRIEF-02 returns `None` on guardrail violation** rather than persisting a "failed" row. Unlike IMP-04 (per-item, individually salvageable), a briefing is a single aggregate artifact — a leaked directional phrase in ANY section should block the whole thing.
-  - **CHAT-02 filters news by `NewsCluster.entity_tickers` intersection with the caller's tickers.** BUILD says "filtered to items touching the user's tickers" without spelling out the mechanism. Using cluster metadata is clean and index-friendly on Postgres.
-  - **EVAL-02 doesn't yet wire `run_metadata()` into the existing graphs** (REL-04, IMP-04, BRIEF-02). Deferred as a one-line addition per graph — should land alongside CHAT-03 or in a small "wire tracing metadata everywhere" cleanup.
-- **Session mechanics recap:** Initial parallel-subagent attempt failed (BRIEF-02 stalled mid-response; CHAT-02 + EVAL-02 lost their completion records — likely process cycle). Diagnosed cleanly: only the empty `__init__.py` markers survived. Restarted sequentially in-session — EVAL-02 (smallest) → CHAT-02 → BRIEF-02 (biggest). Two BRIEF-02 tests needed a second seed impact after the first `pytest -v` revealed the "watchlist skipped when remaining empty" optimization. Full suite green on the retry.
+  - **CHAT-04 SSE emits only `token`/`citations`/`done`.** `tool_call` / `tool_result` events are omitted pending a CHAT-03 refactor that exposes `astream_events`. The `token` event is a single synthetic frame with the assembled content, not per-token — same limitation as BRIEF-04's stream. Contract stable for the future refactor.
+  - **CHAT-04's `TurnRunnerFn` signature is `(session_id, user_id, content) -> ChatMessage`** — the runner constructs its own session/LLM/store/embed. BUILD.md suggested passing them in; the endpoint's request-scoped session dies before the SSE completes, so keeping the runner self-contained is cleaner.
+  - **SIM-02 has no persistence and no repair loop.** BUILD.md's IMP-04 pattern (which SIM-02 mirrors otherwise) includes both. Scenarios are ephemeral analyses — persistence, if any, belongs in SIM-01's endpoint (which can decide whether to log invocations).
+  - **`ScenarioSimulation.citations` is allowed empty.** Every-claim-cites is a PRD hard rule for facts about the world; a hypothetical scenario references historical analogs instead (via `historical_analogs`). Deviation logged in the schema docstring.
+  - **SIM-02 pre-emptively landed the `ScenarioSimulation` schema** in `app/schemas/scenario.py` — BUILD.md attributes that schema to SIM-01. SIM-01 now only needs to add `ScenarioSimulateRequest`.
+- **Session mechanics recap:** Two subagents in parallel. Both landed clean on first try. Parent surgically split the BUILD.md ticks across the two commits (un-tick SIM-02 before committing CHAT-04, re-tick it for the SIM-02 commit) so each commit's diff shows exactly the module it lands. `main.py` was in CHAT-04's diff (router include); SIM-02 didn't touch main.py.
+
+---
+
+## (Prior session, for reference — kept short)
+
+- **Session 36:** BRIEF-03 (in-session) + BRIEF-04 & CHAT-03 (parallel). 363 passed. Deviations: BRIEF-04 SSE pseudo-node envelope; CHAT-03 skip_llm=True; `run_chat_turn` raises PermissionError for cross-user.
+- **Session 35:** BRIEF-02 + CHAT-02 + EVAL-02 rebuilt in-session after subagent stall. 335 passed.
+- **Session 34:** IMP-05. 293 passed. `ClusterDetailRead.impact` tightened.
 
 ---
 
 ## Environment state
 
-- Backend: briefing synthesizer + chat retrieval tools + LangSmith tagging helpers all live. Ready for BRIEF-03 (scheduled generation) and CHAT-03 (agent that composes the retrieval tools).
-- Frontend: unchanged.
+- Backend: chat endpoints + scenario agent live. Every backend agent module is now shipped (REL-01..06, IMP-01..05, BRIEF-01..04, CHAT-01..04, SIM-02, GRD-01..03, EVAL-02). SIM-01 endpoint is the only remaining backend module before all backend is done except EVAL-01+ (labeling) and OPT-01+ (optimizations).
+- Frontend: unchanged. Six frontend modules still pending (DATA-06, REL-07, IMP-06, BRIEF-05, CHAT-05, SIM-04).
 - Database: Alembic head `e5b02c8f6a39` (CHAT-01). No new migrations this session.
-- Vectors: unchanged. `historical_analogs` still needs a `python -m app.evals.seed_analogs` run before end-to-end smoke tests of IMP-04 / IMP-05 / BRIEF-02.
-- Tests: **335 hermetic, 5 opt-in.**
+- Vectors: unchanged. Remember `python -m app.evals.seed_analogs` before smoke-testing IMP-05 / BRIEF-02 / SIM-02 against real Chroma.
+- Tests: **383 hermetic, 5 opt-in.**
 - CI: REL-03..this-batch pending push through CI.
 - Docs: unchanged.
 
@@ -107,16 +104,17 @@ Before starting, verify:
 
 ## Open questions / blockers
 
-- **None for BRIEF-03.** APScheduler already in place (see `main.py::_build_default_orchestrator` for the pattern). BRIEF-03 adds a second scheduled job; the existing `_ingest_and_fanout` wrapper is the recipe.
-- **Follow-ups queued (do not fold into BRIEF-03 unless it's convenient):**
-  - Wire `app.utils.langsmith.run_metadata(...)` into every LangGraph invocation site (REL-04, IMP-04, BRIEF-02) — 3 one-line changes: pass `config=run_metadata(agent_name=..., user_id=..., extra={"cluster_id": ...})` to `graph.ainvoke(state, config=...)`.
+- **None for SIM-01.** SIM-02 is live and its `simulate_scenario` entry can be driven behind an injectable dependency (mirror `get_impact_enqueue` / `get_briefing_enqueue` / `get_chat_turn_runner`).
+- **Follow-ups queued (do not fold into SIM-01 unless it's convenient):**
+  - Wire `app.utils.langsmith.run_metadata(...)` into every LangGraph invocation site (REL-04, IMP-04, BRIEF-02, CHAT-03, SIM-02) — 5 one-line changes.
   - `analyze_impact_for_user` returns `None` on hard failure — IMP-05 currently swallows this. Consider a `impact_failures` table so the endpoint can surface "generation failed" instead of "still generating" forever.
   - Refresh `yfinance` pin in `requirements.txt` (0.2.44 → 1.5.x).
   - Expand `analogs.json` from 37 → ~150 events.
   - Tighten GRD-03 lexical patterns (`audit`, `will`) if UX testing shows over-refusal.
-  - Wire GRD-01's LLM stage into IMP-04 and BRIEF-02 endpoints via a separate `LLMClient` instance (not inside the graph). Ergonomic, not blocking.
+  - Wire GRD-01's LLM stage into IMP-04 / BRIEF-02 / CHAT-03 / SIM-02 endpoints via a separate `LLMClient` instance (not inside the graph). Ergonomic, not blocking.
   - Surface `langsmith_run_id` from `LLMResponse` onto persisted impact + briefing rows.
-  - Add a `Config.IMPACT_MIN_SCORE` env var (currently the code defaults to `Decimal("0.3")` via `getattr(Config, "IMPACT_MIN_SCORE", 0.3)`).
+  - Add a `Config.IMPACT_MIN_SCORE` env var (code currently defaults to `Decimal("0.3")` via `getattr`).
+  - Add `astream_events` support to CHAT-03 (and BRIEF-02) so CHAT-04 / BRIEF-04 can emit per-node + per-tool events instead of the current pseudo-node envelope.
 
 ---
 
