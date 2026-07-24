@@ -1275,7 +1275,7 @@ RAG over the user's news + assessments + portfolio, with streaming responses.
   - Cross-user session access returns 404.
 - **Depends on:** CHAT-03.
 
-### CHAT-05 — Frontend chat UI
+### CHAT-05 — Frontend chat UI ✅
 
 - **Files:** `frontend/src/app/chat/page.tsx`, `frontend/src/app/chat/[id]/page.tsx`, `frontend/src/components/chat/*`.
 - **Action:**
