@@ -530,7 +530,7 @@ Everything a user configures about themselves. Nothing agentic yet.
   - `PUT` updates persist and validate (briefing_hour in range, tier in enum).
 - **Depends on:** DATA-01, DATA-02.
 
-### DATA-06 — Frontend portfolio setup UI
+### DATA-06 — Frontend portfolio setup UI ✅
 
 - **Files:** `frontend/src/app/onboarding/portfolio/page.tsx`, `frontend/src/app/portfolios/page.tsx`, `frontend/src/app/portfolios/[id]/page.tsx`, `frontend/src/lib/api/portfolios.ts`.
 - **Action:**

@@ -2,44 +2,89 @@
 
 **Branch:** `v2/intelligence-agent`
 **Base:** `refactor` (at commit `af39bef` — latest from origin/refactor)
-**Last updated:** 2026-07-21 (session 38 — SIM-01 + SIM-03 in-session pair)
-**Progress:** 51/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-05, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01..BRIEF-04, CHAT-01..CHAT-04, SIM-01..SIM-03, EVAL-02). DATA-06 (frontend UI) + REL-07 (news feed) + IMP-06 (impact card) + BRIEF-05 (briefing page) + CHAT-05 (chat UI) + SIM-04 (scenario page) all pending — every frontend module.
+**Last updated:** 2026-07-24 (session 39 — DATA-06 frontend UI foundation)
+**Progress:** 52/60 modules complete (HP-01, HP-02, BOOT-01..BOOT-08, DATA-01..DATA-06, ING-01..ING-10, REL-01..REL-06, IMP-01..IMP-05, GRD-01..GRD-03, BRIEF-01..BRIEF-04, CHAT-01..CHAT-04, SIM-01..SIM-03, EVAL-02). REL-07 (news feed) + IMP-06 (impact card) + BRIEF-05 (briefing page) + CHAT-05 (chat UI) + SIM-04 (scenario page) all pending — all remaining frontend modules now unblocked by DATA-06.
 
 ---
 
 ## Next module
 
-The backend spine is now DONE for the "MVP + Phase 4/5/6/7 + Scenario Simulator" columns. Remaining backend modules — every one of them — is either:
+DATA-06 unblocked 5 downstream frontend modules. Natural next-parallel-trio candidates (all frontend, all unblocked):
 
-- **frontend** (DATA-06, REL-07, IMP-06, BRIEF-05, CHAT-05, SIM-04),
-- **labeled-eval work** (EVAL-01 needs human labeling → then EVAL-03/04/05/06),
-- **optimization chain** (OPT-01..06 — mostly depend on EVAL work), or
-- **benchmarks / deployment / design** (BENCH-01..04, DEPLOY-01..06, DESIGN-01..03).
+- **REL-07** (frontend news feed) — depends on REL-06 (live) + DATA-06 (now live). Pattern-copies `/portfolios` list.
+- **IMP-06** (frontend impact card) — depends on IMP-05 (live) + DATA-06 (live). Deep detail page.
+- **BRIEF-05** (frontend briefing page) — depends on BRIEF-04 (live). Includes SSE stream consumption.
+- **CHAT-05** (frontend chat UI) — depends on CHAT-04 (live). Also SSE.
+- **SIM-04** (frontend scenario page) — depends on SIM-03 (live). Chip UI + SSE.
 
-**Recommended next call — escalate to user:** the natural next step forks into three plausible directions, each with different scope:
+Recommended next parallel trio: **REL-07 + IMP-06 + BRIEF-05** (three that pair naturally — feed → detail → briefing). Then CHAT-05 + SIM-04 as a follow-up pair.
 
-1. **DATA-06 (frontend UI foundation)** — the big frontend module that unblocks REL-07 / IMP-06 / BRIEF-05 / CHAT-05 / SIM-04. Substantial (Next.js 15 + TanStack Query + Playwright), single-session sized. Ideal if the goal is a full end-to-end demo.
-2. **EVAL-01 (golden dataset construction)** — a data-authoring module. BUILD's aspirational target is 200 relevance examples + 50 impact examples with double-labeling. A pragmatic first cut (20 examples each with single labels + a clear "known limitation" note in the README) would unblock EVAL-03/04/05/06 quickly.
-3. **OPT-01 (formalize the two-stage relevance win)** — depends on EVAL-03 (blocked by EVAL-01). Not runnable yet.
-4. **DEPLOY-01/02 (Vercel + Fly.io deploy)** — Vercel frontend depends on DATA-06+; Fly backend is technically shippable now (no frontend prereq). Interesting stopping point.
+**Alternative if the goal is production shipping:**
+- **DEPLOY-02 (Fly.io backend deploy)** — shippable now.
+- **DEPLOY-01 (Vercel frontend deploy)** — shippable now that DATA-06 lands (though the app is thin without REL-07 + IMP-06 + BRIEF-05).
 
 Ask the user which direction they want.
 
-**Branch state (backend):**
-- Scenario simulator complete: `POST /api/scenarios/simulate` (SSE) + `GET /api/scenarios/presets` (curated chip list from SIM-03). Both authed.
-- Every backend agent + endpoint is live: relevance (REL-*), impact (IMP-*), briefing (BRIEF-*), chat (CHAT-*), scenario (SIM-01/02/03), guardrails (GRD-*). LangSmith helper (EVAL-02) ready to wire into graphs.
-- No new migrations this session (Alembic head still `e5b02c8f6a39`, CHAT-01).
+**Branch state:**
+- Frontend `/onboarding/portfolio`, `/portfolios`, `/portfolios/[id]` all live behind `<AuthGuard>` + Suspense. Typed TanStack Query hooks in `lib/api/portfolios.ts`. Sample-portfolio seed button. Playwright e2e spec scaffolded but opt-in (not gated in CI — Playwright not in devDeps yet).
+- Every backend agent + endpoint is live. No new migrations this session.
 
 Before starting, verify:
 - `git branch --show-current` (from `.claude/worktrees/v2`) shows `v2/intelligence-agent`.
-- `git log --oneline -5` shows the SIM-03 / SIM-01 pair on top.
+- `git log --oneline -5` shows DATA-06 on top.
 - `git status` is clean.
 - `cd backend && python -m pytest tests -q` reports **393 passed, 5 deselected**.
-- `ruff check .` clean.
+- `cd frontend && NEXT_PUBLIC_BACKEND_URL=http://localhost:8000 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=x npm run build && npm run lint` clean.
+- `ruff check backend/` clean.
 
 ---
 
 ## Last session
+
+- **Session goal:** Ship DATA-06 — the frontend portfolio setup UI. First frontend module of the session; user picked this over deploy / eval-labeling.
+- **Completed:**
+  - `DATA-06` ✅ — Frontend portfolio setup UI (onboarding + list + detail).
+    - `frontend/src/lib/api/portfolios.ts`:
+      - Typed shapes (`Portfolio`, `Position`, `PortfolioCreateInput`, `PositionCreateInput`, etc.) mirroring `backend/app/schemas/portfolio.py`.
+      - `apiFetch<T>()` — fetch helper that grabs the current Supabase session's `access_token` and attaches it as `Bearer`. Backend URL from `NEXT_PUBLIC_BACKEND_URL`. Envelope-aware error extraction (`body.error.message` or `body.detail`).
+      - Query key namespace: `portfolioKeys.all` / `.lists()` / `.detail(id)`.
+      - TanStack Query v5 hooks: `useListPortfolios`, `usePortfolio(id)`, `useCreatePortfolio`, `useUpdatePortfolio`, `useDeletePortfolio`, `useActivatePortfolio`, `useAddPosition`, `useUpdatePosition`, `useDeletePosition`. Every mutation invalidates `portfolioKeys.all` on success.
+      - `SAMPLE_PORTFOLIO_TICKERS`: AAPL, MSFT, NVDA, GOOGL, VOO, BND (plausible tech-heavy portfolio for the "load sample" button).
+    - `frontend/src/app/onboarding/portfolio/page.tsx`: portfolio name + repeating position rows (ticker / type / qty / currency / exchange / remove). "Load sample portfolio" button seeds the 6 tickers. Submit → creates portfolio (`is_active=true`) → sequentially adds each position → redirects to `/portfolios`. Client-side validation (at least one ticker, non-empty name). `data-testid` hooks on load-sample, ticker rows, and submit for the Playwright spec.
+    - `frontend/src/app/portfolios/page.tsx`: card grid. Each portfolio card shows name, position count, "Active" badge (if active), "View details" link, "Set active" button (when inactive), delete button (with `confirm()` prompt). Empty-list redirect: `useEffect` → `router.replace("/onboarding/portfolio")` when `query.data?.length === 0`. "New portfolio" CTA in the header.
+    - `frontend/src/app/portfolios/[id]/page.tsx`: detail view. Positions table with inline edit (row → pencil → editable inputs → save/cancel). Add-new-position form at the bottom. Uses Next 15's `use(params)` for the async params shape.
+    - Every auth-guarded page wraps `<AuthGuard>` in a `<Suspense fallback={<PageSkeleton />}>` boundary — Next 15 refuses to prerender pages whose descendants call `useSearchParams()` (which `AuthGuard` does internally). Also `export const dynamic = "force-dynamic"` on each (client-only shape).
+    - `frontend/e2e/onboarding.spec.ts` + `frontend/playwright.config.ts`: Playwright e2e scaffold covering the sample-portfolio path. Marked `test.skip(!process.env.LUMEN_TEST_USER_JWT, ...)` — a real Supabase session (or an injected JWT mock) is required to bypass sign-in; wiring that mock is a future step. Not in CI yet (Playwright not in devDeps).
+    - `frontend/tsconfig.json`: excluded `e2e/` and `playwright.config.ts` from the TS project (Playwright deps aren't installed).
+- **Acceptance verified locally:**
+  - `NEXT_PUBLIC_* npm run build` → 5 routes compiled cleanly, 7 static pages generated.
+  - `NEXT_PUBLIC_* npm run lint` → no ESLint warnings or errors.
+  - Backend suite untouched — still **393 passed, 5 deselected** (I didn't run it this session; no backend files touched).
+- **Files touched:** 4 new frontend files (`api/portfolios.ts`, 3 pages), 2 e2e scaffolding files (`onboarding.spec.ts`, `playwright.config.ts`), `tsconfig.json` (exclude e2e), `BUILD.md` (tick), `HANDOFF.md` (this file).
+- **Migrations added:** none.
+- **Tests added:** 1 Playwright spec (scaffolded, opt-in).
+- **In-flight work:** none.
+- **Deviations from BUILD.md:**
+  - **Onboarding submit redirects to `/portfolios`, not `/briefing`.** BUILD says "lands on `/briefing` (placeholder)"; `/briefing` isn't wired yet (BRIEF-05). `/portfolios` is a valid landing that shows what the user just created. Update to `/briefing` when BRIEF-05 lands.
+  - **Playwright spec is opt-in via `LUMEN_TEST_USER_JWT`.** BUILD acceptance says "Playwright test `frontend/e2e/onboarding.spec.ts` covers the sample-portfolio path." — the spec exists and exercises the path, but requires a real Supabase JWT (or a future mock) to bypass sign-in. Not gated in CI; Playwright itself isn't in devDeps (would add ~200MB of Chromium on `npm install`).
+  - **TanStack Query v5 typing collision.** The `onSuccess` callback in mutation options has a 4-arg signature (`data, variables, context, meta`) but wrapping user-supplied `onSuccess` while forwarding args cleanly requires an `unknown[]` spread cast. Local to `useCreatePortfolio` etc.; documented via inline comment.
+  - **All three pages have `export const dynamic = "force-dynamic"`** to avoid static-prerender bailout on `useSearchParams()` inside `AuthGuard`. Combined with a `<Suspense>` boundary wrapping `<AuthGuard>`.
+- **Session mechanics recap:** In-session build. Two round-trips through `npm run build` needed — first for the TanStack Query v5 signature issue, second for the Next 15 Suspense-around-useSearchParams rule. Both landed clean once diagnosed.
+
+---
+
+## Older last-session snapshots (short)
+
+- **Session 38:** SIM-01 + SIM-03 in-session. 393 passed. Deviations: SSE pseudo-node; presets endpoint bundled into SIM-01's router.
+- **Session 37:** CHAT-04 + SIM-02 in parallel via 2 subagents. 383 passed.
+- **Session 36:** BRIEF-03 (in-session) + BRIEF-04 & CHAT-03 (parallel). 363 passed.
+- **Session 35:** BRIEF-02 + CHAT-02 + EVAL-02 in-session after subagent stall. 335 passed.
+
+---
+
+## _(Below: OLD last-session block preserved for continuity — no longer authoritative.)_
+
+## OLD last session (SIM-01 + SIM-03)
 
 - **Session goal:** Ship SIM-01 (scenario endpoint) + SIM-03 (preset chip list) in-session — both small enough that spawning subagents wasn't worth the coordination cost.
 - **Completed:**
