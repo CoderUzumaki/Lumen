@@ -13,6 +13,7 @@ from models.database import db
 from utils.auth import require_auth
 from utils.crypto import encrypt_secret
 from utils.email_service import EmailService
+from utils.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,7 @@ def delete_config():
 
 
 @email_config_bp.route('/test', methods=['POST'])
+@limiter.limit("5 per minute")
 @require_auth
 def test_connection():
     """Test IMAP connection using the authenticated user's stored config."""
@@ -197,6 +199,7 @@ def test_connection():
 
 
 @email_config_bp.route('/poll-now', methods=['POST'])
+@limiter.limit("5 per minute")
 @require_auth
 def poll_now():
     """Manually trigger email polling for the authenticated user."""

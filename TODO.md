@@ -107,11 +107,13 @@ The single biggest correctness gap. Until this is done, every API endpoint leaks
 - **Acceptance**: Uploading the same invoice twice is rejected with a 409 and a useful message. Different invoices with the same number from different vendors are stored separately.
 - **Depends on**: none.
 
-### DB-05 — Add rate limiting on LLM-backed endpoints
-- [ ] **Files**: [backend/app.py](backend/app.py), [backend/routes/ocr.py](backend/routes/ocr.py), [backend/routes/chat.py](backend/routes/chat.py), [backend/routes/ai_analytics.py](backend/routes/ai_analytics.py)
-- **Action**: Add `flask-limiter`. Default: 60/min per user. Tighter limits on `/extract` (10/min) and `/chat` (30/min).
-- **Acceptance**: 11th `/extract` call within a minute returns 429. Limits are per-user (not global).
-- **Depends on**: AUTH-03.
+### DB-05 — Add rate limiting on LLM-backed endpoints ✅
+- [x] Teammate installed `flask-limiter`, wired `limiter.init_app(app)`, and decorated 4 hot endpoints (`ai_analytics.py:/analyze` 5/min, `batch.py:/extract-batch` 5/min, `chat.py:/chat` 30/min, `ocr.py:/extract` 15/min). Three gaps closed this session:
+  1. **Per-user, not per-IP.** `key_func` was `get_remote_address` — users behind NAT shared quota; a single user across two IPs bypassed limits. Rewrote `utils/limiter.py` to derive the key from the JWT `sub` claim (unverified, since `@require_auth` still enforces real signature verification for access — a fake JWT just lands in its own bucket). Falls back to IP for pre-auth requests.
+  2. **Default limit added.** Was `default_limits=[]` — every un-decorated route had no cap. Now `["60 per minute"]` as a baseline, plus `headers_enabled=True` so the frontend gets `X-RateLimit-Limit/Remaining/Reset` and can back off.
+  3. **Coverage for real IMAP work.** Added `@limiter.limit("5 per minute")` to `email_config/test` and `email_config/poll-now` — both open live IMAP sockets, previously unlimited.
+- **Verified end-to-end**: spun up a test Flask app with the shared limiter + one dummy `/echo` route capped at 5/min. Alice hit it 6 times → `[200, 200, 200, 200, 200, 429]`. Bob's first hit still succeeded (per-user isolation confirmed). Response headers contained `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
+- **Storage**: still in-memory (`memory://`). Fine for the single-process dev server; switch to `storage_uri="redis://..."` once the app scales horizontally so all workers share buckets.
 
 ---
 
