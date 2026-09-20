@@ -18,6 +18,21 @@ _FORBIDDEN = re.compile(
 _ALLOWED_TABLES = frozenset({"transactions", "transaction_items"})
 _MAX_ROWS = 100
 
+# Matches every `user_id = 'X'` or `user_id="X"` occurrence (case-insensitive,
+# tolerant of surrounding whitespace). Used to enforce that the LLM cannot smuggle
+# a second user's id into an OR clause. Group 1 is the quoted value.
+_USER_ID_LITERAL_RE = re.compile(
+    r"""user_id \s* = \s* (?:'([^']*)'|"([^"]*)")""",
+    re.IGNORECASE | re.VERBOSE,
+)
+# Catches non-equality comparisons on user_id (e.g. `user_id != 'me'`,
+# `user_id IN (...)`, `user_id LIKE '%'`) — the LLM is expected to use plain
+# equality only; anything else may be a bypass attempt.
+_USER_ID_OTHER_OP_RE = re.compile(
+    r"""user_id \s* (?: != | <> | \bLIKE\b | \bIN\b | \bNOT\b )""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
 
 class SQLValidationError(ValueError):
     pass
@@ -47,9 +62,26 @@ def _validate_sql(sql: str, user_id: str) -> str:
         if token.lower() not in _ALLOWED_TABLES:
             raise SQLValidationError(f"Table {token!r} is not allowed")
 
-    uid = str(user_id).replace("'", "''")
-    if f"user_id = '{uid}'" not in lower and f'user_id="{uid}"' not in lower:
+    uid = str(user_id)
+
+    # Reject anything other than plain `user_id = '...'` equality. Without this,
+    # constructs like `user_id IN ('me','you')` or `user_id != 'me'` bypass the
+    # authenticated-user check further down.
+    if _USER_ID_OTHER_OP_RE.search(cleaned):
+        raise SQLValidationError("Query must compare user_id with plain equality only")
+
+    # Every user_id reference must equal the authenticated user. This rules out
+    # `WHERE user_id = 'me' OR user_id = 'someone-else'`, which the previous
+    # substring check would accept because the authenticated id does appear.
+    matches = _USER_ID_LITERAL_RE.findall(cleaned)
+    if not matches:
         raise SQLValidationError("Query must filter by authenticated user_id")
+    for single, double in matches:
+        value = single or double
+        if value != uid:
+            raise SQLValidationError(
+                "Query references a user_id other than the authenticated one"
+            )
 
     if "limit" not in lower:
         cleaned = f"{cleaned} LIMIT {_MAX_ROWS}"

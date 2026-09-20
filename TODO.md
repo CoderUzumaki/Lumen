@@ -69,33 +69,25 @@ The single biggest correctness gap. Until this is done, every API endpoint leaks
 
 **Known broken until AUTH-04/05 land**: the frontend still calls these endpoints without an `Authorization` header and will get 401 on every request. That's the intended sequencing per the TODO.
 
-### AUTH-04 — Frontend auth context + protected routes
-- [ ] **Files**: new `frontend/src/lib/auth/context.tsx`, new `frontend/src/app/(auth)/login/page.tsx`, [frontend/src/lib/api/client.ts](frontend/src/lib/api/client.ts), `frontend/src/app/dashboard/`, `frontend/src/app/chatbot/`, `frontend/src/app/analytics/`, `frontend/src/app/ai-analytics/`
-- **Action**: Implement a `useAuth()` hook backed by the chosen provider. Add a real `/login` page. Wrap `/dashboard`, `/chatbot`, `/analytics`, `/ai-analytics` in an auth guard that redirects to `/login` when no session exists. The API client attaches the access token to every request via an `Authorization` header.
-- **Acceptance**: Visiting `/dashboard` while logged out redirects to `/login`. Successful login returns to the originally requested page. The API client no longer accepts a `userId` argument anywhere.
-- **Depends on**: AUTH-02, CFG-03.
+### AUTH-04 — Frontend auth context + protected routes ✅ (shipped by teammate)
+- [x] Landed by `af39bef Refactor LLM model configuration and enhance authentication flow` (Abhinav). Frontend now has `src/components/auth/auth-provider.tsx`, `src/components/auth/auth-guard.tsx`, `src/app/signin/page.tsx`, `src/lib/supabase/client.ts`. Different paths from my session's `backup/auth-04-05-work` branch (mine used `lib/auth/context.tsx` + `/login` + `AuthGuard.tsx` PascalCase + a session cache in the supabase client); his shipped first so we defer to it. My work is preserved local-only on `backup/auth-04-05-work` for reference if we ever revisit the session-cache design.
 
-### AUTH-05 — Remove every hardcoded `"123"` from the frontend
-- [ ] **Files**: every `*.tsx` under `frontend/src/`, particularly [lib/api/client.ts](frontend/src/lib/api/client.ts) (14 occurrences), [section-cards.tsx:37](frontend/src/components/section-cards.tsx), [chatbotContent.tsx:294](frontend/src/app/chatbot/chatbotContent.tsx), [uploadDialog.tsx:70](frontend/src/components/uploadDialog.tsx), [analyticsCards.tsx:97](frontend/src/components/analytics/analyticsCards.tsx)
-- **Action**: Delete every `"123"` default. API functions should no longer take a `userId` parameter — the backend resolves it from the token.
-- **Acceptance**: `grep -rn "['\"]123['\"]" frontend/src` returns 0 matches. `grep -rn "userId\s*=\s*['\"]" frontend/src` returns 0 matches.
-- **Depends on**: AUTH-03, AUTH-04.
+### AUTH-05 — Remove every hardcoded `"123"` from the frontend ✅ (shipped by teammate)
+- [x] Same commit stream. `grep -rn "['\"]123['\"]" frontend/src` now returns 0 matches and there are no `userId` parameters on any API-client function. Consistent with my backup approach.
 
-### AUTH-06 — Encrypt IMAP passwords at rest
-- [ ] **Files**: [backend/models/__init__.py:128](backend/models/__init__.py), [backend/routes/email_config.py](backend/routes/email_config.py), new `backend/utils/crypto.py`
-- **Action**: Add a Fernet-based encryption helper keyed by `EMAIL_ENCRYPTION_KEY` (32 url-safe bytes from env). Encrypt on write, decrypt only inside the email-polling service. Write a one-off migration script under `backend/scripts/` that encrypts any existing plaintext rows.
-- **Acceptance**: Newly saved passwords stored as `gAAAA...` ciphertext. `EmailConfig.imap_password` never returned in API responses (even masked). Polling service still authenticates successfully.
-- **Depends on**: HYG-01, CFG-01.
+### AUTH-06 — Encrypt IMAP passwords at rest ✅ (shipped by teammate, with residual notes)
+- [x] Landed by the same `af39bef` (plus follow-ups). `backend/utils/crypto.py` exposes `encrypt_secret()` / `decrypt_secret()`; `email_config.py` wraps writes; `email_service.connect()` decrypts. My session's `backup/auth-06-work` is preserved local-only but not merged. **Two design differences worth flagging for a follow-up PR** (not blocking, tracked here so we don't forget):
+  1. **Key derivation**: his version derives the Fernet key as `sha256(EMAIL_ENCRYPTION_KEY or SECRET_KEY)`. That means a weak SECRET_KEY becomes the encryption key too, and there's no way to rotate email encryption independently of session signing. Preferred fix: require a real Fernet-format key (as `backup/auth-06-work` did) and drop the SECRET_KEY fallback.
+  2. **Silent plaintext fallback**: when the key is unset his `encrypt_secret()` logs a warning and stores plaintext. A future hostile deploy that forgets the key silently downgrades every new password. Preferred fix: return 503 at the route boundary (as `backup/auth-06-work` did).
+  3. **Missing migration**: no script to encrypt legacy plaintext rows. `backup/auth-06-work` has `scripts/migrate_encrypt_email_passwords.py` (dry-run/apply, idempotent) — worth cherry-picking.
 
 ---
 
 ## Phase 3 — Database Safety
 
-### DB-01 — Parameterize all SQL in the SQL agent
-- [ ] **Files**: [backend/ai/sql_agent.py:92,104,112](backend/ai/sql_agent.py)
-- **Action**: Replace every f-string SQL with parameterized queries (`?` placeholders + tuple args). For LLM-generated SQL, add an allowlist: only `SELECT` statements against `transactions` / `receipts` tables, only the authenticated user's `user_id` injected by the server.
-- **Acceptance**: `grep -rn "f\".*SELECT\|f'.*SELECT" backend/ai` returns 0 matches. Attempting `; DROP TABLE` via the chat endpoint fails validation before execution.
-- **Depends on**: AUTH-03.
+### DB-01 — Parameterize all SQL in the SQL agent ✅ (mostly shipped by teammate, tenancy bypass closed this session)
+- [x] Teammate had already replaced the naive f-string agent with `_validate_sql()`: SELECT-only, forbidden-keyword blocklist (INSERT/UPDATE/DELETE/DROP/…), table allowlist (`transactions`, `transaction_items`), no multi-statements, LIMIT auto-injected, SQL never returned to clients.
+- [x] **Closed cross-tenant bypass this session**: previous check only asserted "the authenticated user_id string appears somewhere in the SQL" — so `WHERE user_id = 'me' OR user_id = 'someone-else'` passed. Rewrote `_validate_sql` to (a) reject any non-equality operator on `user_id` (`!=`, `<>`, `LIKE`, `IN`, `NOT`), and (b) extract **every** `user_id = 'X'` literal (via `_USER_ID_LITERAL_RE`) and reject if any doesn't equal the authenticated id. Smoke-tested 12 cases: 2 legitimate passes, plus rejection of no-user_id, cross-tenant `OR`, `IN`, `!=`, `LIKE`, `DROP`, `UPDATE`, multi-statement, `sqlite_master`. **Follow-ups (deferred)**: fallback queries in `generate_sql` still use f-strings (escaping applied — safe today because the only interpolated value is the server-injected user_id, but ideally parameterize with `?` placeholders when we also parameterize the LLM-generated SQL path).
 
 ### DB-02 — Use SQLAlchemy session everywhere instead of raw sqlite3
 - [ ] **Files**: [backend/ai/sql_agent.py](backend/ai/sql_agent.py), [backend/routes/chat.py](backend/routes/chat.py), any module using `sqlite3.connect`
