@@ -18,6 +18,7 @@ Config.validate()
 
 from routes import register_routes
 from utils.openrouter import get_api_config
+from utils.llm import check_api_key
 from models.database import init_db
 from utils.scheduler import scheduler
 
@@ -56,19 +57,29 @@ def handle_unexpected_exception(e: Exception):
 
 
 if __name__ == "__main__":
-    config = get_api_config()
+    # Werkzeug's debug reloader executes __main__ twice (watcher parent +
+    # serving child). Do one-time startup work only in the serving process.
+    serving_process = not Config.DEBUG or os.environ.get("WERKZEUG_RUN_MAIN") == "true"
 
-    if config["api_key"]:
-        logger.info("OpenRouter API key loaded (%s)", mask_secret(config["api_key"]))
-    else:
-        logger.error("OpenRouter API key NOT loaded - LLM features will fail")
-    logger.info("Using model: %s", config["model"])
+    if serving_process:
+        for key in Config.SHADOWED_ENV_KEYS:
+            logger.warning(
+                "%s is set in your shell/system environment (%s) and overrides "
+                "backend/.env. Remove it there if backend/.env should win.",
+                key, mask_secret(os.environ.get(key)),
+            )
+
+        config = get_api_config()
+        ok, summary = check_api_key()
+        (logger.info if ok else logger.error)(
+            "%s Key %s, text model %s, vision model %s",
+            summary, mask_secret(config["api_key"]),
+            Config.get_llm_text_model(), config["model"],
+        )
 
     logger.info("Starting LUMEN Financial Intelligence API...")
-    # Werkzeug's debug reloader executes __main__ twice (watcher parent +
-    # serving child). Start background polling only in the serving process,
-    # otherwise two pollers race on the same inbox.
-    if not Config.DEBUG or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    # Background polling too, otherwise two pollers race on the same inbox.
+    if serving_process:
         scheduler.start()
 
     try:

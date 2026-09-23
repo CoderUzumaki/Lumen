@@ -25,6 +25,16 @@ def configure_logging() -> None:
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
 
+    # On Windows, stdout redirected to a file or pipe uses cp1252, which can't
+    # encode the emoji some log messages contain; the handler then prints a
+    # "--- Logging error ---" traceback for every such line. Replace
+    # unencodable characters instead of failing.
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(errors="replace")
+        except (ValueError, OSError):
+            pass
+
     handler = logging.StreamHandler(sys.stdout)
     fmt = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
     handler.setFormatter(logging.Formatter(fmt))
@@ -48,9 +58,12 @@ def configure_logging() -> None:
 
 
 def mask_secret(value: str | None, keep: int = 4) -> str:
-    """Render a secret safely for logs: keep last `keep` chars, mask the rest."""
+    """Render a secret safely for logs as `****` plus its last `keep` chars.
+
+    Fixed-width so the log doesn't reveal the secret's length.
+    """
     if not value:
         return "<unset>"
-    if len(value) <= keep:
-        return "*" * len(value)
-    return f"{'*' * (len(value) - keep)}{value[-keep:]}"
+    if len(value) <= keep * 2:
+        return "****"
+    return f"****{value[-keep:]}"

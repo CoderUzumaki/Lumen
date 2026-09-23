@@ -326,13 +326,15 @@ export default function AIAssistantUI() {
         setIsThinking(false);
         setThinkingConvId(null);
 
-        // Add error message
+        // Prefer the backend's user-facing message; axios's own message is just
+        // "Request failed with status code 503".
+        const serverMessage: string | undefined = error?.response?.data?.error;
         const errorMsg: MessageType = {
           id: Math.random().toString(36).slice(2),
           role: "assistant",
-          content: `Sorry, I encountered an error: ${
-            error.message || "Unable to process your request"
-          }. Please try again.`,
+          content:
+            serverMessage ??
+            "Sorry, I couldn't process that request. Please try again.",
           createdAt: new Date().toISOString(),
         };
 

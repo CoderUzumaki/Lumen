@@ -3,9 +3,8 @@ import json
 import logging
 from typing import Dict, Any
 
-import requests
-
 from config import Config
+from utils.llm import chat_completion
 
 from .query_classifier import QueryClassifier
 from .sql_agent import SQLAgent
@@ -24,91 +23,77 @@ class HybridQueryEngine:
         self.rag_system = RAGSystem()
     
     def query(self, user_query: str, user_id: str) -> Dict[str, Any]:
+        """Classify the question, fetch matching data, and write the answer.
+
+        Raises utils.llm.LLMError when the LLM provider can't be used (bad key,
+        no credits, rate limit, outage, retired model); the route turns that
+        into a user-facing error rather than a fake answer.
         """
-        Main entry point for all queries
-        Routes to appropriate system and synthesizes response
-        """
-        # Step 1: Classify query
         query_type = self.classifier.classify(user_query)
-        
-        logger.info(f"Query classified as: {query_type}")
-        
-        # Step 2: Execute appropriate system
-        if query_type == 'ANALYTICAL':
+        logger.info("Query classified as: %s", query_type)
+
+        results = None
+        context_type = 'sql'
+        if query_type == 'SEMANTIC':
+            results = self._semantic_search(user_query, user_id)
+            context_type = 'semantic'
+        if results is None:
+            # Analytical question, or semantic search unavailable.
             results = self.sql_agent.query(user_query, user_id)
             context_type = 'sql'
-        else:
-            results = self.rag_system.search(user_query, user_id)
-            context_type = 'semantic'
-        
-        # Step 3: Synthesize response
+
         response = self._synthesize_response(
             user_query=user_query,
             results=results,
-            context_type=context_type
+            context_type=context_type,
         )
-        
+
         return {
             'query': user_query,
             'query_type': query_type,
             'raw_results': results,
-            'response': response
+            'response': response,
         }
-    
-    def _synthesize_response(self, 
-                            user_query: str, 
-                            results: Dict, 
+
+    def _semantic_search(self, user_query: str, user_id: str) -> Dict[str, Any] | None:
+        """Vector search, or None if the index can't serve it (disabled, not
+        built, embedding call failed) so the caller can use SQL instead."""
+        try:
+            results = self.rag_system.search(user_query, user_id)
+        except Exception as e:
+            logger.warning("Semantic search failed (%s); falling back to SQL", e)
+            return None
+        if not results.get("success"):
+            logger.info("Semantic search unavailable (%s); falling back to SQL", results.get("error"))
+            return None
+        return results
+
+    def _synthesize_response(self,
+                            user_query: str,
+                            results: Dict,
                             context_type: str) -> str:
         """Generate natural language response from results"""
-        
+
         synthesis_prompt = f"""
         You are a financial assistant explaining query results to a user.
-        
+        Amounts are in {Config.DEFAULT_CURRENCY} unless the data says otherwise.
+
         User asked: "{user_query}"
-        
+
         Query type: {context_type}
-        
+
         Results:
         {json.dumps(results, indent=2, default=str)}
-        
+
         Generate a clear, concise answer:
         1. Directly answer the question
         2. Include key numbers/facts
         3. Add brief insight if relevant
         4. Keep it conversational
-        
+        5. If the results are empty, say you found no matching transactions and
+           suggest uploading invoices; do not invent data
+
         Answer:
         """
-        
-        try:
-            response = requests.post(
-                Config.OPENROUTER_CHAT_URL,
-                headers={
-                    "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": Config.get_llm_text_model(),
-                    "messages": [{"role": "user", "content": synthesis_prompt}],
-                    "temperature": 0.7,
-                    "max_tokens": 500
-                }
-            )
-            
-            response_data = response.json()
-            
-            # Log response for debugging
-            logger.info(f"OpenRouter response status: {response.status_code}")
-            if response.status_code != 200:
-                logger.info(f"OpenRouter error: {response_data}")
-                return f"Error generating response: {response_data.get('error', {}).get('message', 'Unknown error')}"
-            
-            return response_data['choices'][0]['message']['content']
-        
-        except KeyError as e:
-            logger.info(f"KeyError in response: {e}")
-            logger.info(f"Full response: {response_data}")
-            return "Error: Unable to generate natural language response. Raw results available in 'raw_results' field."
-        except Exception as e:
-            logger.info(f"Error synthesizing response: {e}")
-            return f"Error generating response: {str(e)}"
+
+        return chat_completion(synthesis_prompt, temperature=0.7, max_tokens=500)
