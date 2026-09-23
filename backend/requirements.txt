@@ -19,8 +19,9 @@ cryptography
 
 
 # Vector Database
-
-chromadb
+# Pinned to a minor range: chromadb's on-disk format changes between minors
+# (a 0.4 index is unreadable by 0.5 — fails with KeyError '_type').
+chromadb>=0.5.11,<0.6
 
 
 
