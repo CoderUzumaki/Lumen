@@ -15,6 +15,7 @@ export default function robots(): MetadataRoute.Robots {
 					"/chatbot",
 					"/upload",
 					"/signin",
+					"/reset-password",
 				],
 			},
 		],
