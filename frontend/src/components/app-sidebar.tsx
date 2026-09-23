@@ -4,29 +4,28 @@ import * as React from "react";
 import {
 	BookOpen,
 	Bot,
-	Frame,
-	Map,
 	PieChart,
-	Settings2,
-	SquareTerminal,
+	LayoutDashboard,
 } from "lucide-react";
+import Image from "next/image";
 
 import { NavMain } from "@/components/nav-main";
 import { NavProjects } from "@/components/nav-projects";
 import { NavUser } from "@/components/nav-user";
-import { TeamSwitcher } from "@/components/team-switcher";
 import {
 	Sidebar,
 	SidebarContent,
 	SidebarFooter,
+	SidebarGroupLabel,
 	SidebarHeader,
 	SidebarRail,
 } from "@/components/ui/sidebar";
-import { authApi, tokenManager } from "@/lib/api/client"; // This is sample data.
+import { useAuth } from "@/components/auth/auth-provider";
+
 const data = {
 	navMain: [
 		{
-			title: "Analytics",
+			title: "Spending Views",
 			url: "#",
 			icon: BookOpen,
 			items: [
@@ -47,24 +46,30 @@ const data = {
 	],
 	projects: [
 		{
-			name: "Dashboard",
+			name: "Overview",
 			url: "/dashboard",
-			icon: SquareTerminal,
+			icon: LayoutDashboard,
 		},
 		{
-			name: "Chat Bot",
-			url: "/chatbot",
-			icon: Bot,
+			name: "Analytics",
+			url: "/analytics",
+			icon: BookOpen,
 		},
 		{
-			name: "AI Analytics",
+			name: "AI Insights",
 			url: "/ai-analytics",
 			icon: PieChart,
+		},
+		{
+			name: "Ask Lumen",
+			url: "/chatbot",
+			icon: Bot,
 		},
 	],
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+	const { user: authUser } = useAuth();
 	const [user, setUser] = React.useState<{
 		name: string;
 		email: string;
@@ -76,68 +81,61 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 	});
 
 	React.useEffect(() => {
-		const fetchUserData = async () => {
-			if (typeof window !== "undefined") {
-				// First try to get from localStorage
-				const userStr = localStorage.getItem("invox_user");
-				if (userStr) {
-					const userData = JSON.parse(userStr);
-					setUser({
-						name: userData.name || "User",
-						email: userData.email || "user@example.com",
-						avatar:
-							userData.picture ||
-							`https://ui-avatars.com/api/?name=${encodeURIComponent(
-								userData.name || "User"
-							)}&background=random`,
-					});
-				} else {
-					// If not in localStorage, fetch from backend
-					try {
-						const userData = await authApi.getCurrentUser();
-						tokenManager.setUser(userData);
-						setUser({
-							name: userData.name || "User",
-							email: userData.email || "user@example.com",
-							avatar:
-								userData.picture ||
-								`https://ui-avatars.com/api/?name=${encodeURIComponent(
-									userData.name || "User"
-								)}&background=random`,
-						});
-					} catch (error) {
-						console.error("Error fetching user data:", error);
-					}
-				}
-			}
-		};
+		if (!authUser) {
+			return;
+		}
 
-		fetchUserData();
-	}, []);
+		const name =
+			authUser.user_metadata?.full_name ??
+			authUser.user_metadata?.name ??
+			authUser.email ??
+			"User";
+		const avatar =
+			authUser.user_metadata?.avatar_url ??
+			authUser.user_metadata?.picture ??
+			`https://ui-avatars.com/api/?name=${encodeURIComponent(
+				name
+			)}&background=random`;
+
+		setUser({
+			name,
+			email: authUser.email || "user@example.com",
+			avatar,
+		});
+	}, [authUser]);
 
 	return (
 		<Sidebar
 			collapsible="icon"
 			{...props}
-			className="bg-white border-r border-gray-200"
+			className="border-r border-sidebar-border/80"
 		>
-			<SidebarHeader className="bg-white border-b border-gray-200">
-				<div className="flex items-center gap-2 px-2 py-2">
-					<img
-						src="/lumen.svg"
-						alt="Invox Logo"
-						className="w-8 h-8"
+			<SidebarHeader className="border-b border-sidebar-border/80 px-3 py-3">
+				<div className="flex items-center gap-3">
+					<Image
+						src="/lumen_logo.svg"
+						alt="Lumen logo"
+						width={32}
+						height={32}
+						className="h-8 w-8"
 					/>
-					<span className="text-xl font-bold text-gray-800 group-data-[collapsible=icon]:hidden">
-						Lumen
-					</span>
+					<div className="group-data-[collapsible=icon]:hidden">
+						<p className="text-sm font-semibold tracking-wide text-sidebar-foreground">
+							Lumen
+						</p>
+						<p className="text-xs text-sidebar-foreground/60">
+							Financial command center
+						</p>
+					</div>
 				</div>
 			</SidebarHeader>
-			<SidebarContent className="bg-white">
+			<SidebarContent className="px-1 py-3">
+				<SidebarGroupLabel>Workspace</SidebarGroupLabel>
 				<NavProjects projects={data.projects} />
+				<SidebarGroupLabel className="mt-2">Compare</SidebarGroupLabel>
 				<NavMain items={data.navMain} />
 			</SidebarContent>
-			<SidebarFooter className="bg-white border-t border-gray-200">
+			<SidebarFooter className="border-t border-sidebar-border/80 pt-3">
 				<NavUser user={user} />
 			</SidebarFooter>
 			<SidebarRail />

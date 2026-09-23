@@ -1,5 +1,10 @@
+import { AuthGuard } from "@/components/auth/auth-guard";
 import AnalyticsContent from "./analyticsContent";
 
 export default function AnalyticsPage() {
-	return <AnalyticsContent />;
+	return (
+		<AuthGuard>
+			<AnalyticsContent />
+		</AuthGuard>
+	);
 }

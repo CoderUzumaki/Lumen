@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 /**
  * Simple event emitter for cross-component communication
  * Used to refresh invoice lists when invoices are updated
@@ -22,7 +23,7 @@ class EventEmitter {
 
 	emit(event: string) {
 		const callbacks = this.events.get(event);
-		console.log(
+		logger.debug(
 			`📢 Event emitted: ${event}, listeners: ${callbacks?.size || 0}`
 		);
 		if (callbacks) {

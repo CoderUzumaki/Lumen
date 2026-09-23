@@ -1,7 +1,7 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Lightbulb } from "lucide-react";
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 
 interface Template {
 	id: string;
@@ -65,7 +65,7 @@ export default function CreateTemplateModal({
 	};
 
 	// Update form when editingTemplate changes
-	useState(() => {
+	useEffect(() => {
 		if (editingTemplate) {
 			setTemplateName(editingTemplate.name || "");
 			setTemplateContent(editingTemplate.content || "");

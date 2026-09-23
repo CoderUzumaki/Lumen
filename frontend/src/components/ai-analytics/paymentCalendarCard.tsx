@@ -33,19 +33,23 @@ export default function PaymentCalendarCard() {
 		forecast: [],
 	});
 	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		const fetchPaymentDates = async () => {
 			try {
-				const response = await analyticsApi.getAllTimeSummary("123");
+				setError(null);
+				const response = await analyticsApi.getAllTimeSummary();
 				if (response.success && response.payment_calendar) {
 					setPaymentDates(response.payment_calendar);
 				} else {
 					setPaymentDates({ upcoming: [], forecast: [] });
+					setError("Could not load payment calendar.");
 				}
 			} catch (err) {
 				console.error("Failed to load payment calendar", err);
 				setPaymentDates({ upcoming: [], forecast: [] });
+				setError("Could not load payment calendar.");
 			} finally {
 				setLoading(false);
 			}
@@ -82,29 +86,49 @@ export default function PaymentCalendarCard() {
 	const isUpcoming = (day: number) => paymentDates.upcoming.includes(day);
 	const isForecast = (day: number) => paymentDates.forecast.includes(day);
 
+	if (loading) {
+		return (
+			<Card className="border-border/70 bg-card/80 shadow-lg shadow-black/10">
+				<CardContent className="flex items-center justify-center h-[280px]">
+					<p className="text-muted-foreground">Loading calendar...</p>
+				</CardContent>
+			</Card>
+		);
+	}
+
+	if (error) {
+		return (
+			<Card className="border-border/70 bg-card/80 shadow-lg shadow-black/10">
+				<CardContent className="flex items-center justify-center h-[280px]">
+					<p className="text-muted-foreground">{error}</p>
+				</CardContent>
+			</Card>
+		);
+	}
+
 	return (
 		<motion.div variants={cardVariants} initial="hidden" animate="visible">
-			<Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300">
+			<Card className="border-border/70 bg-card/80 shadow-lg shadow-black/10 transition-all duration-300 hover:shadow-xl hover:shadow-black/10">
 				<CardHeader className="pb-3">
-					<CardTitle className="text-lg font-semibold text-gray-900 flex items-center justify-between">
+					<CardTitle className="flex items-center justify-between text-lg font-semibold text-foreground">
 						<div className="flex items-center gap-2">
-							<CalendarIcon className="w-5 h-5 text-purple-600" />
+							<CalendarIcon className="h-5 w-5 text-primary" />
 							Payment Calendar
 						</div>
 						<div className="flex items-center gap-2">
 							<button
 								onClick={previousMonth}
-								className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+								className="rounded-lg p-1 transition-colors hover:bg-accent"
 								aria-label="Previous month"
 							>
-								<ChevronLeft className="w-4 h-4 text-gray-600" />
+								<ChevronLeft className="h-4 w-4 text-muted-foreground" />
 							</button>
 							<button
 								onClick={nextMonth}
-								className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+								className="rounded-lg p-1 transition-colors hover:bg-accent"
 								aria-label="Next month"
 							>
-								<ChevronRight className="w-4 h-4 text-gray-600" />
+								<ChevronRight className="h-4 w-4 text-muted-foreground" />
 							</button>
 						</div>
 					</CardTitle>
@@ -112,7 +136,7 @@ export default function PaymentCalendarCard() {
 				<CardContent>
 					<div className="space-y-3">
 						{/* Month/Year */}
-						<p className="text-sm font-medium text-gray-900 text-center">
+						<p className="text-center text-sm font-medium text-foreground">
 							{monthName}
 						</p>
 
@@ -123,7 +147,7 @@ export default function PaymentCalendarCard() {
 								(day) => (
 									<div
 										key={day}
-										className="text-center text-xs font-medium text-gray-600 py-1"
+										className="py-1 text-center text-xs font-medium text-muted-foreground"
 									>
 										{day}
 									</div>
@@ -152,10 +176,10 @@ export default function PaymentCalendarCard() {
 											key={day}
 											className={`aspect-square flex items-center justify-center text-sm rounded-lg cursor-pointer transition-all duration-200 ${
 												isUpcomingDay
-													? "bg-orange-500 text-white font-semibold hover:bg-orange-600"
+													? "bg-amber-500/80 text-white font-semibold hover:bg-amber-500"
 													: isForecastDay
-													? "bg-blue-500 text-white font-semibold hover:bg-blue-600"
-													: "text-gray-700 hover:bg-gray-100"
+													? "bg-primary/80 text-white font-semibold hover:bg-primary"
+													: "text-foreground hover:bg-accent"
 											}`}
 										>
 											{day}
@@ -168,12 +192,12 @@ export default function PaymentCalendarCard() {
 						{/* Legend */}
 						<div className="flex items-center gap-4 pt-2 text-xs">
 							<div className="flex items-center gap-1.5">
-								<div className="w-3 h-3 rounded bg-orange-500"></div>
-								<span className="text-gray-700">Upcoming</span>
+								<div className="h-3 w-3 rounded bg-amber-500"></div>
+								<span className="text-muted-foreground">Upcoming</span>
 							</div>
 							<div className="flex items-center gap-1.5">
-								<div className="w-3 h-3 rounded bg-blue-500"></div>
-								<span className="text-gray-700">Forecast</span>
+								<div className="h-3 w-3 rounded bg-primary"></div>
+								<span className="text-muted-foreground">Forecast</span>
 							</div>
 						</div>
 					</div>

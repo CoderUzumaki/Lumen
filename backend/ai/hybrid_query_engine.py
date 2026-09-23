@@ -1,18 +1,26 @@
 # hybrid_query_engine.py
+import json
+import logging
+from typing import Dict, Any
+
+import requests
+
+from config import Config
 
 from .query_classifier import QueryClassifier
 from .sql_agent import SQLAgent
 from .rag_system import RAGSystem
-import requests
-import os
-from typing import Dict, Any
-import json
+
+logger = logging.getLogger(__name__)
+
+
 class HybridQueryEngine:
     """Orchestrates SQL Agent and RAG System"""
-    
-    def __init__(self, db_path: str = "instance/lumen.db"):
+
+    def __init__(self, db_path: str | None = None):
+        resolved = db_path or str(Config.DATABASE_PATH)
         self.classifier = QueryClassifier()
-        self.sql_agent = SQLAgent(db_path)
+        self.sql_agent = SQLAgent(resolved)
         self.rag_system = RAGSystem()
     
     def query(self, user_query: str, user_id: str) -> Dict[str, Any]:
@@ -23,7 +31,7 @@ class HybridQueryEngine:
         # Step 1: Classify query
         query_type = self.classifier.classify(user_query)
         
-        print(f"Query classified as: {query_type}")
+        logger.info(f"Query classified as: {query_type}")
         
         # Step 2: Execute appropriate system
         if query_type == 'ANALYTICAL':
@@ -74,13 +82,13 @@ class HybridQueryEngine:
         
         try:
             response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                Config.OPENROUTER_CHAT_URL,
                 headers={
-                    "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+                    "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "anthropic/claude-3.5-sonnet",
+                    "model": Config.get_llm_text_model(),
                     "messages": [{"role": "user", "content": synthesis_prompt}],
                     "temperature": 0.7,
                     "max_tokens": 500
@@ -90,17 +98,17 @@ class HybridQueryEngine:
             response_data = response.json()
             
             # Log response for debugging
-            print(f"OpenRouter response status: {response.status_code}")
+            logger.info(f"OpenRouter response status: {response.status_code}")
             if response.status_code != 200:
-                print(f"OpenRouter error: {response_data}")
+                logger.info(f"OpenRouter error: {response_data}")
                 return f"Error generating response: {response_data.get('error', {}).get('message', 'Unknown error')}"
             
             return response_data['choices'][0]['message']['content']
         
         except KeyError as e:
-            print(f"KeyError in response: {e}")
-            print(f"Full response: {response_data}")
+            logger.info(f"KeyError in response: {e}")
+            logger.info(f"Full response: {response_data}")
             return "Error: Unable to generate natural language response. Raw results available in 'raw_results' field."
         except Exception as e:
-            print(f"Error synthesizing response: {e}")
+            logger.info(f"Error synthesizing response: {e}")
             return f"Error generating response: {str(e)}"

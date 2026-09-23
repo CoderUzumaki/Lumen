@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { FileText, Save, CheckCircle } from "lucide-react";
 import { eventBus, EVENTS } from "@/lib/events";
 import { transactionApi } from "@/lib/api/client";
+import { toast } from "@/lib/toast";
 
 interface Invoice {
 	id: string; // UUID from database
@@ -25,6 +26,7 @@ interface Invoice {
 	address: string | null;
 	category: string | null;
 	created_at: string;
+	updated_at?: string;
 	items?: Array<{
 		item_name: string;
 		quantity: number;
@@ -99,7 +101,7 @@ export function InvoiceEditDialog({
 			}
 		} catch (error) {
 			console.error("Error updating invoice:", error);
-			alert("Failed to update invoice. Please try again.");
+			toast.error("Failed to update invoice. Please try again.");
 		} finally {
 			setSaving(false);
 		}
@@ -321,9 +323,13 @@ export function InvoiceEditDialog({
 									</p>
 									<p>
 										Updated:{" "}
-										{new Date(
-											invoice.updated_at
-										).toLocaleString()}
+										{invoice.updated_at
+											? new Date(
+													invoice.updated_at
+												).toLocaleString()
+											: new Date(
+													invoice.created_at
+												).toLocaleString()}
 									</p>
 								</div>
 							</div>

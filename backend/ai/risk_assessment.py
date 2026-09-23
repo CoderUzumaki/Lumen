@@ -6,6 +6,10 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 import statistics
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class RiskAssessmentEngine:
     """Calculate comprehensive financial health score"""
@@ -376,7 +380,7 @@ class RiskAssessmentEngine:
         Returns:
             Complete risk assessment with score and recommendations
         """
-        print(f"📊 Assessing financial risk for user {user_id}...")
+        logger.info(f"📊 Assessing financial risk for user {user_id}...")
         
         # Calculate all risk factors
         velocity_risk = self.calculate_spending_velocity_risk(user_id)
@@ -469,7 +473,7 @@ if __name__ == "__main__":
     import json
     
     if len(sys.argv) < 2:
-        print("Usage: python risk_assessment_engine.py <db_path> [user_id]")
+        logger.info("Usage: python risk_assessment_engine.py <db_path> [user_id]")
         sys.exit(1)
     
     db_path = sys.argv[1]
@@ -477,28 +481,28 @@ if __name__ == "__main__":
     
     engine = RiskAssessmentEngine(db_path)
     
-    print("="*60)
-    print("Risk Assessment Engine Test")
-    print("="*60)
+    logger.info("="*60)
+    logger.info("Risk Assessment Engine Test")
+    logger.info("="*60)
     
     result = engine.calculate_overall_risk(user_id)
     
-    print("\n" + "="*60)
-    print(f"FINANCIAL HEALTH SCORE: {result['overall_score']}/100")
-    print(f"Status: {result['health_status']}")
-    print(f"Risk Level: {result['risk_level']}")
-    print("="*60)
+    logger.info("\n" + "="*60)
+    logger.info(f"FINANCIAL HEALTH SCORE: {result['overall_score']}/100")
+    logger.info(f"Status: {result['health_status']}")
+    logger.info(f"Risk Level: {result['risk_level']}")
+    logger.info("="*60)
     
-    print("\n" + "-"*60)
-    print("RISK FACTORS:")
-    print("-"*60)
+    logger.info("\n" + "-"*60)
+    logger.info("RISK FACTORS:")
+    logger.info("-"*60)
     for factor in result['factors']:
-        print(f"\n{factor['factor'].upper()}")
-        print(f"  Score: {factor['score']}/{factor['max_score']} ({factor['percentage']}%)")
-        print(f"  {factor['message']}")
+        logger.info(f"\n{factor['factor'].upper()}")
+        logger.info(f"  Score: {factor['score']}/{factor['max_score']} ({factor['percentage']}%)")
+        logger.info(f"  {factor['message']}")
     
-    print("\n" + "-"*60)
-    print("RECOMMENDATIONS:")
-    print("-"*60)
+    logger.info("\n" + "-"*60)
+    logger.info("RECOMMENDATIONS:")
+    logger.info("-"*60)
     for rec in result['recommendations']:
-        print(f"  {rec}")
+        logger.info(f"  {rec}")

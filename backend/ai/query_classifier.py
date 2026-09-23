@@ -1,9 +1,11 @@
 # query_classifier.py
+import logging
 
 import requests
-import os
 
-OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+from config import Config
+
+logger = logging.getLogger(__name__)
 
 class QueryClassifier:
     """Classifies user queries into ANALYTICAL or SEMANTIC"""
@@ -56,19 +58,19 @@ class QueryClassifier:
         # Check for obvious analytical patterns
         for keyword in analytical_keywords:
             if keyword in query_lower:
-                print(f"🎯 Quick match: '{keyword}' found → ANALYTICAL")
+                logger.info(f"🎯 Quick match: '{keyword}' found → ANALYTICAL")
                 return 'ANALYTICAL'
         
         # Otherwise, use LLM classification
         try:
             response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                Config.OPENROUTER_CHAT_URL,
                 headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "anthropic/claude-3.5-sonnet",
+                    "model": Config.get_llm_text_model(),
                     "messages": [
                         {
                             "role": "user",
@@ -84,24 +86,24 @@ class QueryClassifier:
             
             # Check for errors in response
             if 'error' in result:
-                print(f"OpenRouter API error in classifier: {result['error']}")
+                logger.info(f"OpenRouter API error in classifier: {result['error']}")
                 return 'ANALYTICAL'  # Default fallback
             
             raw_response = result['choices'][0]['message']['content'].strip()
             classification = raw_response.upper()
             
-            print(f"🔍 Query: '{query}'")
-            print(f"📊 LLM raw response: '{raw_response}'")
-            print(f"✅ Classification: {classification}")
+            logger.info(f"🔍 Query: '{query}'")
+            logger.info(f"📊 LLM raw response: '{raw_response}'")
+            logger.info(f"✅ Classification: {classification}")
             
             # Fallback to ANALYTICAL if unclear
             if classification not in ['ANALYTICAL', 'SEMANTIC']:
-                print(f"⚠️  Invalid classification '{classification}', defaulting to ANALYTICAL")
+                logger.warning(f"⚠️  Invalid classification '{classification}', defaulting to ANALYTICAL")
                 classification = 'ANALYTICAL'
             
             return classification
             
         except Exception as e:
-            print(f"Error in query classifier: {e}")
-            print(f"Defaulting to ANALYTICAL query type")
+            logger.info(f"Error in query classifier: {e}")
+            logger.info(f"Defaulting to ANALYTICAL query type")
             return 'ANALYTICAL'  # Safe fallback

@@ -1,19 +1,11 @@
 "use client";
 
-import {
-	BadgeCheck,
-	Bell,
-	ChevronsUpDown,
-	CreditCard,
-	LogOut,
-	Sparkles,
-} from "lucide-react";
+import { ChevronsUpDown, LogOut } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
-	DropdownMenuGroup,
 	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
@@ -25,8 +17,16 @@ import {
 	SidebarMenuItem,
 	useSidebar,
 } from "@/components/ui/sidebar";
-// import { tokenManager } from "@/lib/api/client";
-// import { signOut } from "next-auth/react";
+import { authApi } from "@/lib/api/client";
+
+function initials(name: string) {
+	return name
+		.split(" ")
+		.filter(Boolean)
+		.slice(0, 2)
+		.map((part) => part[0]?.toUpperCase() ?? "")
+		.join("");
+}
 
 export function NavUser({
 	user,
@@ -38,6 +38,7 @@ export function NavUser({
 	};
 }) {
 	const { isMobile } = useSidebar();
+	const fallback = initials(user.name || user.email || "U");
 
 	return (
 		<SidebarMenu>
@@ -54,7 +55,7 @@ export function NavUser({
 									alt={user.name}
 								/>
 								<AvatarFallback className="rounded-lg">
-									CN
+									{fallback}
 								</AvatarFallback>
 							</Avatar>
 							<div className="grid flex-1 text-left text-sm leading-tight">
@@ -82,7 +83,7 @@ export function NavUser({
 										alt={user.name}
 									/>
 									<AvatarFallback className="rounded-lg">
-										CN
+										{fallback}
 									</AvatarFallback>
 								</Avatar>
 								<div className="grid flex-1 text-left text-sm leading-tight">
@@ -96,33 +97,9 @@ export function NavUser({
 							</div>
 						</DropdownMenuLabel>
 						<DropdownMenuSeparator />
-						<DropdownMenuGroup>
-							<DropdownMenuItem>
-								<Sparkles />
-								Upgrade to Pro
-							</DropdownMenuItem>
-						</DropdownMenuGroup>
-						<DropdownMenuSeparator />
-						<DropdownMenuGroup>
-							<DropdownMenuItem>
-								<BadgeCheck />
-								Account
-							</DropdownMenuItem>
-							<DropdownMenuItem>
-								<CreditCard />
-								Billing
-							</DropdownMenuItem>
-							<DropdownMenuItem>
-								<Bell />
-								Notifications
-							</DropdownMenuItem>
-						</DropdownMenuGroup>
-						<DropdownMenuSeparator />
 						<DropdownMenuItem
 							onClick={async () => {
-								// tokenManager.removeToken();
-								localStorage.removeItem("user");
-								// await signOut({ callbackUrl: "/" });
+								await authApi.logout();
 							}}
 						>
 							<LogOut />

@@ -13,7 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { analyticsApi, tokenManager } from "@/lib/api/client";
+import { analyticsApi } from "@/lib/api/client";
 
 interface SelectedPeriod {
 	year: number;
@@ -82,8 +82,8 @@ const getPeriodLabels = (timeRange: string, selectedPeriod: SelectedPeriod) => {
 const CustomTooltip = ({ active, payload, label }: any) => {
 	if (active && payload && payload.length) {
 		return (
-			<div className="bg-white p-4 rounded-lg shadow-lg border border-gray-200">
-				<p className="font-semibold text-sm mb-2 text-gray-900">
+			<div className="rounded-xl border border-border/70 bg-card/95 p-4 shadow-xl shadow-black/20 backdrop-blur">
+				<p className="mb-2 text-sm font-semibold text-foreground">
 					{label}
 				</p>
 				{payload.map((entry: any, index: number) => (
@@ -119,11 +119,8 @@ export default function SpendingTrendChart({
 		const fetchChartData = async () => {
 			try {
 				setLoading(true);
-				const user = tokenManager.getUser();
-				// if (!user?.id) return;
 
 				const response = await analyticsApi.getTimeRangeAnalytics(
-					"123",
 					timeRange,
 					selectedPeriod.year,
 					selectedPeriod.month,
@@ -147,31 +144,31 @@ export default function SpendingTrendChart({
 
 	if (loading) {
 		return (
-			<Card className="col-span-full bg-white border border-gray-200">
+			<Card className="col-span-full border-border/70 bg-card/80">
 				<CardHeader>
-					<div className="h-6 w-48 bg-gray-200 rounded animate-pulse"></div>
+					<div className="h-6 w-48 animate-pulse rounded bg-muted"></div>
 				</CardHeader>
 				<CardContent>
-					<div className="h-[400px] w-full bg-gray-200 rounded animate-pulse"></div>
+					<div className="h-[400px] w-full animate-pulse rounded bg-muted"></div>
 				</CardContent>
 			</Card>
 		);
 	}
 
 	return (
-		<Card className="w-full bg-white border border-gray-200 shadow-sm">
+		<Card className="w-full border-border/70 bg-card/80 shadow-lg shadow-black/10">
 			<CardHeader>
-				<CardTitle className="flex items-center gap-2 text-gray-900">
-					<BarChart3 className="w-5 h-5 text-primary" />
+				<CardTitle className="flex items-center gap-2 text-foreground">
+					<BarChart3 className="h-5 w-5 text-primary" />
 					Spending Comparison
 				</CardTitle>
-				<p className="text-sm text-gray-600">
+				<p className="text-sm text-muted-foreground">
 					Comparing{" "}
 					<span className="font-semibold text-primary">
 						{periodLabels.current}
 					</span>{" "}
 					vs{" "}
-					<span className="font-semibold text-gray-700">
+					<span className="font-semibold text-foreground">
 						{periodLabels.previous}
 					</span>
 				</p>
@@ -192,12 +189,12 @@ export default function SpendingTrendChart({
 							>
 								<stop
 									offset="5%"
-									stopColor="#8884d8"
+									stopColor="#60a5fa"
 									stopOpacity={0.8}
 								/>
 								<stop
 									offset="95%"
-									stopColor="#8884d8"
+									stopColor="#60a5fa"
 									stopOpacity={0}
 								/>
 							</linearGradient>
@@ -210,24 +207,24 @@ export default function SpendingTrendChart({
 							>
 								<stop
 									offset="5%"
-									stopColor="#82ca9d"
+									stopColor="#2dd4bf"
 									stopOpacity={0.8}
 								/>
 								<stop
 									offset="95%"
-									stopColor="#82ca9d"
+									stopColor="#2dd4bf"
 									stopOpacity={0}
 								/>
 							</linearGradient>
 						</defs>
-						<CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+						<CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.18)" />
 						<XAxis
 							dataKey="date"
-							tick={{ fontSize: 12 }}
+							tick={{ fontSize: 12, fill: "#94a3b8" }}
 							tickLine={false}
 						/>
 						<YAxis
-							tick={{ fontSize: 12 }}
+							tick={{ fontSize: 12, fill: "#94a3b8" }}
 							tickLine={false}
 							tickFormatter={(value) => `₹${value}`}
 						/>
@@ -239,7 +236,7 @@ export default function SpendingTrendChart({
 						<Area
 							type="monotone"
 							dataKey="currentSpending"
-							stroke="#8884d8"
+							stroke="#60a5fa"
 							fillOpacity={1}
 							fill="url(#colorSpending)"
 							strokeWidth={2}
@@ -249,7 +246,7 @@ export default function SpendingTrendChart({
 						<Area
 							type="monotone"
 							dataKey="previousSpending"
-							stroke="#82ca9d"
+							stroke="#2dd4bf"
 							fillOpacity={1}
 							fill="url(#colorIncome)"
 							strokeWidth={2}

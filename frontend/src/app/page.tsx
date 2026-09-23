@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { GlassmorphismNav } from "@/components/landing/glassmorphism-nav";
 import { HeroSection } from "@/components/landing/hero-section";
 import { ProblemSolutionSection } from "@/components/landing/problem-solution-section";
@@ -8,6 +9,26 @@ import { TestimonialsSection } from "@/components/landing/testimonials-section";
 import { ROICalculatorSection } from "@/components/landing/roi-calculator-section";
 import { CTASection } from "@/components/landing/cta-section";
 import { Footer } from "@/components/landing/footer";
+
+export const metadata: Metadata = {
+	title: "AI Financial Dashboard for Invoice Operations",
+	description:
+		"Capture invoices, analyze spend, detect anomalies, and ask finance questions faster with Lumen's AI-powered financial dashboard.",
+	alternates: {
+		canonical: "/",
+	},
+	openGraph: {
+		url: "/",
+		title: "AI Financial Dashboard for Invoice Operations | Lumen",
+		description:
+			"Capture invoices, analyze spend, detect anomalies, and ask finance questions faster with Lumen's AI-powered financial dashboard.",
+	},
+	twitter: {
+		title: "AI Financial Dashboard for Invoice Operations | Lumen",
+		description:
+			"Capture invoices, analyze spend, detect anomalies, and ask finance questions faster with Lumen's AI-powered financial dashboard.",
+	},
+};
 
 export default function HomePage() {
 	return (

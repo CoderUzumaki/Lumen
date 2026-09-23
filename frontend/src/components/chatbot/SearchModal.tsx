@@ -1,7 +1,7 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, SearchIcon, Plus, Clock } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 
 interface MessageType {
 	id: string;
@@ -74,7 +74,11 @@ export default function SearchModal({
 		};
 
 		filteredConversations
-			.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+			.sort(
+				(a, b) =>
+					new Date(b.updatedAt).getTime() -
+					new Date(a.updatedAt).getTime()
+			)
 			.forEach((conv) => {
 				const group = getTimeGroup(conv.updatedAt);
 				groups[group].push(conv);
@@ -83,17 +87,17 @@ export default function SearchModal({
 		return groups;
 	}, [filteredConversations]);
 
-	const handleClose = () => {
+	const handleClose = useCallback(() => {
 		setQuery("");
 		onClose();
-	};
+	}, [onClose]);
 
 	const handleNewChat = () => {
 		createNewChat();
 		handleClose();
 	};
 
-	const handleSelectConversation = (id) => {
+	const handleSelectConversation = (id: string) => {
 		onSelect(id);
 		handleClose();
 	};
@@ -107,7 +111,7 @@ export default function SearchModal({
 			document.addEventListener("keydown", handleEscape);
 			return () => document.removeEventListener("keydown", handleEscape);
 		}
-	}, [isOpen]);
+	}, [isOpen, handleClose]);
 
 	return (
 		<AnimatePresence>

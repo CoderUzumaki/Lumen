@@ -17,6 +17,27 @@ Complete guide for deploying LUMEN to production environments.
 
 ---
 
+### Backend Deployment (Render)
+
+A `render.yaml` blueprint is included at the repo root. It provisions:
+
+- **lumen-api** — Flask/Gunicorn web service
+- **lumen-frontend** — Next.js web service  
+- **lumen-db** — managed Postgres
+
+Deploy via the Render dashboard (New → Blueprint) or `render deploy` CLI after connecting the repo.
+
+Required env vars are documented in `backend/.env.example` and `frontend/.env.example`.
+
+Run migrations on deploy:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+---
+
 ## 🎨 Frontend Deployment (Vercel)
 
 ### Why Vercel?
@@ -66,18 +87,19 @@ vercel
 3. Click "New Project"
 4. Import your repository
 5. Configure:
-    - **Framework**: Next.js
+    - **Framework Preset**: Next.js
     - **Root Directory**: `frontend`
-    - **Build Command**: `npm run build`
-    - **Output Directory**: `.next`
+    - **Build Command**: `npm run build` (default)
+    - **Output Directory**: leave **empty** (do NOT set `.next` — that causes platform `404: NOT_FOUND`)
 
 ### Step 3: Configure Environment Variables
 
 In Vercel dashboard:
 
 ```bash
-NEXT_PUBLIC_API_URL=https://your-backend-api.com
-NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
+NEXT_PUBLIC_BACKEND_URL=https://your-backend-api.onrender.com
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 ### Step 4: Custom Domain (Optional)
@@ -156,7 +178,7 @@ OPENROUTER_API_KEY=sk-xxxxx
 GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/google-creds.json
 SECRET_KEY=<generate-strong-key>
 FLASK_ENV=production
-CORS_ORIGINS=https://your-app.vercel.app
+ALLOWED_ORIGINS=https://your-app.vercel.app
 ```
 
 ### Step 5: Add Google Credentials

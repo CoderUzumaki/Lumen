@@ -4,13 +4,14 @@ import type React from "react"
 
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
+import { logger } from "@/lib/logger"
 
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [isAnimating, setIsAnimating] = useState(false)
 
   useEffect(() => {
-    console.log("[v0] Page changed to:", pathname)
+    logger.debug("[v0] Page changed to:", pathname)
     // Fade in when page loads
     setIsAnimating(true)
     const timer = setTimeout(() => {

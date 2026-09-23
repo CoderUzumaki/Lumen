@@ -1,323 +1,131 @@
 # ⚡ Quick Start Guide
 
-Get LUMEN up and running in 5 minutes!
+Get Lumen up and running in 5 minutes.
 
 ---
 
-## 🎯 Prerequisites Checklist
+## Prerequisites
 
-```bash
-# Check Node.js version (need 18+)
-node --version
-
-# Check Python version (need 3.11+)
-python --version
-
-# Check Git
-git --version
-```
+- Node.js 18+
+- Python 3.11+
+- [OpenRouter API key](https://openrouter.ai/)
+- [Supabase project](https://supabase.com/) with Google OAuth enabled
 
 ---
 
-## 🚀 Installation (5 Minutes)
-
-### Step 1: Clone & Navigate (30 seconds)
-
-```bash
-git clone https://github.com/CoderUzumaki/Lumen.git
-cd Lumen
-```
-
-### Step 2: Frontend Setup (2 minutes)
+## 1. Frontend
 
 ```bash
 cd frontend
 npm install
+cp .env.example .env.local
 ```
 
-Create `frontend/.env.local`:
+Set in `frontend/.env.local`:
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 ```bash
 npm run dev
 ```
 
-✅ Frontend running at http://localhost:3000
+Open http://localhost:3000
 
-### Step 3: Backend Setup (2.5 minutes)
+---
 
-Open new terminal:
+## 2. Backend
 
 ```bash
 cd backend
-
-# Create virtual environment
 python -m venv venv
-
-# Activate (Windows PowerShell)
-.\venv\Scripts\Activate.ps1
-
-# Activate (Mac/Linux)
-source venv/bin/activate
-
-# Install dependencies
+.\venv\Scripts\Activate.ps1   # Windows
+# source venv/bin/activate    # Mac/Linux
 pip install -r requirements.txt
+cp .env.example .env
 ```
 
-Create `backend/.env`:
+Set in `backend/.env`:
 
 ```bash
-OPENROUTER_API_KEY=your_key_here
-GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
-DATABASE_URL=sqlite:///instance/lumen.db
+SECRET_KEY=generate-a-long-random-string
+OPENROUTER_API_KEY=your_key
+SUPABASE_URL=https://your-project.supabase.co
+LLM_TEXT_MODEL=openrouter/free
+
+# Optional: Neon/Postgres (omit to use local SQLite)
+# DATABASE_URL=postgresql://...
+```
+
+**Local SQLite (default):** omit `DATABASE_URL` — data lives in `backend/instance/lumen.db`.
+
+**Neon/Postgres:** set `DATABASE_URL`, then:
+
+```bash
+alembic upgrade head
 ```
 
 ```bash
 python app.py
 ```
 
-✅ Backend running at http://localhost:5000
+API at http://localhost:5000
 
 ---
 
-## 🎮 First Use
+## 3. Supabase Google OAuth
 
-### 1. Visit the Landing Page
+In Supabase → Authentication → Providers → Google:
 
-Open browser → http://localhost:3000
+- Add Google Client ID + Secret
+- Google Cloud redirect URI: `https://YOUR_PROJECT.supabase.co/auth/v1/callback`
 
-### 2. Navigate to Dashboard
+In Supabase → URL Configuration:
 
-Click "Get Started" or use sidebar
-
-### 3. Upload Your First Invoice
-
--   Click "Upload Invoice" button
--   Drag & drop an invoice image/PDF
--   Wait for OCR processing (2-3 seconds)
--   View extracted data!
-
-### 4. Try the Chat Interface
-
--   Go to "Chat Bot" page
--   Ask: "Show me all invoices"
--   Get AI-powered response with data
-
-### 5. Explore Analytics
-
--   Visit "Analytics" page for basic stats
--   Visit "AI Analytics" for advanced insights
--   See forecasts, anomalies, and patterns
+- Site URL: `http://localhost:3000`
+- Redirect URLs: `http://localhost:3000/signin`
 
 ---
 
-## 🔑 Getting API Keys
-
-### OpenRouter (Required for Chat)
-
-1. Go to https://openrouter.ai/
-2. Sign up for free account
-3. Navigate to "Keys" section
-4. Create new API key
-5. Copy to `.env` file
-
-**Free tier**: $5 credit for testing
-
-### Google Cloud Vision (Required for OCR)
-
-1. Go to https://console.cloud.google.com/
-2. Create new project
-3. Enable "Cloud Vision API"
-4. Create service account
-5. Download JSON key file
-6. Save in backend directory
-7. Update path in `.env`
-
-**Free tier**: 1000 requests/month
-
----
-
-## 🧪 Test with Sample Data
-
-### Sample Invoices
-
-We provide sample invoices in `backend/sample_invoices/`:
-
--   `sample_invoice_1.pdf` - Tech company invoice
--   `sample_invoice_2.jpg` - Office supplies invoice
--   `sample_invoice_3.png` - Cloud services invoice
-
-### Upload Sample Invoice
+## 4. Seed demo data (optional)
 
 ```bash
-# Using cURL
-curl -X POST http://localhost:5000/extract \
-  -F "file=@backend/sample_invoices/sample_invoice_1.pdf" \
-  -F "user_id=demo_user"
+cd backend
+python scripts/populate_db.py --user-id YOUR_SUPABASE_USER_UUID
 ```
 
-Or use the web interface!
-
----
-
-## 🎨 Customize Configuration
-
-### Change Port Numbers
-
-**Frontend** (`frontend/package.json`):
-
-```json
-"scripts": {
-  "dev": "next dev -p 3001"
-}
-```
-
-**Backend** (`backend/app.py`):
-
-```python
-app.run(debug=True, port=5001)
-```
-
-### Change Database
-
-Edit `backend/.env`:
+Or migrate legacy `user_id='123'` rows:
 
 ```bash
-# PostgreSQL
-DATABASE_URL=postgresql://user:pass@localhost/lumen
-
-# MySQL
-DATABASE_URL=mysql://user:pass@localhost/lumen
+python scripts/migrate_demo_user_id.py
 ```
 
 ---
 
-## 🐛 Common Issues & Fixes
+## 5. Sign in and test
 
-### Issue: Port Already in Use
-
-```bash
-# Windows - Kill port 3000
-netstat -ano | findstr :3000
-taskkill /PID <PID> /F
-
-# Mac/Linux - Kill port 3000
-lsof -ti:3000 | xargs kill -9
-```
-
-### Issue: Module Not Found
-
-```bash
-# Frontend
-cd frontend
-rm -rf node_modules package-lock.json
-npm install
-
-# Backend
-pip install -r requirements.txt --force-reinstall
-```
-
-### Issue: API Key Not Working
-
--   Check `.env` file exists in correct directory
--   Verify no extra spaces in API key
--   Ensure no quotes around the key
--   Restart server after changing `.env`
-
-### Issue: Database Error
-
-```bash
-# Reset database
-rm backend/instance/lumen.db
-python backend/app.py  # Will recreate
-```
+1. Open http://localhost:3000/signin
+2. Sign in with Google
+3. Upload an invoice on the dashboard
+4. Try Chat, Analytics, and AI Analytics
 
 ---
 
-## 📚 Next Steps
+## Deploy (Render)
 
-1. ✅ Read [Full Setup Guide](SETUP.md) for detailed instructions
-2. ✅ Check [Architecture](ARCHITECTURE.md) to understand the system
-3. ✅ Review [API Documentation](API_DOCS.md) for integration
-4. ✅ See [Contributing Guide](CONTRIBUTING.md) to contribute
+See `render.yaml` and `DEPLOYMENT.md`. Use managed Postgres (`DATABASE_URL`), set `ENABLE_CHROMA=false` on the API service, and run the `lumen-email-worker` for IMAP polling.
 
 ---
 
-## 🎯 Quick Command Reference
+## Troubleshooting
 
-### Start Development
-
-```bash
-# Terminal 1 - Frontend
-cd frontend && npm run dev
-
-# Terminal 2 - Backend
-cd backend && .\venv\Scripts\Activate.ps1 && python app.py
-```
-
-### Run Tests
-
-```bash
-# Frontend
-cd frontend && npm test
-
-# Backend
-cd backend && pytest
-```
-
-### Build for Production
-
-```bash
-# Frontend
-cd frontend && npm run build
-
-# Backend
-# Use Gunicorn or similar
-gunicorn -w 4 app:app
-```
-
----
-
-## 💡 Pro Tips
-
-1. **Use VS Code**: Great for TypeScript/Python development
-2. **Install Extensions**:
-    - ESLint (JavaScript)
-    - Pylance (Python)
-    - Prettier (Formatting)
-3. **Enable Auto-save**: Never lose changes
-4. **Use Git Branches**: One branch per feature
-5. **Read Error Messages**: They usually tell you what's wrong!
-
----
-
-## 🆘 Get Help
-
--   **Documentation**: Check other .md files in repo
--   **GitHub Issues**: Report bugs or ask questions
--   **Email**: team@dunder-pressure.dev
-
----
-
-## ✅ Success Checklist
-
--   [ ] Both servers running without errors
--   [ ] Landing page loads at localhost:3000
--   [ ] Backend health check returns OK
--   [ ] Sample invoice uploads successfully
--   [ ] OCR extraction works
--   [ ] Chat interface responds
--   [ ] Analytics page loads data
-
----
-
-<div align="center">
-
-**You're ready to go! 🚀**
-
-Start exploring LUMEN and upload your first invoice!
-
-</div>
+| Issue | Fix |
+|-------|-----|
+| `auth_misconfigured` | Set `SUPABASE_URL` in backend `.env` and restart |
+| `NEXT_PUBLIC_SUPABASE_URL is not set` | Restart `npm run dev` after editing `.env.local` |
+| `No module named 'psycopg2'` | `pip install psycopg2-binary` when using `DATABASE_URL` |
+| Empty dashboard after login | Seed data with your Supabase UUID or upload invoices |
+| Gmail OAuth button fails | Use IMAP + app password instead (OAuth not implemented) |

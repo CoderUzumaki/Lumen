@@ -1,15 +1,25 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import { Suspense } from "react";
+import { AuthGuard } from "@/components/auth/auth-guard";
 
-// Dynamically import the DashboardContent with ssr disabled
 const DashboardContent = dynamic(() => import("./dashboardContent"), {
-  ssr: false,
+	ssr: false,
 });
 
 export default function DashboardPage() {
-  const router = useRouter();
-
-  return <DashboardContent />;
+	return (
+		<AuthGuard>
+			<Suspense
+				fallback={
+					<div className="flex min-h-screen items-center justify-center">
+						Loading...
+					</div>
+				}
+			>
+				<DashboardContent />
+			</Suspense>
+		</AuthGuard>
+	);
 }

@@ -2,22 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
-import { Separator } from "@/components/ui/separator";
-import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
-import {
-	Breadcrumb,
-	BreadcrumbItem,
-	BreadcrumbLink,
-	BreadcrumbList,
-	BreadcrumbPage,
-	BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { DashboardShell } from "@/components/dashboard-shell";
 import AnalyticsCards from "@/components/analytics/analyticsCards";
 import SpendingTrendChart from "@/components/analytics/spendingTrendChart";
 import { Button } from "@/components/ui/button";
-import { Calendar, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import {
 	Select,
 	SelectContent,
@@ -41,9 +30,10 @@ export default function AnalyticsContent() {
 	const [timeRange, setTimeRange] = useState<TimeRange>(
 		tabParam || "monthly"
 	);
+	const now = new Date();
 	const [selectedPeriod, setSelectedPeriod] = useState<SelectedPeriod>({
-		year: 2024, // Default to 2024 where test data exists
-		month: 10, // November (0-indexed, so 10 = November)
+		year: now.getFullYear(),
+		month: now.getMonth(),
 	});
 
 	// Generate period options based on time range
@@ -179,238 +169,161 @@ export default function AnalyticsContent() {
 		setSelectedPeriod(newPeriod);
 	};
 
+	const toolbar = (
+		<div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+			<div className="flex flex-wrap items-center gap-2">
+				{(["weekly", "monthly", "yearly"] as TimeRange[]).map((range) => (
+					<Button
+						key={range}
+						variant={timeRange === range ? "default" : "outline"}
+						onClick={() => handleTimeRangeChange(range)}
+						className="rounded-full px-4"
+					>
+						{range[0].toUpperCase()}
+						{range.slice(1)}
+					</Button>
+				))}
+			</div>
+
+			<div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-background/60 p-2">
+				<Button
+					variant="ghost"
+					size="icon"
+					onClick={() => navigatePeriod("prev")}
+				>
+					<ChevronLeft className="w-4 h-4" />
+				</Button>
+
+				{timeRange === "yearly" && (
+					<Select
+						value={selectedPeriod.year.toString()}
+						onValueChange={(value) =>
+							handlePeriodChange("year", value)
+						}
+					>
+						<SelectTrigger className="w-[140px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{generateYears().map((year) => (
+								<SelectItem key={year} value={year.toString()}>
+									{year}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				)}
+
+				{timeRange === "monthly" && (
+					<>
+						<Select
+							value={selectedPeriod.month?.toString()}
+							onValueChange={(value) =>
+								handlePeriodChange("month", value)
+							}
+						>
+							<SelectTrigger className="w-[150px]">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{months.map((month, idx) => (
+									<SelectItem key={idx} value={idx.toString()}>
+										{month}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+						<Select
+							value={selectedPeriod.year.toString()}
+							onValueChange={(value) =>
+								handlePeriodChange("year", value)
+							}
+						>
+							<SelectTrigger className="w-[110px]">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{generateYears().map((year) => (
+									<SelectItem key={year} value={year.toString()}>
+										{year}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</>
+				)}
+
+				{timeRange === "weekly" && (
+					<>
+						<Select
+							value={selectedPeriod.week?.toString()}
+							onValueChange={(value) =>
+								handlePeriodChange("week", value)
+							}
+						>
+							<SelectTrigger className="w-[130px]">
+								<SelectValue placeholder="Week" />
+							</SelectTrigger>
+							<SelectContent>
+								{generateWeeks().map((week) => (
+									<SelectItem key={week} value={week.toString()}>
+										Week {week}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+						<Select
+							value={selectedPeriod.year.toString()}
+							onValueChange={(value) =>
+								handlePeriodChange("year", value)
+							}
+						>
+							<SelectTrigger className="w-[110px]">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{generateYears().map((year) => (
+									<SelectItem key={year} value={year.toString()}>
+										{year}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</>
+				)}
+
+				<Button
+					variant="ghost"
+					size="icon"
+					onClick={() => navigatePeriod("next")}
+				>
+					<ChevronRight className="w-4 h-4" />
+				</Button>
+			</div>
+		</div>
+	);
+
 	return (
-		<SidebarProvider>
-			<AppSidebar />
-			<SidebarInset className="bg-gray-50">
-				<header className="flex h-16 shrink-0 items-center gap-2 border-b border-gray-200 px-4 bg-white">
-					<SidebarTrigger className="-ml-1" />
-					<Separator orientation="vertical" className="mr-2 h-4" />
-					<Breadcrumb>
-						<BreadcrumbList>
-							<BreadcrumbItem className="hidden md:block">
-								<BreadcrumbLink
-									href="/"
-									className="text-gray-600 hover:text-gray-900"
-								>
-									Home
-								</BreadcrumbLink>
-							</BreadcrumbItem>
-							<BreadcrumbSeparator className="hidden md:block" />
-							<BreadcrumbItem>
-								<BreadcrumbPage className="text-gray-900">
-									Analytics
-								</BreadcrumbPage>
-							</BreadcrumbItem>
-						</BreadcrumbList>
-					</Breadcrumb>
-				</header>
-
-				<div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-					{/* Page Header with Time Range Tabs */}
-					<div className="flex flex-col gap-4 py-4">
-						<div className="flex items-center justify-between flex-wrap gap-4">
-							<div>
-								<h1 className="text-3xl font-bold tracking-tight flex items-center gap-2 text-gray-900">
-									<TrendingUp className="w-8 h-8 text-primary" />
-									Spending Analytics
-								</h1>
-								<p className="text-gray-600 mt-1">
-									Compare spending patterns across periods
-								</p>
-							</div>
-							<div className="flex items-center gap-3 bg-white border border-gray-200 p-2 rounded-lg">
-								<Button
-									variant="ghost"
-									size="icon"
-									onClick={() => navigatePeriod("prev")}
-								>
-									<ChevronLeft className="w-4 h-4" />
-								</Button>
-
-								{timeRange === "yearly" && (
-									<Select
-										value={selectedPeriod.year.toString()}
-										onValueChange={(value) =>
-											handlePeriodChange("year", value)
-										}
-									>
-										<SelectTrigger className="w-[120px] text-gray-900 font-medium">
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											{generateYears().map((year) => (
-												<SelectItem
-													key={year}
-													value={year.toString()}
-												>
-													{year}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								)}
-
-								{timeRange === "monthly" && (
-									<div className="flex gap-2">
-										<Select
-											value={selectedPeriod.month?.toString()}
-											onValueChange={(value) =>
-												handlePeriodChange(
-													"month",
-													value
-												)
-											}
-										>
-											<SelectTrigger className="w-[140px] text-gray-900 font-medium">
-												<SelectValue />
-											</SelectTrigger>
-											<SelectContent>
-												{months.map((month, idx) => (
-													<SelectItem
-														key={idx}
-														value={idx.toString()}
-													>
-														{month}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-										<Select
-											value={selectedPeriod.year.toString()}
-											onValueChange={(value) =>
-												handlePeriodChange(
-													"year",
-													value
-												)
-											}
-										>
-											<SelectTrigger className="w-[100px] text-gray-900 font-medium">
-												<SelectValue />
-											</SelectTrigger>
-											<SelectContent>
-												{generateYears().map((year) => (
-													<SelectItem
-														key={year}
-														value={year.toString()}
-													>
-														{year}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
-								)}
-
-								{timeRange === "weekly" && (
-									<div className="flex gap-2">
-										<Select
-											value={selectedPeriod.week?.toString()}
-											onValueChange={(value) =>
-												handlePeriodChange(
-													"week",
-													value
-												)
-											}
-										>
-											<SelectTrigger className="w-[120px] text-gray-900 font-medium">
-												<SelectValue placeholder="Week" />
-											</SelectTrigger>
-											<SelectContent>
-												{generateWeeks().map((week) => (
-													<SelectItem
-														key={week}
-														value={week.toString()}
-													>
-														Week {week}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-										<Select
-											value={selectedPeriod.year.toString()}
-											onValueChange={(value) =>
-												handlePeriodChange(
-													"year",
-													value
-												)
-											}
-										>
-											<SelectTrigger className="w-[100px] text-gray-900 font-medium">
-												<SelectValue />
-											</SelectTrigger>
-											<SelectContent>
-												{generateYears().map((year) => (
-													<SelectItem
-														key={year}
-														value={year.toString()}
-													>
-														{year}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
-								)}
-
-								<Button
-									variant="ghost"
-									size="icon"
-									onClick={() => navigatePeriod("next")}
-								>
-									<ChevronRight className="w-4 h-4" />
-								</Button>
-							</div>
-						</div>{" "}
-						{/* Time Range Tabs */}
-						<div className="flex gap-2 border-b">
-							<Button
-								variant={
-									timeRange === "weekly" ? "default" : "ghost"
-								}
-								onClick={() => handleTimeRangeChange("weekly")}
-								className="rounded-b-none"
-							>
-								Weekly
-							</Button>
-							<Button
-								variant={
-									timeRange === "monthly"
-										? "default"
-										: "ghost"
-								}
-								onClick={() => handleTimeRangeChange("monthly")}
-								className="rounded-b-none"
-							>
-								Monthly
-							</Button>
-							<Button
-								variant={
-									timeRange === "yearly" ? "default" : "ghost"
-								}
-								onClick={() => handleTimeRangeChange("yearly")}
-								className="rounded-b-none"
-							>
-								Yearly
-							</Button>
-						</div>
-					</div>
-
-					{/* Analytics Cards Section */}
-					<AnalyticsCards
-						timeRange={timeRange}
-						selectedPeriod={selectedPeriod}
-					/>
-
-					{/* Spending Trend Chart */}
-					<div className="mt-4">
-						<SpendingTrendChart
-							timeRange={timeRange}
-							selectedPeriod={selectedPeriod}
-						/>
-					</div>
+		<DashboardShell
+			title="Spending Analytics"
+			description="Compare cash outflow across weekly, monthly, and yearly periods to spot volatility, vendor concentration, and cost drift."
+			eyebrow="Spend Analysis"
+			toolbar={toolbar}
+			actions={
+				<div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/60 px-4 py-2 text-sm text-muted-foreground">
+					<Calendar className="h-4 w-4 text-primary" />
+					<span>{getPeriodLabel()}</span>
 				</div>
-			</SidebarInset>
-		</SidebarProvider>
+			}
+		>
+			<AnalyticsCards
+				timeRange={timeRange}
+				selectedPeriod={selectedPeriod}
+			/>
+			<SpendingTrendChart
+				timeRange={timeRange}
+				selectedPeriod={selectedPeriod}
+			/>
+		</DashboardShell>
 	);
 }

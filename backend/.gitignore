@@ -27,10 +27,23 @@ wheels/
 instance/
 .webassets-cache
 
-# Environment
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Local vector index (rebuild with `python -m scripts.backfill_chromadb`)
+chroma_db/
+
+# Environment — real values never go in git. Template: .env.example
 .env
+.env.*
+!.env.example
 .venv
-.env.local
+
+# Credentials
+*service-account*.json
+*-credentials.json
 
 # IDE
 .vscode/

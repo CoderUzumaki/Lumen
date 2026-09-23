@@ -39,12 +39,12 @@ const cardVariants = {
 const CustomTooltip = ({ active, payload }: any) => {
 	if (active && payload && payload.length) {
 		return (
-			<div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
-				<p className="font-semibold text-gray-900">{payload[0].name}</p>
-				<p className="text-sm text-gray-700">
+			<div className="rounded-xl border border-border/70 bg-card/95 p-3 shadow-xl shadow-black/20">
+				<p className="font-semibold text-foreground">{payload[0].name}</p>
+				<p className="text-sm text-muted-foreground">
 					₹{payload[0].value.toLocaleString("en-IN")}
 				</p>
-				<p className="text-sm text-gray-700">
+				<p className="text-sm text-muted-foreground">
 					{payload[0].payload.percentage}%
 				</p>
 			</div>
@@ -72,7 +72,7 @@ export default function CategoryPieChart() {
 					return;
 				}
 
-				const response = await transactionApi.getTransactions("123", {
+				const response = await transactionApi.getTransactions({
 					page: 1,
 					page_size: 1000,
 				});
@@ -119,9 +119,9 @@ export default function CategoryPieChart() {
 
 	if (loading) {
 		return (
-			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+			<Card className="h-full border-border/70 bg-card/80 shadow-lg shadow-black/10">
 				<CardContent className="flex items-center justify-center h-[400px]">
-					<p className="text-gray-500">Loading category data...</p>
+					<p className="text-muted-foreground">Loading category data...</p>
 				</CardContent>
 			</Card>
 		);
@@ -129,9 +129,9 @@ export default function CategoryPieChart() {
 
 	if (error) {
 		return (
-			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+			<Card className="h-full border-border/70 bg-card/80 shadow-lg shadow-black/10">
 				<CardContent className="flex items-center justify-center h-[400px]">
-					<p className="text-red-500">{error}</p>
+					<p className="text-rose-300">{error}</p>
 				</CardContent>
 			</Card>
 		);
@@ -139,9 +139,9 @@ export default function CategoryPieChart() {
 
 	if (categoryData.length === 0) {
 		return (
-			<Card className="bg-white border border-gray-200 shadow-sm h-full">
+			<Card className="h-full border-border/70 bg-card/80 shadow-lg shadow-black/10">
 				<CardContent className="flex items-center justify-center h-[400px]">
-					<p className="text-gray-500">No category data available</p>
+					<p className="text-muted-foreground">No category data available</p>
 				</CardContent>
 			</Card>
 		);
@@ -154,10 +154,10 @@ export default function CategoryPieChart() {
 			animate="visible"
 			className="h-full"
 		>
-			<Card className="bg-white border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 h-full">
+			<Card className="h-full border-border/70 bg-card/80 shadow-lg shadow-black/10 transition-all duration-300 hover:shadow-xl hover:shadow-black/10">
 				<CardHeader className="pb-3">
-					<CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-						<PieChartIcon className="w-5 h-5 text-purple-600" />
+					<CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+						<PieChartIcon className="h-5 w-5 text-primary" />
 						Category Breakdown
 					</CardTitle>
 				</CardHeader>
@@ -198,7 +198,7 @@ export default function CategoryPieChart() {
 									duration: 0.3,
 									delay: 0.7 + index * 0.1,
 								}}
-								className="flex items-center justify-between p-2 rounded hover:bg-gray-100 transition-colors"
+								className="flex items-center justify-between rounded-lg p-2 transition-colors hover:bg-accent/60"
 							>
 								<div className="flex items-center gap-2">
 									<div
@@ -207,16 +207,16 @@ export default function CategoryPieChart() {
 											backgroundColor: COLORS[index],
 										}}
 									></div>
-									<span className="text-sm text-gray-700">
+									<span className="text-sm text-muted-foreground">
 										{category.name}
 									</span>
 								</div>
 								<div className="text-right">
-									<p className="text-sm font-semibold text-gray-900">
+									<p className="text-sm font-semibold text-foreground">
 										₹
 										{category.value.toLocaleString("en-IN")}
 									</p>
-									<p className="text-xs text-gray-600">
+									<p className="text-xs text-muted-foreground">
 										{category.percentage}%
 									</p>
 								</div>
@@ -225,12 +225,12 @@ export default function CategoryPieChart() {
 					</div>
 
 					{/* Total */}
-					<div className="mt-4 pt-4 border-t border-gray-200">
+					<div className="mt-4 border-t border-border/70 pt-4">
 						<div className="flex items-center justify-between">
-							<span className="text-sm font-semibold text-gray-700">
+							<span className="text-sm font-semibold text-muted-foreground">
 								Total Spending
 							</span>
-							<span className="text-lg font-bold text-gray-900">
+							<span className="text-lg font-bold text-foreground">
 								₹
 								{categoryData
 									.reduce((sum, cat) => sum + cat.value, 0)

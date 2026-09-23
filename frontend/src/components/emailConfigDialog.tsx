@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Mail, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { emailConfigApi } from "@/lib/api/client";
+import { toast } from "@/lib/toast";
 import { GmailOAuthButton } from "@/components/gmailOAuthButton";
 
 interface EmailConfigDialogProps {
@@ -210,12 +211,10 @@ export function EmailConfigDialog({
       if (onConfigured) {
         onConfigured();
       }
-    } catch (error: any) {
-      alert(
-        `Failed to save configuration: ${
-          error.response?.data?.detail || error.message
-        }`
-      );
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to save configuration: ${message}`);
     } finally {
       setLoading(false);
     }
