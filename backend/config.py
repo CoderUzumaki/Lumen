@@ -14,15 +14,35 @@ import secrets
 import warnings
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
+from dotenv import dotenv_values, load_dotenv
 
 # Project layout: BACKEND_DIR is the directory this file lives in.
 BACKEND_DIR = Path(__file__).resolve().parent
 INSTANCE_DIR = BACKEND_DIR / "instance"
 INSTANCE_DIR.mkdir(exist_ok=True)
+
+_DOTENV_PATH = BACKEND_DIR / ".env"
+load_dotenv(_DOTENV_PATH)
+
+
+def find_shadowed_keys(file_values: dict, environ) -> list[str]:
+    """Keys set in backend/.env whose value is overridden by the process env.
+
+    load_dotenv() never overrides variables that already exist, so a stale
+    shell or system-wide variable silently beats backend/.env.
+    """
+    return sorted(
+        key
+        for key, value in file_values.items()
+        if value and key in environ and environ[key] != value
+    )
+
+
+_SHADOWED_ENV_KEYS = (
+    find_shadowed_keys(dotenv_values(_DOTENV_PATH), os.environ)
+    if _DOTENV_PATH.exists()
+    else []
+)
 
 
 def _env_path(name: str, default: Path) -> Path:
@@ -127,23 +147,43 @@ class Config:
         "yes",
     )
 
+    # Variables from backend/.env that are overridden by the shell/system
+    # environment (logged as a warning at startup).
+    SHADOWED_ENV_KEYS = _SHADOWED_ENV_KEYS
+
     # === OpenRouter / LLM ===
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
     OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
     OPENROUTER_CHAT_URL = f"{OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
 
     # Vision-capable model used for OCR / invoice extraction (`utils/openrouter.py`).
-    LLM_VISION_MODEL = os.getenv(
-        "LLM_VISION_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free"
-    )
+    # `openrouter/free` routes to whichever free model accepts images right now.
+    # Individual free models get retired or rate-limited without notice (the
+    # previous default, nvidia/nemotron-nano-12b-v2-vl:free, now returns 404).
+    LLM_VISION_MODEL = os.getenv("LLM_VISION_MODEL") or "openrouter/free"
     # Text model used for chat synthesis, SQL generation, classification,
-    # anomaly explanation, forecasting reasoning.
-    LLM_TEXT_MODEL = os.getenv("LLM_TEXT_MODEL") or "openrouter/free"
+    # anomaly explanation, forecasting reasoning. Must be ONE model id.
+    #
+    # Not `openrouter/free` on its own: that router picks a random free model
+    # per call and for SQL generation it has returned empty replies and even
+    # routed to a content-safety classifier. For production, set a paid model
+    # (fast, cheap and reliable) and buy OpenRouter credits.
+    LLM_TEXT_MODEL = os.getenv("LLM_TEXT_MODEL") or "nvidia/nemotron-3-ultra-550b-a55b:free"
+    # Tried in order when the primary errors, is rate-limited or retired
+    # (comma-separated; OpenRouter uses at most 3 models in total).
+    LLM_TEXT_FALLBACK_MODELS = os.getenv(
+        "LLM_TEXT_FALLBACK_MODELS", "nex-agi/nex-n2.5-pro:free,openrouter/free"
+    )
 
     @classmethod
     def get_llm_text_model(cls) -> str:
         """Resolve the text model from the live environment (not import-time cache)."""
-        return os.getenv("LLM_TEXT_MODEL") or cls.LLM_TEXT_MODEL or "openrouter/free"
+        return os.getenv("LLM_TEXT_MODEL") or cls.LLM_TEXT_MODEL
+
+    @classmethod
+    def get_llm_text_fallback_models(cls) -> list[str]:
+        raw = os.getenv("LLM_TEXT_FALLBACK_MODELS", cls.LLM_TEXT_FALLBACK_MODELS)
+        return [m.strip() for m in raw.split(",") if m.strip()]
     # Embedding model used by the RAG store.
     LLM_EMBEDDING_MODEL = os.getenv("LLM_EMBEDDING_MODEL", "openai/text-embedding-3-small")
 
