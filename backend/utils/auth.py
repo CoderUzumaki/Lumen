@@ -128,8 +128,13 @@ def verify_token(token: str) -> dict[str, Any]:
     try:
         signing_key = _get_jwks_client().get_signing_key_from_jwt(token).key
     except jwt.PyJWKClientError as e:
-        # Covers: token is malformed, kid not in JWKS even after refresh.
+        # kid not in JWKS even after refresh, or JWKS fetch failed inside PyJWT.
         raise TokenError("unknown_key", f"could not resolve signing key: {e}")
+    except jwt.PyJWTError as e:
+        # Not a JWT at all (wrong segment count, undecodable header, ...).
+        # PyJWKClient parses the header before looking up the key, so junk
+        # tokens surface here as DecodeError — must be a 401, not a 500.
+        raise TokenError("malformed_token", f"could not parse token: {e}")
     except requests.RequestException as e:
         # JWKS endpoint unreachable. Distinguishable so the caller can decide
         # whether to 503 instead of 401; we use 401 here for simplicity.
