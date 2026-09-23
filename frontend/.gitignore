@@ -22,9 +22,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
-.env*.local
+# env files — real values never go in git. Template: .env.example
 .env
+.env.*
+!.env.example
 
 # vercel
 .vercel
