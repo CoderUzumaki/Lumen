@@ -62,6 +62,10 @@ export const tokenManager = {
 	},
 };
 
+// A page often fires several requests at once; only the first 401 should
+// sign out and redirect.
+let redirectingToSignIn = false;
+
 const createApiClient = (): AxiosInstance => {
 	const client = axios.create({
 		baseURL: API_BASE_URL,
@@ -82,9 +86,18 @@ const createApiClient = (): AxiosInstance => {
 
 	client.interceptors.response.use(
 		(response) => response,
-		(error: AxiosError) => {
-			if (error.response?.status === 401) {
+		async (error: AxiosError) => {
+			if (error.response?.status === 401 && !redirectingToSignIn) {
+				redirectingToSignIn = true;
 				tokenManager.removeToken();
+				// End the Supabase session too. Otherwise /signin still sees a
+				// signed-in user, bounces straight back here, gets another 401,
+				// and loops forever whenever the backend rejects a live session.
+				try {
+					await getSupabaseBrowserClient().auth.signOut();
+				} catch {
+					// Supabase not configured: nothing to sign out of.
+				}
 				if (typeof window !== "undefined") {
 					const next =
 						window.location.pathname + window.location.search;
