@@ -1,9 +1,7 @@
 # query_classifier.py
 import logging
 
-import requests
-
-from config import Config
+from utils.llm import LLMError, chat_completion
 
 logger = logging.getLogger(__name__)
 
@@ -63,47 +61,22 @@ class QueryClassifier:
         
         # Otherwise, use LLM classification
         try:
-            response = requests.post(
-                Config.OPENROUTER_CHAT_URL,
-                headers={
-                    "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": Config.get_llm_text_model(),
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": self.CLASSIFICATION_PROMPT.format(query=query)
-                        }
-                    ],
-                    "temperature": 0,
-                    "max_tokens": 10
-                }
+            raw_response = chat_completion(
+                self.CLASSIFICATION_PROMPT.format(query=query),
+                temperature=0,
+                max_tokens=10,
             )
-            
-            result = response.json()
-            
-            # Check for errors in response
-            if 'error' in result:
-                logger.info(f"OpenRouter API error in classifier: {result['error']}")
-                return 'ANALYTICAL'  # Default fallback
-            
-            raw_response = result['choices'][0]['message']['content'].strip()
-            classification = raw_response.upper()
-            
-            logger.info(f"🔍 Query: '{query}'")
-            logger.info(f"📊 LLM raw response: '{raw_response}'")
-            logger.info(f"✅ Classification: {classification}")
-            
-            # Fallback to ANALYTICAL if unclear
-            if classification not in ['ANALYTICAL', 'SEMANTIC']:
-                logger.warning(f"⚠️  Invalid classification '{classification}', defaulting to ANALYTICAL")
-                classification = 'ANALYTICAL'
-            
-            return classification
-            
-        except Exception as e:
-            logger.info(f"Error in query classifier: {e}")
-            logger.info(f"Defaulting to ANALYTICAL query type")
-            return 'ANALYTICAL'  # Safe fallback
+        except LLMError as e:
+            if e.is_fatal:
+                # Auth/credits/rate-limit/outage: every later step would fail too.
+                raise
+            logger.warning("Classifier got an unusable reply (%s); defaulting to ANALYTICAL", e)
+            return 'ANALYTICAL'
+
+        classification = raw_response.upper()
+        # Models sometimes wrap the label in punctuation or a sentence.
+        for label in ('ANALYTICAL', 'SEMANTIC'):
+            if label in classification:
+                return label
+        logger.warning("Unrecognised classification %r, defaulting to ANALYTICAL", raw_response)
+        return 'ANALYTICAL'

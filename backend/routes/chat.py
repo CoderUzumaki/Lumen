@@ -11,6 +11,7 @@ from models.database import db
 from utils.auth import require_auth
 from utils.errors import api_error
 from utils.limiter import limiter
+from utils.llm import LLMError
 
 logger = logging.getLogger(__name__)
 
@@ -33,16 +34,40 @@ def _sanitize_chat_result(result: dict) -> dict:
     return safe
 
 
-def _save_message(user_id: str, role: str, content: str) -> None:
-    db.session.add(
-        ChatMessage(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            role=role,
-            content=content,
+def _save_exchange(user_id: str, question: str, answer: str) -> None:
+    for role, content in (("user", question), ("assistant", answer)):
+        db.session.add(
+            ChatMessage(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                role=role,
+                content=content,
+            )
         )
-    )
     db.session.commit()
+
+
+# What the user sees for each provider failure. Operator detail (which key,
+# which model) goes to the server log via LLMError, never to the client. None
+# of these may be 401: the frontend treats 401 as "session expired" and signs
+# the user out.
+_LLM_ERROR_RESPONSES = {
+    LLMError.RATE_LIMITED: (
+        429,
+        "llm_rate_limited",
+        "Lumen's assistant is handling too many requests right now. Please try again in a minute.",
+    ),
+    LLMError.BAD_RESPONSE: (
+        502,
+        "llm_bad_response",
+        "The assistant didn't return an answer. Please try again.",
+    ),
+}
+_LLM_DEFAULT_RESPONSE = (
+    503,
+    "llm_unavailable",
+    "Lumen's assistant is unavailable right now. Please try again shortly.",
+)
 
 
 @chat_bp.route("/chat", methods=["POST"])
@@ -59,16 +84,23 @@ def chat():
     user_id = str(g.user_id)
 
     try:
-        _save_message(user_id, "user", query)
         logger.info("Processing chat query for user=%s", user_id)
         result = engine.query(query, user_id)
-        response_text = result.get("response") or ""
-        if response_text:
-            _save_message(user_id, "assistant", response_text)
-        return jsonify({"success": True, "data": _sanitize_chat_result(result)}), 200
+    except LLMError as e:
+        status, code, message = _LLM_ERROR_RESPONSES.get(e.kind, _LLM_DEFAULT_RESPONSE)
+        logger.error("Chat failed for user=%s: LLM %s: %s", user_id, e.kind, e.detail)
+        return api_error(message, status=status, code=code)
     except Exception as e:
-        db.session.rollback()
         return api_error("Chat request failed", code="chat_failed", log=e)
+
+    try:
+        _save_exchange(user_id, query, result["response"])
+    except Exception as e:
+        # Losing history shouldn't cost the user their answer.
+        db.session.rollback()
+        logger.exception("Failed to save chat history for user=%s: %s", user_id, e)
+
+    return jsonify({"success": True, "data": _sanitize_chat_result(result)}), 200
 
 
 @chat_bp.route("/chat/history", methods=["GET"])

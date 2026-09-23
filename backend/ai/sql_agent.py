@@ -4,9 +4,8 @@ import re
 import sqlite3
 from typing import Any, Dict
 
-import requests
-
 from config import Config
+from utils.llm import LLMError, chat_completion
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +35,18 @@ _USER_ID_OTHER_OP_RE = re.compile(
 
 class SQLValidationError(ValueError):
     pass
+
+
+def _first_select_statement(text: str) -> str:
+    """Keep only the first SELECT statement from a model reply.
+
+    Models often wrap the query in prose or append a second statement. What
+    this returns is still validated by _validate_sql before it runs.
+    """
+    match = re.search(r"\bSELECT\b", text, re.IGNORECASE)
+    if not match:
+        return text
+    return text[match.start():].split(";", 1)[0].strip()
 
 
 def _validate_sql(sql: str, user_id: str) -> str:
@@ -108,7 +119,8 @@ class SQLAgent:
       * tax_amount (REAL)
       * vendor_name (TEXT)
       * invoice_number (TEXT)
-      * category (TEXT)
+      * category (TEXT) - Title Case, e.g. Groceries, Restaurant, Utilities,
+        Transport, Healthcare, Shopping, Entertainment, Other
       * payment_method (TEXT)
       * address (TEXT)
       * created_at (TEXT) - Timestamp
@@ -130,6 +142,11 @@ class SQLAgent:
     5. SELECT only — never INSERT, UPDATE, DELETE, or DDL
     6. Only query tables: transactions, transaction_items
     7. Use single quotes for string literals
+    8. SQLite `=` on text is case-sensitive: compare category, vendor_name and
+       payment_method case-insensitively, e.g. LOWER(category) = 'groceries'
+       or vendor_name LIKE '%starbucks%'
+    9. Wrap aggregates in COALESCE so empty results read as 0, e.g.
+       COALESCE(SUM(total_amount), 0) AS total_spent
 
     User Question: {query}
     Current Date: {current_date}
@@ -137,58 +154,41 @@ class SQLAgent:
     Generate SQL query:
     """
 
+    @staticmethod
+    def _fallback_sql(user_id: str) -> str:
+        """Server-built query for the user's recent transactions, used when the
+        model's SQL is unusable so the answer is based on real data."""
+        safe_uid = str(user_id).replace("'", "''")
+        return (
+            f"SELECT id, vendor_name, total_amount, date, category "
+            f"FROM transactions WHERE user_id = '{safe_uid}' "
+            f"ORDER BY date DESC LIMIT 10"
+        )
+
     def generate_sql(self, query: str, user_id: str) -> str:
         from datetime import datetime
 
-        uid = str(user_id)
+        safe_uid = str(user_id).replace("'", "''")
+        fallback = self._fallback_sql(user_id)
         try:
-            response = requests.post(
-                Config.OPENROUTER_CHAT_URL,
-                headers={
-                    "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": Config.get_llm_text_model(),
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": self.SQL_GENERATION_PROMPT.format(
-                                query=query,
-                                user_id=uid.replace("'", "''"),
-                                current_date=datetime.now().strftime("%Y-%m-%d"),
-                            ),
-                        }
-                    ],
-                    "temperature": 0,
-                    "max_tokens": 500,
-                },
-                timeout=60,
+            sql = chat_completion(
+                self.SQL_GENERATION_PROMPT.format(
+                    query=query,
+                    user_id=safe_uid,
+                    current_date=datetime.now().strftime("%Y-%m-%d"),
+                ),
+                temperature=0,
+                max_tokens=500,
             )
+        except LLMError as e:
+            if e.is_fatal:
+                # Provider is down or the key is bad; the answer step would fail
+                # too, so let the caller report it instead of guessing.
+                raise
+            logger.warning("SQL generation returned nothing usable (%s); using recent-transactions fallback", e)
+            return fallback
 
-            result = response.json()
-
-            if "error" in result:
-                logger.warning("OpenRouter API error in SQL generation: %s", result["error"])
-                safe_uid = uid.replace("'", "''")
-                return (
-                    f"SELECT id, vendor_name, total_amount, date, category "
-                    f"FROM transactions WHERE user_id = '{safe_uid}' "
-                    f"ORDER BY date DESC LIMIT 10"
-                )
-
-            sql = result["choices"][0]["message"]["content"].strip()
-            sql = sql.replace("```sql", "").replace("```", "").strip()
-            return sql
-
-        except Exception as e:
-            logger.warning("Error generating SQL: %s", e)
-            safe_uid = uid.replace("'", "''")
-            return (
-                f"SELECT id, vendor_name, total_amount, date, category "
-                f"FROM transactions WHERE user_id = '{safe_uid}' "
-                f"ORDER BY date DESC LIMIT 10"
-            )
+        return sql.replace("```sql", "").replace("```", "").strip()
 
     def execute_sql(self, sql: str, user_id: str) -> Dict[str, Any]:
         """Validate and execute SQL, returning results."""
@@ -196,7 +196,7 @@ class SQLAgent:
             safe_sql = _validate_sql(sql, user_id)
         except SQLValidationError as e:
             logger.warning("Rejected unsafe SQL for user %s: %s", user_id, e)
-            return {"success": False, "error": "Query could not be executed safely"}
+            return {"success": False, "rejected": True, "error": "Query could not be executed safely"}
 
         try:
             conn = sqlite3.connect(self.db_path)
@@ -219,5 +219,13 @@ class SQLAgent:
 
     def query(self, natural_language_query: str, user_id: str) -> Dict[str, Any]:
         """Full pipeline: NL → SQL → Results (SQL never returned to clients)."""
-        sql = self.generate_sql(natural_language_query, user_id)
-        return self.execute_sql(sql, user_id)
+        sql = _first_select_statement(self.generate_sql(natural_language_query, user_id))
+        result = self.execute_sql(sql, user_id)
+        if result.get("rejected"):
+            # Don't let a malformed model reply turn into "you have no data".
+            result = self.execute_sql(self._fallback_sql(user_id), user_id)
+            result["note"] = (
+                "The question could not be turned into a precise query; these "
+                "are the user's most recent transactions."
+            )
+        return result
