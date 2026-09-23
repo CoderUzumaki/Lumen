@@ -1,5 +1,6 @@
 """LUMEN Financial Intelligence API - Main Application Entry Point"""
 import logging
+import os
 
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -64,7 +65,11 @@ if __name__ == "__main__":
     logger.info("Using model: %s", config["model"])
 
     logger.info("Starting LUMEN Financial Intelligence API...")
-    scheduler.start()
+    # Werkzeug's debug reloader executes __main__ twice (watcher parent +
+    # serving child). Start background polling only in the serving process,
+    # otherwise two pollers race on the same inbox.
+    if not Config.DEBUG or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        scheduler.start()
 
     try:
         app.run(debug=Config.DEBUG, host=Config.HOST, port=Config.PORT)

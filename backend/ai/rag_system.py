@@ -23,9 +23,16 @@ class RAGSystem:
 
         try:
             import chromadb
+            from chromadb.config import Settings
             from chromadb.utils import embedding_functions
 
-            self.client = chromadb.PersistentClient(path=str(Config.CHROMA_DB_PATH))
+            # Telemetry off: chromadb 0.5's PostHog hook is incompatible with
+            # posthog>=6 (logs "capture() takes 1 positional argument") and we
+            # don't want usage pings leaving the server anyway.
+            self.client = chromadb.PersistentClient(
+                path=str(Config.CHROMA_DB_PATH),
+                settings=Settings(anonymized_telemetry=False),
+            )
             self.embedding_function = embedding_functions.OpenAIEmbeddingFunction(
                 api_key=Config.OPENROUTER_API_KEY,
                 api_base=Config.OPENROUTER_BASE_URL,
@@ -36,7 +43,14 @@ class RAGSystem:
                 embedding_function=self.embedding_function,
             )
         except Exception as e:
-            logger.warning("ChromaDB unavailable: %s", e)
+            # A KeyError like '_type' means the on-disk index was written by a
+            # different chromadb major/minor version than the one installed.
+            logger.warning(
+                "ChromaDB unavailable (%s: %s). Semantic search is disabled. "
+                "If the index at %s was built by another chromadb version, move "
+                "it aside and rebuild with `python -m scripts.backfill_chromadb`.",
+                type(e).__name__, e, Config.CHROMA_DB_PATH,
+            )
             self.enabled = False
             self.collection = None
 

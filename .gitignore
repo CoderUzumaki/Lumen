@@ -9,12 +9,10 @@ __pycache__/
 *.pyd
 .Python
 
-# Environment variables
+# Environment variables — real values never go in git. Templates live in .env.example.
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
 # API Keys and Credentials
 *.json
@@ -25,6 +23,11 @@ __pycache__/
 !next.config.js
 google-credentials.json
 *-credentials.json
+*service-account*.json
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Database
 *.db
