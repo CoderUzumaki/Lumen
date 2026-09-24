@@ -194,12 +194,13 @@ def process_invoice_attachment(content: bytes, filename: str, user_id: str, emai
 
 def poll_all_users():
     """Poll emails for all users with enabled configs"""
-    logger.info("Starting polling cycle for all users...")
-    
     configs = EmailConfig.query.filter_by(polling_enabled=True).all()
-    
-    logger.info(f"Found {len(configs)} users with polling enabled")
-    
+    user_count = len(configs)
+
+    log_func = logger.debug if user_count == 0 else logger.info
+    log_func("Starting polling cycle for all users...")
+    log_func(f"Found {user_count} users with polling enabled")
+
     results = []
     for config in configs:
         try:
@@ -217,6 +218,6 @@ def poll_all_users():
                 'success': False,
                 'error': str(e)
             })
-    
-    logger.info(f"Polling cycle complete: {len(results)} users processed")
+
+    log_func(f"Polling cycle complete: {len(results)} users processed")
     return results
