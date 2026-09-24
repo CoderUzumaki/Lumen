@@ -123,6 +123,8 @@ def test_semantic_question_falls_back_to_sql_when_index_unavailable(monkeypatch)
             return "SEMANTIC"
 
     class Rag:
+        enabled = True
+
         def search(self, q, uid):
             return {"success": False, "error": "Semantic search is unavailable", "data": []}
 
@@ -140,6 +142,72 @@ def test_semantic_question_falls_back_to_sql_when_index_unavailable(monkeypatch)
     result = engine.query("coffee purchases", "user-1")
     assert Sql.called
     assert result["response"] == "No transactions yet."
+
+
+def test_skips_classifier_when_semantic_search_disabled(monkeypatch):
+    import ai.hybrid_query_engine as hqe
+
+    class Classifier:
+        def classify(self, q):
+            raise AssertionError("classifier should not be called")
+
+    class Rag:
+        enabled = False
+
+        def search(self, q, uid):
+            raise AssertionError("semantic search should not be called")
+
+    class Sql:
+        called = False
+
+        def query(self, q, uid):
+            Sql.called = True
+            return {"success": True, "data": [], "row_count": 0}
+
+    engine = hqe.HybridQueryEngine.__new__(hqe.HybridQueryEngine)
+    engine.classifier, engine.rag_system, engine.sql_agent = Classifier(), Rag(), Sql()
+    monkeypatch.setattr(hqe, "chat_completion", lambda *a, **k: "No transactions yet.")
+
+    result = engine.query("coffee purchases", "user-1")
+    assert Sql.called
+    assert result["query_type"] == "ANALYTICAL"
+
+
+def test_synthesis_prompt_serializes_results_as_compact_json(monkeypatch):
+    import ai.hybrid_query_engine as hqe
+
+    class Classifier:
+        def classify(self, q):
+            return "ANALYTICAL"
+
+    class Rag:
+        enabled = False
+
+        def search(self, q, uid):
+            raise AssertionError("semantic search should not be called")
+
+    class Sql:
+        def query(self, q, uid):
+            return {
+                "success": True,
+                "data": [{"vendor_name": "Berghotel Müller", "total_amount": 42}],
+                "row_count": 1,
+            }
+
+    engine = hqe.HybridQueryEngine.__new__(hqe.HybridQueryEngine)
+    engine.classifier, engine.rag_system, engine.sql_agent = Classifier(), Rag(), Sql()
+
+    prompts = []
+
+    def capture(prompt, **kwargs):
+        prompts.append(prompt)
+        return "Found one transaction."
+
+    monkeypatch.setattr(hqe, "chat_completion", capture)
+
+    engine.query("last bill", "user-1")
+    assert len(prompts) == 1
+    assert '"vendor_name":"Berghotel Müller"' in prompts[0]
 
 
 def test_chat_llm_auth_failure_is_503_not_401(authed_client, monkeypatch):

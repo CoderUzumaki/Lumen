@@ -64,7 +64,7 @@ class QueryClassifier:
             raw_response = chat_completion(
                 self.CLASSIFICATION_PROMPT.format(query=query),
                 temperature=0,
-                max_tokens=10,
+                max_tokens=20,
             )
         except LLMError as e:
             if e.is_fatal:

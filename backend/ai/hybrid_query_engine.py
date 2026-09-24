@@ -29,8 +29,14 @@ class HybridQueryEngine:
         no credits, rate limit, outage, retired model); the route turns that
         into a user-facing error rather than a fake answer.
         """
-        query_type = self.classifier.classify(user_query)
-        logger.info("Query classified as: %s", query_type)
+        if not getattr(self.rag_system, "enabled", False):
+            # A SEMANTIC label would fall back to SQL anyway (see below), so
+            # classifying here would only cost latency and quota.
+            query_type = 'ANALYTICAL'
+            logger.info("Semantic search disabled; answering with SQL without classifying")
+        else:
+            query_type = self.classifier.classify(user_query)
+            logger.info("Query classified as: %s", query_type)
 
         results = None
         context_type = 'sql'
@@ -83,7 +89,7 @@ class HybridQueryEngine:
         Query type: {context_type}
 
         Results:
-        {json.dumps(results, indent=2, default=str)}
+        {json.dumps(results, default=str, ensure_ascii=False, separators=(",", ":"))}
 
         Generate a clear, concise answer:
         1. Directly answer the question
