@@ -98,3 +98,61 @@ def test_successful_call_logs_served_model_and_latency(monkeypatch, caplog):
         "served=cohere/north-mini-code:free" in r.getMessage() and "latency=" in r.getMessage()
         for r in records
     )
+
+
+def test_malformed_choice_element_raises_bad_response_not_attributeerror(monkeypatch):
+    from utils import llm
+
+    # A malformed choices[0] (None instead of a dict) must still surface as a
+    # typed LLMError, not an unhandled AttributeError from .get() on None.
+    body = {"model": "x", "choices": [None], "usage": {"prompt_tokens": 1, "completion_tokens": 0}}
+    # chat_completion retries BAD_RESPONSE once; the fake returns the same reply both times.
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: _FakeResponse(200, body))
+
+    with pytest.raises(llm.LLMError) as excinfo:
+        llm.chat_completion("hi")
+    assert excinfo.value.kind == llm.LLMError.BAD_RESPONSE
+
+
+def test_non_dict_usage_degrades_telemetry_to_none_counts(monkeypatch, caplog):
+    from utils import llm
+
+    body = {
+        "model": "x",
+        "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+        "usage": "not-a-dict",
+    }
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: _FakeResponse(200, body))
+
+    with caplog.at_level(logging.INFO, logger="utils.llm"):
+        result = llm.chat_completion("hi")
+
+    assert result == "ok"
+    records = [r for r in caplog.records if r.name == "utils.llm"]
+    assert any(
+        "tokens(prompt=None, completion=None, reasoning=None)" in r.getMessage() for r in records
+    )
+
+
+def test_non_dict_completion_tokens_details_degrades_reasoning_count_to_none(monkeypatch, caplog):
+    from utils import llm
+
+    body = {
+        "model": "x",
+        "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+        "usage": {
+            "prompt_tokens": 5,
+            "completion_tokens": 2,
+            "completion_tokens_details": ["not", "a", "dict"],
+        },
+    }
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: _FakeResponse(200, body))
+
+    with caplog.at_level(logging.INFO, logger="utils.llm"):
+        result = llm.chat_completion("hi")
+
+    assert result == "ok"
+    records = [r for r in caplog.records if r.name == "utils.llm"]
+    assert any(
+        "tokens(prompt=5, completion=2, reasoning=None)" in r.getMessage() for r in records
+    )

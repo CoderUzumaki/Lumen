@@ -187,8 +187,14 @@ def _chat_completion_once(
         choice = body["choices"][0]
     except (KeyError, IndexError, TypeError):
         choice = {}
-    usage = body.get("usage") or {}
-    usage_details = usage.get("completion_tokens_details") or {}
+    if not isinstance(choice, dict):
+        choice = {}
+    usage = body.get("usage")
+    if not isinstance(usage, dict):
+        usage = {}
+    usage_details = usage.get("completion_tokens_details")
+    if not isinstance(usage_details, dict):
+        usage_details = {}
     finish_reason = choice.get("finish_reason")
     reasoning_tokens = usage_details.get("reasoning_tokens")
     logger.info(
