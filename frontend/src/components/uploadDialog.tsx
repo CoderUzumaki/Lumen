@@ -13,6 +13,7 @@ interface FileWithStatus {
 	file: File;
 	status: "pending" | "uploading" | "success" | "error";
 	error?: string;
+	note?: string;
 	extractedData?: any;
 }
 
@@ -100,6 +101,7 @@ export function DialogDemo({ defaultOpen = false }: { defaultOpen?: boolean }) {
 					updated[i] = {
 						...updated[i],
 						status: "success",
+						note: result.duplicate ? "Already uploaded" : undefined,
 						extractedData: result.data,
 					};
 					return updated;
@@ -107,8 +109,13 @@ export function DialogDemo({ defaultOpen = false }: { defaultOpen?: boolean }) {
 			} catch (error) {
 				console.error("Upload error:", error);
 
+				// Prefer the backend's user-facing message; axios's own message is
+				// just "Request failed with status code 503".
+				const serverMessage: string | undefined = (error as any)?.response
+					?.data?.error;
 				const errorMessage =
-					error instanceof Error ? error.message : "Upload failed";
+					serverMessage ??
+					(error instanceof Error ? error.message : "Upload failed");
 
 				// Update status to error
 				setFiles((prev) => {
@@ -253,10 +260,18 @@ export function DialogDemo({ defaultOpen = false }: { defaultOpen?: boolean }) {
 									</div>
 									{fileItem.status === "error" &&
 										fileItem.error && (
-											<div className="text-xs text-red-400 max-w-[150px] truncate">
+											<div
+												className="text-xs text-red-400 max-w-[150px] truncate"
+												title={fileItem.error}
+											>
 												{fileItem.error}
 											</div>
 										)}
+									{fileItem.note && (
+										<div className="text-xs text-neutral-400">
+											{fileItem.note}
+										</div>
+									)}
 									<Button
 										variant="ghost"
 										size="sm"
