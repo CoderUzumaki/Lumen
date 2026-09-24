@@ -17,9 +17,9 @@ class HybridQueryEngine:
     """Orchestrates SQL Agent and RAG System"""
 
     def __init__(self, db_path: str | None = None):
-        resolved = db_path or str(Config.DATABASE_PATH)
+        # db_path=None -> the app database (Postgres on Render, SQLite locally).
         self.classifier = QueryClassifier()
-        self.sql_agent = SQLAgent(resolved)
+        self.sql_agent = SQLAgent(db_path)
         self.rag_system = RAGSystem()
     
     def query(self, user_query: str, user_id: str) -> Dict[str, Any]:

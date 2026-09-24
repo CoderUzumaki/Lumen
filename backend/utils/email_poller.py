@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from models import EmailConfig, Receipt, Transaction
 from models.database import db
 from utils.email_service import EmailService
-from utils.image_processing import image_to_base64, convert_pdf_to_images, pil_image_to_bytes
+from utils.image_processing import image_to_base64, render_pdf_first_page, pil_image_to_bytes
 from utils.openrouter import extract_and_structure_with_openrouter
 from utils.normalize import normalize_transaction
 from utils.save_transaction import save_transaction
@@ -130,12 +130,11 @@ def process_invoice_attachment(content: bytes, filename: str, user_id: str, emai
         if file_ext == 'pdf':
             # Convert PDF to images and process first page
             logger.info("Converting PDF to images...")
-            images = convert_pdf_to_images(content)
+            first_page, _total_pages = render_pdf_first_page(content)
             
-            if not images:
+            if first_page is None:
                 return {'success': False, 'error': 'No pages found in PDF', 'filename': filename}
             
-            first_page = images[0]
             img_bytes = pil_image_to_bytes(first_page, format='PNG')
             image_base64 = image_to_base64(img_bytes)
             media_type = 'image/png'

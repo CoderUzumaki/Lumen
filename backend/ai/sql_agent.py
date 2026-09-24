@@ -1,8 +1,9 @@
 # sql_agent.py
 import logging
 import re
-import sqlite3
 from typing import Any, Dict
+
+from sqlalchemy import create_engine
 
 from config import Config
 from utils.llm import LLMError, chat_completion
@@ -104,10 +105,40 @@ class SQLAgent:
     """Converts natural language to SQL and executes queries safely."""
 
     def __init__(self, db_path: str | None = None):
-        self.db_path = db_path or str(Config.DATABASE_PATH)
+        # No path: the app's own database (Postgres on Render via DATABASE_URL,
+        # local SQLite otherwise). A path forces that SQLite file (tests).
+        uri = f"sqlite:///{db_path}" if db_path else Config.DATABASE_URI
+        self.engine = create_engine(uri, pool_pre_ping=True)
+        self.dialect = "postgresql" if self.engine.dialect.name == "postgresql" else "sqlite"
+
+    # Rules 2 and 8 differ by database; see _DIALECT_RULES.
+    _DIALECT_RULES = {
+        "sqlite": {
+            "name": "SQLite",
+            "date_rule": "Use SQLite date functions (date(), datetime(), strftime())",
+            "case_rule": (
+                "SQLite `=` on text is case-sensitive: compare category, vendor_name and\n"
+                "       payment_method case-insensitively, e.g. LOWER(category) = 'groceries'\n"
+                "       or vendor_name LIKE '%starbucks%'"
+            ),
+        },
+        "postgresql": {
+            "name": "PostgreSQL",
+            "date_rule": (
+                "Use PostgreSQL date functions. `date` is TEXT, so cast it: date::date,\n"
+                "       e.g. to_char(date::date, 'YYYY-MM') or date::date >= CURRENT_DATE - INTERVAL '30 days'.\n"
+                "       Never use strftime() or date('now')"
+            ),
+            "case_rule": (
+                "Text `=` is case-sensitive: compare category, vendor_name and\n"
+                "       payment_method case-insensitively, e.g. LOWER(category) = 'groceries'\n"
+                "       or vendor_name ILIKE '%starbucks%'"
+            ),
+        },
+    }
 
     SQL_GENERATION_PROMPT = """
-    You are an expert SQL query generator for a financial transactions database using SQLite.
+    You are an expert SQL query generator for a financial transactions database using {dialect_name}.
 
     Database Schema:
     - Table: transactions
@@ -136,15 +167,13 @@ class SQLAgent:
 
     Rules:
     1. ALWAYS include: user_id = '{user_id}'
-    2. Use SQLite date functions (date(), datetime(), strftime())
+    2. {date_rule}
     3. Return ONLY the SQL query, no explanation
     4. Use LIMIT 100 or less
     5. SELECT only — never INSERT, UPDATE, DELETE, or DDL
     6. Only query tables: transactions, transaction_items
     7. Use single quotes for string literals
-    8. SQLite `=` on text is case-sensitive: compare category, vendor_name and
-       payment_method case-insensitively, e.g. LOWER(category) = 'groceries'
-       or vendor_name LIKE '%starbucks%'
+    8. {case_rule}
     9. Wrap aggregates in COALESCE so empty results read as 0, e.g.
        COALESCE(SUM(total_amount), 0) AS total_spent
 
@@ -170,9 +199,13 @@ class SQLAgent:
 
         safe_uid = str(user_id).replace("'", "''")
         fallback = self._fallback_sql(user_id)
+        rules = self._DIALECT_RULES[self.dialect]
         try:
             sql = chat_completion(
                 self.SQL_GENERATION_PROMPT.format(
+                    dialect_name=rules["name"],
+                    date_rule=rules["date_rule"],
+                    case_rule=rules["case_rule"],
                     query=query,
                     user_id=safe_uid,
                     current_date=datetime.now().strftime("%Y-%m-%d"),
@@ -199,17 +232,13 @@ class SQLAgent:
             return {"success": False, "rejected": True, "error": "Query could not be executed safely"}
 
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute(safe_sql)
-
-            columns = [desc[0] for desc in cursor.description] if cursor.description else []
-            rows = cursor.fetchall()
-            results = [dict(zip(columns, row)) for row in rows]
-
-            cursor.close()
-            conn.close()
+            with self.engine.connect() as conn:
+                # Send the model's SQL to the driver verbatim. Without
+                # no_parameters, psycopg2 would read the % in ILIKE '%x%' as a
+                # placeholder.
+                result = conn.execution_options(no_parameters=True).exec_driver_sql(safe_sql)
+                rows = result.mappings().all()
+            results = [dict(row) for row in rows]
 
             return {"success": True, "data": results, "row_count": len(results)}
 

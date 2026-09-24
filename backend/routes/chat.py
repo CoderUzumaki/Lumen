@@ -5,11 +5,10 @@ import uuid
 from flask import Blueprint, g, request, jsonify
 
 from ai.hybrid_query_engine import HybridQueryEngine
-from config import Config
 from models import ChatMessage
 from models.database import db
 from utils.auth import require_auth
-from utils.errors import api_error
+from utils.errors import api_error, llm_api_error
 from utils.limiter import limiter
 from utils.llm import LLMError
 
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 chat_bp = Blueprint("chat", __name__)
 
-engine = HybridQueryEngine(db_path=str(Config.DATABASE_PATH))
+engine = HybridQueryEngine()
 
 
 def _sanitize_chat_result(result: dict) -> dict:
@@ -47,27 +46,12 @@ def _save_exchange(user_id: str, question: str, answer: str) -> None:
     db.session.commit()
 
 
-# What the user sees for each provider failure. Operator detail (which key,
-# which model) goes to the server log via LLMError, never to the client. None
-# of these may be 401: the frontend treats 401 as "session expired" and signs
-# the user out.
-_LLM_ERROR_RESPONSES = {
-    LLMError.RATE_LIMITED: (
-        429,
-        "llm_rate_limited",
-        "Lumen's assistant is handling too many requests right now. Please try again in a minute.",
-    ),
-    LLMError.BAD_RESPONSE: (
-        502,
-        "llm_bad_response",
-        "The assistant didn't return an answer. Please try again.",
-    ),
+# What the user sees for each provider failure (status codes: utils.errors.llm_api_error).
+_LLM_MESSAGES = {
+    "rate_limited": "Lumen's assistant is handling too many requests right now. Please try again in a minute.",
+    "bad_response": "The assistant didn't return an answer. Please try again.",
+    "unavailable": "Lumen's assistant is unavailable right now. Please try again shortly.",
 }
-_LLM_DEFAULT_RESPONSE = (
-    503,
-    "llm_unavailable",
-    "Lumen's assistant is unavailable right now. Please try again shortly.",
-)
 
 
 @chat_bp.route("/chat", methods=["POST"])
@@ -87,9 +71,7 @@ def chat():
         logger.info("Processing chat query for user=%s", user_id)
         result = engine.query(query, user_id)
     except LLMError as e:
-        status, code, message = _LLM_ERROR_RESPONSES.get(e.kind, _LLM_DEFAULT_RESPONSE)
-        logger.error("Chat failed for user=%s: LLM %s: %s", user_id, e.kind, e.detail)
-        return api_error(message, status=status, code=code)
+        return llm_api_error(e, _LLM_MESSAGES, context=f"Chat failed for user={user_id}")
     except Exception as e:
         return api_error("Chat request failed", code="chat_failed", log=e)
 

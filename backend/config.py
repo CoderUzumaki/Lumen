@@ -157,10 +157,16 @@ class Config:
     OPENROUTER_CHAT_URL = f"{OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
 
     # Vision-capable model used for OCR / invoice extraction (`utils/openrouter.py`).
-    # `openrouter/free` routes to whichever free model accepts images right now.
+    # Not `openrouter/free` first: it picks any free model that accepts images,
+    # including ones that reply empty and a content-safety classifier that
+    # answers "User Safety: safe", so each invoice cost up to 3 requests.
     # Individual free models get retired or rate-limited without notice (the
-    # previous default, nvidia/nemotron-nano-12b-v2-vl:free, now returns 404).
-    LLM_VISION_MODEL = os.getenv("LLM_VISION_MODEL") or "openrouter/free"
+    # old nvidia/nemotron-nano-12b-v2-vl:free now returns 404), so the router
+    # stays as the last fallback.
+    LLM_VISION_MODEL = os.getenv("LLM_VISION_MODEL") or "google/gemma-4-31b-it:free"
+    LLM_VISION_FALLBACK_MODELS = os.getenv(
+        "LLM_VISION_FALLBACK_MODELS", "qwen/qwen3.8-27b:free,openrouter/free"
+    )
     # Text model used for chat synthesis, SQL generation, classification,
     # anomaly explanation, forecasting reasoning. Must be ONE model id.
     #
@@ -184,6 +190,16 @@ class Config:
     def get_llm_text_fallback_models(cls) -> list[str]:
         raw = os.getenv("LLM_TEXT_FALLBACK_MODELS", cls.LLM_TEXT_FALLBACK_MODELS)
         return [m.strip() for m in raw.split(",") if m.strip()]
+
+    @classmethod
+    def get_llm_vision_model(cls) -> str:
+        return os.getenv("LLM_VISION_MODEL") or cls.LLM_VISION_MODEL
+
+    @classmethod
+    def get_llm_vision_fallback_models(cls) -> list[str]:
+        raw = os.getenv("LLM_VISION_FALLBACK_MODELS", cls.LLM_VISION_FALLBACK_MODELS)
+        return [m.strip() for m in raw.split(",") if m.strip()]
+
     # Embedding model used by the RAG store.
     LLM_EMBEDDING_MODEL = os.getenv("LLM_EMBEDDING_MODEL", "openai/text-embedding-3-small")
 

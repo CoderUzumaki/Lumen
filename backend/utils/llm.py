@@ -76,46 +76,52 @@ def _auth_hint() -> str:
 
 
 def chat_completion(
-    prompt: str,
+    prompt: str | list,
     *,
     temperature: float = 0.0,
     max_tokens: int = 500,
     model: str | None = None,
+    fallback_models: list[str] | None = None,
     timeout: float = 60,
 ) -> str:
-    """Send one user prompt to OpenRouter and return the reply text.
+    """Send one user message to OpenRouter and return the reply text.
+
+    `prompt` is plain text, or a list of content parts (text + image_url) for
+    vision models.
 
     Raises LLMError for any failure; never returns provider error text as if it
     were an answer. An empty or malformed reply is retried once: with the
     `openrouter/free` router the retry usually lands on a different model.
     """
+    models = _model_chain(model, fallback_models)
     try:
-        return _chat_completion_once(prompt, temperature, max_tokens, model, timeout)
+        return _chat_completion_once(prompt, temperature, max_tokens, models, timeout)
     except LLMError as e:
         if e.kind != LLMError.BAD_RESPONSE:
             raise
         logger.info("Retrying LLM call after unusable reply: %s", e.detail)
-        return _chat_completion_once(prompt, temperature, max_tokens, model, timeout)
+        return _chat_completion_once(prompt, temperature, max_tokens, models, timeout)
 
 
-def _model_chain(model: str | None) -> list[str]:
-    """Explicit model -> just that one. Otherwise the configured text model
-    plus its fallbacks; OpenRouter moves down the list when a model errors, is
-    rate-limited or has been retired. OpenRouter accepts at most 3."""
+def _model_chain(model: str | None, fallback_models: list[str] | None = None) -> list[str]:
+    """Explicit model -> that one plus any explicit fallbacks. Otherwise the
+    configured text model plus its fallbacks; OpenRouter moves down the list
+    when a model errors, is rate-limited or has been retired. OpenRouter
+    accepts at most 3."""
     if model:
-        return [model]
-    chain = [Config.get_llm_text_model(), *Config.get_llm_text_fallback_models()]
+        chain = [model, *(fallback_models or [])]
+    else:
+        chain = [Config.get_llm_text_model(), *Config.get_llm_text_fallback_models()]
     return list(dict.fromkeys(m for m in chain if m))[:3]
 
 
 def _chat_completion_once(
-    prompt: str,
+    prompt: str | list,
     temperature: float,
     max_tokens: int,
-    model: str | None,
+    models: list[str],
     timeout: float,
 ) -> str:
-    models = _model_chain(model)
     model = models[0]
     payload = {
         "messages": [{"role": "user", "content": prompt}],

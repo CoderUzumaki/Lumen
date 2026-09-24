@@ -4,21 +4,39 @@ import logging
 from flask import Blueprint, g, request, jsonify
 
 from utils.auth import require_auth
-from utils.errors import api_error
+from utils.errors import api_error, llm_api_error
 from utils.limiter import limiter
+from utils.llm import LLMError
 from utils.upload_validation import validate_upload
 from utils.image_processing import (
+    PDFReadError,
     image_to_base64,
-    convert_pdf_to_images,
     pil_image_to_bytes,
+    render_pdf_first_page,
 )
 from utils.openrouter import extract_and_structure_with_openrouter
 from utils.normalize import normalize_transaction
-from utils.save_transaction import save_transaction
+from utils.save_transaction import save_transaction_detailed
 
 logger = logging.getLogger(__name__)
 # Create blueprint
 ocr_bp = Blueprint('ocr', __name__)
+
+MEDIA_TYPES = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'bmp': 'image/bmp',
+    'webp': 'image/webp',
+}
+
+# What the user sees when the vision model fails (status codes: utils.errors.llm_api_error).
+OCR_LLM_MESSAGES = {
+    "rate_limited": "Invoice scanning is handling too many requests right now. Please try again in a minute.",
+    "bad_response": "We couldn't read this invoice. Please try again, or upload a clearer image.",
+    "unavailable": "Invoice scanning is unavailable right now. Please try again shortly.",
+}
 
 
 @ocr_bp.route('/extract', methods=['POST'])
@@ -34,105 +52,85 @@ def extract_invoice_data():
     # Validate file
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
-    
+
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
-    
-    try:
-        file_content = file.read()
-        upload_error = validate_upload(file.filename, file_content)
-        if upload_error:
-            return jsonify({"error": upload_error}), 400
 
-        file_ext = file.filename.lower().split('.')[-1]
-        
-        # Determine media type
-        media_type_map = {
-            'jpg': 'image/jpeg',
-            'jpeg': 'image/jpeg',
-            'png': 'image/png',
-            'gif': 'image/gif',
-            'bmp': 'image/bmp',
-            'webp': 'image/webp'
-        }
-        
-        # Step 1: Perform OCR
+    file_content = file.read()
+    upload_error = validate_upload(file.filename, file_content)
+    if upload_error:
+        return jsonify({"error": upload_error}), 400
+
+    file_ext = file.filename.lower().rsplit('.', 1)[-1]
+
+    # Step 1: OCR (PDFs: first page only)
+    try:
         if file_ext == 'pdf':
-            # Convert PDF to images and process first page
-            logger.info("Converting PDF to images...")
-            images = convert_pdf_to_images(file_content)
-            
-            if not images:
-                return jsonify({'error': 'No pages found in PDF'}), 400
-            
-            first_page = images[0]
-            img_bytes = pil_image_to_bytes(first_page, format='PNG')
-            image_base64 = image_to_base64(img_bytes)
-            media_type = 'image/png'
-            
-            logger.info("Processing PDF page with OpenRouter...")
-            structured_data = extract_and_structure_with_openrouter(image_base64, media_type)
-            
-            # Add metadata
+            try:
+                first_page, total_pages = render_pdf_first_page(file_content)
+            except PDFReadError as e:
+                logger.info("Unreadable PDF upload %r: %s", file.filename, e)
+                return api_error(
+                    "Couldn't open this PDF. It may be corrupted or password-protected.",
+                    status=422,
+                    code="pdf_unreadable",
+                )
+            if first_page is None:
+                return api_error("This PDF has no pages.", status=422, code="pdf_empty")
+
+            image_base64 = image_to_base64(pil_image_to_bytes(first_page, format='PNG'))
+            logger.info("Processing PDF page 1/%d with OpenRouter...", total_pages)
+            structured_data = extract_and_structure_with_openrouter(image_base64, 'image/png')
             structured_data['pages_processed'] = 1
-            structured_data['total_pages'] = len(images)
-        
-        elif file_ext in media_type_map:
-            # Process image directly
-            logger.info(f"Processing {file_ext} image with OpenRouter...")
-            image_base64 = image_to_base64(file_content)
-            media_type = media_type_map[file_ext]
-            
-            structured_data = extract_and_structure_with_openrouter(image_base64, media_type)
-        
+            structured_data['total_pages'] = total_pages
+        elif file_ext in MEDIA_TYPES:
+            logger.info("Processing %s image with OpenRouter...", file_ext)
+            structured_data = extract_and_structure_with_openrouter(
+                image_to_base64(file_content), MEDIA_TYPES[file_ext]
+            )
         else:
             return jsonify({'error': 'Unsupported file format. Please upload PDF or image file (JPG, PNG, GIF, BMP, WEBP).'}), 400
-        
-        # Add source file info
-        structured_data['source_file'] = file.filename
-        structured_data['file_type'] = file_ext
-        
-        # Step 2: Normalize the OCR data
-        logger.info("Normalizing transaction data...")
-        try:
-            normalized = normalize_transaction(structured_data)
-        except Exception as e:
-            return api_error(
-                "Failed to normalize extracted data",
-                status=500,
-                code="normalization_failed",
-                log=e,
-            )
-        
-        # Step 3: Save to database (optional - graceful degradation)
-        transaction_id = None
-        db_warning = None
-        logger.info(f"Saving transaction to database for user {user_id}...")
-        try:
-            transaction_id = save_transaction(user_id, normalized)
-            logger.info(f"✅ Transaction {transaction_id} saved to database")
-        except Exception as e:
-            db_warning = f"Database save failed: {str(e)}"
-            logger.warning(f"⚠️  {db_warning}")
-            logger.info("   Continuing without database storage (OCR successful)")
-        
-        # Step 4: Return success response
-        response_data = {
-            'success': True,
-            'message': 'Transaction extracted successfully',
-            'data': normalized,
-            'ocr_data': structured_data
-        }
-        
-        if transaction_id:
-            response_data['transaction_id'] = str(transaction_id)
-            response_data['message'] = 'Transaction extracted and stored successfully'
-        else:
-            response_data['warning'] = 'Database unavailable - transaction not persisted'
-            response_data['db_error'] = db_warning
-        
-        return jsonify(response_data), 200
-    
+    except LLMError as e:
+        return llm_api_error(e, OCR_LLM_MESSAGES, context=f"OCR failed for user={user_id}")
     except Exception as e:
         return api_error("Invoice extraction failed", code="extract_failed", log=e)
+
+    structured_data['source_file'] = file.filename
+    structured_data['file_type'] = file_ext
+
+    # Step 2: Normalize the OCR data (never raises; unparseable fields become None)
+    normalized = normalize_transaction(structured_data)
+    if normalized["total_amount"] is None and not normalized["vendor_name"]:
+        logger.info("OCR found no invoice data in %r: %s", file.filename, structured_data)
+        return api_error(
+            "We couldn't find invoice details in this file. Please upload a clear photo or PDF of an invoice or receipt.",
+            status=422,
+            code="no_invoice_data",
+        )
+
+    # Step 3: Save. If this fails the user must know: reporting success would
+    # lose the invoice silently.
+    try:
+        transaction_id, created = save_transaction_detailed(user_id, normalized, email=g.user_email)
+    except Exception as e:
+        return api_error(
+            "We read the invoice but couldn't save it. Please try again.",
+            code="save_failed",
+            log=e,
+        )
+
+    if created:
+        logger.info("Transaction %s saved for user %s", transaction_id, user_id)
+        message = 'Transaction extracted and stored successfully'
+    else:
+        message = 'This invoice was already uploaded'
+
+    return jsonify({
+        'success': True,
+        'duplicate': not created,
+        'message': message,
+        'transaction_id': str(transaction_id),
+        'data': normalized,
+        'ocr_data': structured_data,
+    }), 200

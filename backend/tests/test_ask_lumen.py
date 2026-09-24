@@ -142,20 +142,6 @@ def test_semantic_question_falls_back_to_sql_when_index_unavailable(monkeypatch)
     assert result["response"] == "No transactions yet."
 
 
-@pytest.fixture
-def authed_client(monkeypatch):
-    import utils.auth
-    from app import app
-
-    monkeypatch.setattr(
-        utils.auth,
-        "verify_token",
-        lambda token: {"sub": "user-1", "email": "u@example.com", "role": "authenticated"},
-    )
-    app.config.update({"TESTING": True})
-    return app.test_client()
-
-
 def test_chat_llm_auth_failure_is_503_not_401(authed_client, monkeypatch):
     # A 401 would make the frontend sign the user out; a dead API key is our
     # problem, not an expired session.
