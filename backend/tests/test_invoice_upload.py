@@ -3,6 +3,7 @@
 The vision model is always mocked; these tests spend no OpenRouter requests.
 """
 import io
+from pathlib import Path
 
 import pytest
 from PIL import Image, ImageDraw
@@ -248,12 +249,17 @@ def _upload(client, content, name="invoice.png"):
 def client(authed_client, monkeypatch):
     """Signed-in client with no rate limit and an empty database."""
     from app import app
+    from conftest import TEST_DB_DIR
     from models import Transaction, TransactionItem, User
     from models.database import db
     from utils.limiter import limiter
 
     monkeypatch.setattr(limiter, "enabled", False)
     with app.app_context():
+        # This deletes every row: be sure it is the throwaway test database.
+        url = db.engine.url
+        assert url.get_backend_name() == "sqlite", url
+        assert Path(url.database).resolve().is_relative_to(TEST_DB_DIR.resolve()), url
         db.session.query(TransactionItem).delete()
         db.session.query(Transaction).delete()
         db.session.query(User).delete()

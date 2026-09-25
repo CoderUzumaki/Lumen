@@ -12,10 +12,12 @@ if str(BACKEND_ROOT) not in sys.path:
 
 # Tests must never write to the developer's real database or vector index.
 # `config` reads these at import time and load_dotenv doesn't override them,
-# so set them before any test imports the app.
-_TEST_DIR = Path(tempfile.mkdtemp(prefix="lumen-tests-"))
-os.environ.pop("DATABASE_URL", None)
-os.environ["DATABASE_PATH"] = str(_TEST_DIR / "lumen-test.db")
+# so set them before any test imports the app. DATABASE_URL is set to empty
+# (Config treats that as unset) rather than removed: removed, load_dotenv
+# would fill it in from backend/.env.
+TEST_DB_DIR = Path(tempfile.mkdtemp(prefix="lumen-tests-"))
+os.environ["DATABASE_URL"] = ""
+os.environ["DATABASE_PATH"] = str(TEST_DB_DIR / "lumen-test.db")
 os.environ["ENABLE_CHROMA"] = "false"
 
 

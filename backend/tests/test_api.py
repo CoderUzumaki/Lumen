@@ -81,3 +81,17 @@ def test_rate_limit_key_is_per_user(app):
         assert _rate_limit_key() == "user:alice"
     with app.test_request_context("/"):
         assert _rate_limit_key().startswith("ip:")
+
+
+def test_tests_use_the_throwaway_database():
+    # A DATABASE_URL in backend/.env must not reach the tests (conftest sets it
+    # to empty, which load_dotenv leaves alone and Config treats as unset).
+    import os
+    from pathlib import Path
+
+    from config import Config
+    from conftest import TEST_DB_DIR
+
+    assert os.environ["DATABASE_URL"] == ""
+    assert Config.DATABASE_URI.startswith("sqlite:///")
+    assert Path(Config.DATABASE_PATH).resolve().is_relative_to(TEST_DB_DIR.resolve())
