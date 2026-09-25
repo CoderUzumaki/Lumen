@@ -10,6 +10,9 @@ Flask-Limiter
 
 SQLAlchemy
 
+# Parses Ask Lumen's model-written SQL to check it and scope it to the user
+sqlglot>=30,<31
+
 python-dotenv
 
 gunicorn
