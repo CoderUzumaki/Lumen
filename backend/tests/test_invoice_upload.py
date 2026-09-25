@@ -41,6 +41,13 @@ SHARMA_OCR = {
         ("₹1,12,100", 112100.0),
         ("$12.50", 12.5),
         ("1121.00 INR", 1121.0),
+        # Apostrophe and space thousands separators (Swiss, European invoices)
+        ("CHF 1'250.00", 1250.0),
+        ("1 121.00", 1121.0),
+        ("1\u2019250", 1250.0),
+        ("1\u202f121.00", 1121.0),
+        ("1\u00a0121.00", 1121.0),
+        ("2 pcs", 2.0),
         (1121, 1121.0),
         (12.5, 12.5),
         ("", None),
@@ -62,6 +69,8 @@ def test_clean_amount(raw, expected):
         ("14/09/2026", "2026-09-14"),
         ("14-09-2026", "2026-09-14"),
         ("04/09/2026", "2026-09-04"),  # day-first, as on Indian invoices
+        ("2026/09/04", "2026-09-04"),  # year first: year-month-day
+        ("2026-9-4", "2026-09-04"),
         ("Sep 14, 2026", "2026-09-14"),
         ("14 September 2026", "2026-09-14"),
         ("14 Sep", None),  # no year: don't invent one

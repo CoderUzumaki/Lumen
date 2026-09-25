@@ -13,6 +13,12 @@ from dateutil import parser as date_parser
 logger = logging.getLogger(__name__)
 
 _NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?|-?\.\d+")
+# Thousands separators other than commas: "CHF 1'250.00", "1’250", "1 121.00"
+# (plain, no-break, narrow no-break or thin space). Removed only between a
+# digit and exactly three digits, so "2 pcs" stays 2.
+_THOUSANDS_SEP = re.compile(r"(?<=\d)['\u2019\u00a0\u202f\u2009 ](?=\d{3}(?!\d))")
+# Text that starts with a 4-digit year: "2026/09/04", "2026-9-4".
+_YEAR_FIRST = re.compile(r"\d{4}\D")
 _MISSING = {"", "null", "none", "n/a", "na", "-", "unknown"}
 
 
@@ -25,7 +31,7 @@ def _text(value):
 
 
 def clean_amount(value):
-    """Parse an amount like "Rs 1,121.00", "₹1,12,100", "USD 12.5" or 12.5.
+    """Parse an amount like "Rs 1,121.00", "₹1,12,100", "CHF 1'250.00" or 12.5.
 
     Returns a float, or None when there is no number in it.
     """
@@ -33,7 +39,7 @@ def clean_amount(value):
         return None
     if isinstance(value, (int, float)):
         return float(value)
-    match = _NUMBER.search(str(value))
+    match = _NUMBER.search(_THOUSANDS_SEP.sub("", str(value)))
     if not match:
         return None
     try:
@@ -47,7 +53,8 @@ def parse_date(value):
 
     Analytics compare `Transaction.date` as a string, so anything else
     ("14/09/2026", "Sep 14, 2026") would sort and filter wrongly. Ambiguous
-    numeric dates are read day-first, as printed on Indian invoices.
+    numeric dates are read day-first, as printed on Indian invoices, unless
+    they start with the year ("2026/09/04" is 4 September).
     """
     text = _text(value)
     if not text:
@@ -57,7 +64,11 @@ def parse_date(value):
     except ValueError:
         pass
     try:
-        parsed = date_parser.parse(text, dayfirst=True, default=datetime(1900, 1, 1))
+        parsed = date_parser.parse(
+            text,
+            dayfirst=not _YEAR_FIRST.match(text),
+            default=datetime(1900, 1, 1),
+        )
     except (ValueError, OverflowError):
         logger.info("Could not parse invoice date %r", text)
         return None
