@@ -2,6 +2,7 @@
 
 The vision model is always mocked; these tests spend no OpenRouter requests.
 """
+import base64
 import io
 from pathlib import Path
 
@@ -335,9 +336,11 @@ def ocr(monkeypatch):
         def __init__(self):
             self.result = dict(SHARMA_OCR)
             self.calls = []
+            self.images = []
 
         def __call__(self, image_base64, media_type):
             self.calls.append(media_type)
+            self.images.append(base64.b64decode(image_base64))
             if isinstance(self.result, Exception):
                 raise self.result
             return dict(self.result)
@@ -510,3 +513,58 @@ def test_unsupported_extension_is_400(client, ocr):
     resp = _upload(client, b"hello", name="invoice.txt")
     assert resp.status_code == 400
     assert ocr.calls == []
+
+
+def _image_bytes(fmt, frames=1):
+    imgs = [Image.new("RGB", (400, 300), color) for color in ("white", "gray", "black")[:frames]]
+    buf = io.BytesIO()
+    if frames > 1:
+        imgs[0].save(buf, format=fmt, save_all=True, append_images=imgs[1:])
+    else:
+        imgs[0].save(buf, format=fmt)
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize("fmt, name, frames", [("BMP", "invoice.bmp", 1), ("GIF", "invoice.gif", 3)])
+def test_bmp_and_gif_are_sent_as_png(client, ocr, fmt, name, frames):
+    # OpenRouter doesn't take BMP, and an animated GIF would send every frame.
+    resp = _upload(client, _image_bytes(fmt, frames), name=name)
+    assert resp.status_code == 200, resp.get_json()
+    assert ocr.calls == ["image/png"]
+    sent = Image.open(io.BytesIO(ocr.images[0]))
+    assert sent.format == "PNG"
+    assert sent.size == (400, 300)
+    assert getattr(sent, "n_frames", 1) == 1
+
+
+def test_corrupt_bmp_is_422(client, ocr):
+    resp = _upload(client, b"BM this is not really a bitmap", name="invoice.bmp")
+    assert resp.status_code == 422
+    assert resp.get_json()["code"] == "image_unreadable"
+    assert ocr.calls == []
+
+
+def _pdf_page(width_pt, height_pt):
+    # Pillow sizes the page as pixels * 72 / resolution points.
+    buf = io.BytesIO()
+    Image.new("RGB", (100, round(100 * height_pt / width_pt)), "white").save(
+        buf, format="PDF", resolution=100 * 72 / width_pt
+    )
+    return buf.getvalue()
+
+
+def test_large_pdf_page_is_rendered_at_most_2500px():
+    from utils.image_processing import convert_pdf_to_images, render_pdf_first_page
+
+    poster = _pdf_page(3600, 2700)  # 50 x 37.5 inches: 10000 px wide at 200 dpi
+    page, _ = render_pdf_first_page(poster)
+    assert page.size == (2500, 1875)
+    assert convert_pdf_to_images(poster)[0].size == (2500, 1875)
+
+
+def test_a4_pdf_page_is_still_rendered_at_200_dpi():
+    from utils.image_processing import render_pdf_first_page
+
+    page, _ = render_pdf_first_page(_pdf_page(595, 842))
+    assert page.width == 1653  # 595 pt at 200 dpi
+    assert max(page.size) < 2500

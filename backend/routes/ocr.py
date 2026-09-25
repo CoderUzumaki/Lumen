@@ -9,8 +9,10 @@ from utils.limiter import limiter
 from utils.llm import LLMError
 from utils.upload_validation import validate_upload
 from utils.image_processing import (
+    ImageReadError,
     PDFReadError,
     image_to_base64,
+    image_to_png,
     pil_image_to_bytes,
     render_pdf_first_page,
 )
@@ -26,10 +28,11 @@ MEDIA_TYPES = {
     'jpg': 'image/jpeg',
     'jpeg': 'image/jpeg',
     'png': 'image/png',
-    'gif': 'image/gif',
-    'bmp': 'image/bmp',
     'webp': 'image/webp',
 }
+# OpenRouter takes png/jpeg/webp/gif images. BMP isn't one of them, and an
+# animated GIF would send every frame, so both go as a PNG of the first frame.
+CONVERT_TO_PNG = frozenset({'bmp', 'gif'})
 
 # What the user sees when the vision model fails (status codes: utils.errors.llm_api_error).
 OCR_LLM_MESSAGES = {
@@ -84,6 +87,18 @@ def extract_invoice_data():
             structured_data = extract_and_structure_with_openrouter(image_base64, 'image/png')
             structured_data['pages_processed'] = 1
             structured_data['total_pages'] = total_pages
+        elif file_ext in CONVERT_TO_PNG:
+            try:
+                png = image_to_png(file_content)
+            except ImageReadError as e:
+                logger.info("Unreadable %s upload %r: %s", file_ext, file.filename, e)
+                return api_error(
+                    "Couldn't open this image. It may be corrupted.",
+                    status=422,
+                    code="image_unreadable",
+                )
+            logger.info("Processing %s image as PNG with OpenRouter...", file_ext)
+            structured_data = extract_and_structure_with_openrouter(image_to_base64(png), 'image/png')
         elif file_ext in MEDIA_TYPES:
             logger.info("Processing %s image with OpenRouter...", file_ext)
             structured_data = extract_and_structure_with_openrouter(
