@@ -427,6 +427,10 @@ class SQLAgent:
                 ),
                 temperature=0,
                 max_tokens=500,
+                # A bad reply already has a fallback query; don't spend a
+                # retry of the request's time budget on it.
+                timeout=30,
+                retries=0,
             )
         except LLMError as e:
             if e.is_fatal:

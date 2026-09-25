@@ -156,3 +156,35 @@ def test_non_dict_completion_tokens_details_degrades_reasoning_count_to_none(mon
     assert any(
         "tokens(prompt=5, completion=2, reasoning=None)" in r.getMessage() for r in records
     )
+
+
+@pytest.mark.parametrize("retries, calls", [(0, 1), (1, 2), (2, 3)])
+def test_retries_sets_extra_attempts_after_empty_reply(monkeypatch, retries, calls):
+    from utils import llm
+
+    sent = []
+
+    def empty(*a, **k):
+        sent.append(1)
+        return _FakeResponse(200, {"choices": [{"message": {"content": ""}}]})
+
+    monkeypatch.setattr(llm.requests, "post", empty)
+    with pytest.raises(llm.LLMError) as excinfo:
+        llm.chat_completion("hi", retries=retries)
+    assert excinfo.value.kind == llm.LLMError.BAD_RESPONSE
+    assert len(sent) == calls
+
+
+def test_default_is_one_retry(monkeypatch):
+    from utils import llm
+
+    sent = []
+
+    def empty(*a, **k):
+        sent.append(1)
+        return _FakeResponse(200, {"choices": [{"message": {"content": ""}}]})
+
+    monkeypatch.setattr(llm.requests, "post", empty)
+    with pytest.raises(llm.LLMError):
+        llm.chat_completion("hi")
+    assert len(sent) == 2

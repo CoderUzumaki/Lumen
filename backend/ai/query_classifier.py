@@ -65,6 +65,9 @@ class QueryClassifier:
                 self.CLASSIFICATION_PROMPT.format(query=query),
                 temperature=0,
                 max_tokens=20,
+                # A bad reply falls back to ANALYTICAL, so no retry.
+                timeout=15,
+                retries=0,
             )
         except LLMError as e:
             if e.is_fatal:

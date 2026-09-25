@@ -231,6 +231,43 @@ def test_vision_call_sends_image_and_retries_unparseable_reply(monkeypatch):
     assert parts[1] == {"type": "image_url", "image_url": {"url": "data:image/png;base64,aGk="}}
 
 
+@pytest.mark.parametrize(
+    "first, second",
+    [
+        ("", ""),  # empty twice
+        ("Sorry, the image is blurry.", "Still blurry."),  # no JSON twice
+        ("", "Still blurry."),
+        ("Sorry, the image is blurry.", ""),
+    ],
+)
+def test_vision_call_makes_at_most_two_requests(monkeypatch, first, second):
+    # Two 55s calls fit in gunicorn's 120s worker timeout; a third would not.
+    from utils import llm
+    from utils.openrouter import extract_and_structure_with_openrouter
+
+    sent = []
+    replies = iter([_reply(first), _reply(second), _reply('{"vendor_name": "A"}')])
+
+    def post(url, headers, json, timeout):
+        sent.append(timeout)
+        return next(replies)
+
+    monkeypatch.setattr(llm.requests, "post", post)
+    with pytest.raises(llm.LLMError) as excinfo:
+        extract_and_structure_with_openrouter("aGk=", "image/png")
+    assert excinfo.value.kind == llm.LLMError.BAD_RESPONSE
+    assert sent == [55, 55]
+
+
+def test_vision_call_retries_empty_reply(monkeypatch):
+    from utils import llm
+    from utils.openrouter import extract_and_structure_with_openrouter
+
+    replies = iter([_reply(""), _reply('{"vendor_name": "A"}')])
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: next(replies))
+    assert extract_and_structure_with_openrouter("aGk=", "image/png") == {"vendor_name": "A"}
+
+
 # --- POST /extract ------------------------------------------------------------
 
 

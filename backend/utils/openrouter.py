@@ -73,18 +73,22 @@ def extract_and_structure_with_openrouter(image_base64, media_type="image/jpeg")
         {"type": "text", "text": EXTRACTION_PROMPT},
         {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{image_base64}"}},
     ]
-    # Two tries must fit inside gunicorn's 120s worker timeout on Render.
+    # At most two HTTP calls of up to 55s each (110s), inside gunicorn's 120s
+    # worker timeout on Render: chat_completion doesn't retry (retries=0), and
+    # the one retry below covers both an empty reply and one without JSON.
     call = dict(
         model=Config.get_llm_vision_model(),
         fallback_models=Config.get_llm_vision_fallback_models(),
         temperature=0.1,
         max_tokens=2000,
         timeout=55,
+        retries=0,
     )
-    reply = chat_completion(content, **call)
     try:
-        return parse_json_reply(reply)
+        return parse_json_reply(chat_completion(content, **call))
     except LLMError as e:
+        if e.kind != LLMError.BAD_RESPONSE:
+            raise
         # With `openrouter/free` a retry usually lands on a different model.
         logger.info("Retrying invoice OCR after an unusable reply")
         logger.debug("Unusable invoice OCR reply: %s", e.detail)

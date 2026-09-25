@@ -102,4 +102,6 @@ class HybridQueryEngine:
         Answer:
         """
 
-        return chat_completion(synthesis_prompt, temperature=0.7, max_tokens=500)
+        # Classify (15s, no retry) + SQL (30s, no retry) + this (30s, one retry) is
+        # about 105s at worst, inside gunicorn's 120s worker timeout.
+        return chat_completion(synthesis_prompt, temperature=0.7, max_tokens=500, timeout=30)

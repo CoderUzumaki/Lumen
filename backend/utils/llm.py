@@ -92,6 +92,7 @@ def chat_completion(
     fallback_models: list[str] | None = None,
     reasoning: dict | None = REASONING_OFF,
     timeout: float = 60,
+    retries: int = 1,
 ) -> str:
     """Send one user message to OpenRouter and return the reply text.
 
@@ -103,17 +104,19 @@ def chat_completion(
     field entirely and use the model's own default.
 
     Raises LLMError for any failure; never returns provider error text as if it
-    were an answer. An empty or malformed reply is retried once: with the
-    `openrouter/free` router the retry usually lands on a different model.
+    were an answer. An empty or malformed reply is retried `retries` more
+    times (default once, 0 = never): with the `openrouter/free` router the
+    retry usually lands on a different model. Each try can take up to
+    `timeout` seconds, so callers inside a request budget pass retries=0.
     """
     models = _model_chain(model, fallback_models)
-    try:
-        return _chat_completion_once(prompt, temperature, max_tokens, models, reasoning, timeout)
-    except LLMError as e:
-        if e.kind != LLMError.BAD_RESPONSE:
-            raise
-        logger.info("Retrying LLM call after unusable reply: %s", e.detail)
-        return _chat_completion_once(prompt, temperature, max_tokens, models, reasoning, timeout)
+    for attempt in range(max(retries, 0) + 1):
+        try:
+            return _chat_completion_once(prompt, temperature, max_tokens, models, reasoning, timeout)
+        except LLMError as e:
+            if e.kind != LLMError.BAD_RESPONSE or attempt >= retries:
+                raise
+            logger.info("Retrying LLM call after unusable reply: %s", e.detail)
 
 
 def _model_chain(model: str | None, fallback_models: list[str] | None = None) -> list[str]:
