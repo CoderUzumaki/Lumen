@@ -9,12 +9,20 @@ endpoint and turns provider failures into a typed `LLMError`.
 from __future__ import annotations
 
 import logging
+import time
 
 import requests
 
 from config import Config
 
 logger = logging.getLogger(__name__)
+
+# Every configured free text model reasons by default (some at effort "high" or
+# "xhigh"), and OpenRouter counts reasoning tokens against max_tokens. With the
+# small max_tokens our callers use, reasoning alone exhausts the budget and the
+# reply comes back empty. Same prompt, reasoning off: 0.9s instead of tens of
+# seconds. Off is the default for every call; pass reasoning=None to opt out.
+REASONING_OFF = {"enabled": False}
 
 
 class LLMError(RuntimeError):
@@ -76,46 +84,61 @@ def _auth_hint() -> str:
 
 
 def chat_completion(
-    prompt: str,
+    prompt: str | list,
     *,
     temperature: float = 0.0,
     max_tokens: int = 500,
     model: str | None = None,
+    fallback_models: list[str] | None = None,
+    reasoning: dict | None = REASONING_OFF,
     timeout: float = 60,
+    retries: int = 1,
 ) -> str:
-    """Send one user prompt to OpenRouter and return the reply text.
+    """Send one user message to OpenRouter and return the reply text.
+
+    `prompt` is plain text, or a list of content parts (text + image_url) for
+    vision models.
+
+    `reasoning` is sent as OpenRouter's `reasoning` request field (e.g.
+    `{"effort": "low"}`); defaults to REASONING_OFF. Pass None to omit the
+    field entirely and use the model's own default.
 
     Raises LLMError for any failure; never returns provider error text as if it
-    were an answer. An empty or malformed reply is retried once: with the
-    `openrouter/free` router the retry usually lands on a different model.
+    were an answer. An empty or malformed reply is retried `retries` more
+    times (default once, 0 = never): with the `openrouter/free` router the
+    retry usually lands on a different model. Each try can take up to
+    `timeout` seconds, so callers inside a request budget pass retries=0.
     """
-    try:
-        return _chat_completion_once(prompt, temperature, max_tokens, model, timeout)
-    except LLMError as e:
-        if e.kind != LLMError.BAD_RESPONSE:
-            raise
-        logger.info("Retrying LLM call after unusable reply: %s", e.detail)
-        return _chat_completion_once(prompt, temperature, max_tokens, model, timeout)
+    models = _model_chain(model, fallback_models)
+    for attempt in range(max(retries, 0) + 1):
+        try:
+            return _chat_completion_once(prompt, temperature, max_tokens, models, reasoning, timeout)
+        except LLMError as e:
+            if e.kind != LLMError.BAD_RESPONSE or attempt >= retries:
+                raise
+            logger.info("Retrying LLM call after unusable reply: %s", e.detail)
 
 
-def _model_chain(model: str | None) -> list[str]:
-    """Explicit model -> just that one. Otherwise the configured text model
-    plus its fallbacks; OpenRouter moves down the list when a model errors, is
-    rate-limited or has been retired. OpenRouter accepts at most 3."""
+def _model_chain(model: str | None, fallback_models: list[str] | None = None) -> list[str]:
+    """Explicit model -> that one plus any explicit fallbacks. Otherwise the
+    configured text model plus its fallbacks; OpenRouter moves down the list
+    when a model errors, is rate-limited or has been retired. OpenRouter
+    accepts at most 3."""
     if model:
-        return [model]
-    chain = [Config.get_llm_text_model(), *Config.get_llm_text_fallback_models()]
+        chain = [model, *(fallback_models or [])]
+    else:
+        chain = [Config.get_llm_text_model(), *Config.get_llm_text_fallback_models()]
     return list(dict.fromkeys(m for m in chain if m))[:3]
 
 
 def _chat_completion_once(
-    prompt: str,
+    prompt: str | list,
     temperature: float,
     max_tokens: int,
-    model: str | None,
+    models: list[str],
+    reasoning: dict | None,
     timeout: float,
 ) -> str:
-    models = _model_chain(model)
     model = models[0]
     payload = {
         "messages": [{"role": "user", "content": prompt}],
@@ -126,6 +149,9 @@ def _chat_completion_once(
         payload["models"] = models
     else:
         payload["model"] = model
+    if reasoning is not None:
+        payload["reasoning"] = reasoning
+    start = time.monotonic()
     try:
         resp = requests.post(
             Config.OPENROUTER_CHAT_URL,
@@ -140,6 +166,7 @@ def _chat_completion_once(
         raise LLMError(LLMError.UNAVAILABLE, f"OpenRouter timed out after {timeout}s") from e
     except requests.RequestException as e:
         raise LLMError(LLMError.UNAVAILABLE, f"OpenRouter request failed: {e}") from e
+    latency = time.monotonic() - start
 
     try:
         body = resp.json()
@@ -155,15 +182,47 @@ def _chat_completion_once(
         detail = f"OpenRouter HTTP {status} (model={model}): {_error_message(body) or resp.text[:200]}"
         if kind == LLMError.AUTH:
             detail += _auth_hint()
-        logger.error("LLM call failed [%s]: %s", kind, detail)
+        logger.error("LLM call failed [%s]: %s after %.1fs", kind, detail, latency)
         raise LLMError(kind, detail, status=status)
 
+    served = body.get("model") or model
     try:
-        content = body["choices"][0]["message"]["content"]
+        choice = body["choices"][0]
+    except (KeyError, IndexError, TypeError):
+        choice = {}
+    if not isinstance(choice, dict):
+        choice = {}
+    usage = body.get("usage")
+    if not isinstance(usage, dict):
+        usage = {}
+    usage_details = usage.get("completion_tokens_details")
+    if not isinstance(usage_details, dict):
+        usage_details = {}
+    finish_reason = choice.get("finish_reason")
+    reasoning_tokens = usage_details.get("reasoning_tokens")
+    logger.info(
+        "LLM %s served=%s latency=%.1fs finish=%s tokens(prompt=%s, completion=%s, reasoning=%s)",
+        model,
+        served,
+        latency,
+        finish_reason,
+        usage.get("prompt_tokens"),
+        usage.get("completion_tokens"),
+        reasoning_tokens,
+    )
+
+    try:
+        content = choice["message"]["content"]
     except (KeyError, IndexError, TypeError) as e:
         raise LLMError(LLMError.BAD_RESPONSE, f"Unexpected OpenRouter response shape: {e}") from e
     if not content or not content.strip():
-        raise LLMError(LLMError.BAD_RESPONSE, f"Empty completion from {body.get('model') or model}")
+        if finish_reason == "length":
+            raise LLMError(
+                LLMError.BAD_RESPONSE,
+                f"{served} hit max_tokens={max_tokens} before writing any output "
+                f"(reasoning_tokens={reasoning_tokens})",
+            )
+        raise LLMError(LLMError.BAD_RESPONSE, f"Empty completion from {served}")
     return content.strip()
 
 

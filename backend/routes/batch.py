@@ -4,15 +4,18 @@ import logging
 from flask import Blueprint, g, request, jsonify
 
 from utils.auth import require_auth
-from utils.errors import api_error
+from utils.errors import api_error, llm_api_error
 from utils.limiter import limiter
 from utils.upload_validation import validate_upload
 from utils.image_processing import (
+    PDFReadError,
     convert_pdf_to_images,
     pil_image_to_bytes,
     image_to_base64,
 )
+from utils.llm import LLMError
 from utils.openrouter import extract_and_structure_with_openrouter
+from routes.ocr import OCR_LLM_MESSAGES
 from utils.normalize import normalize_transaction
 from utils.save_transaction import save_transaction
 
@@ -46,7 +49,15 @@ def extract_batch():
             return jsonify({"error": upload_error}), 400
 
         logger.info("Converting all PDF pages to images...")
-        images = convert_pdf_to_images(file_content)
+        try:
+            images = convert_pdf_to_images(file_content)
+        except PDFReadError as e:
+            logger.info("Unreadable PDF upload %r: %s", file.filename, e)
+            return api_error(
+                "Couldn't open this PDF. It may be corrupted or password-protected.",
+                status=422,
+                code="pdf_unreadable",
+            )
         if not images:
             return jsonify({"error": "No pages found in PDF"}), 400
 
@@ -66,7 +77,7 @@ def extract_batch():
                 page_data["source_file"] = file.filename
 
                 normalized = normalize_transaction(page_data)
-                transaction_id = save_transaction(user_id, normalized)
+                transaction_id = save_transaction(user_id, normalized, email=g.user_email)
                 saved_ids.append(str(transaction_id))
 
                 results.append(
@@ -78,6 +89,17 @@ def extract_batch():
                         "total_amount": normalized.get("total_amount"),
                     }
                 )
+            except LLMError as e:
+                if not e.is_fatal:
+                    logger.warning("Page %s failed: %s", idx + 1, e)
+                    results.append({"page_number": idx + 1, "success": False, "error": "Page extraction failed"})
+                    continue
+                # Dead key or rate limit: every later page would fail too, and
+                # each attempt spends a request from the daily quota.
+                if not saved_ids:
+                    return llm_api_error(e, OCR_LLM_MESSAGES, context=f"Batch OCR failed for user={user_id}")
+                logger.error("Stopping batch at page %s: LLM %s: %s", idx + 1, e.kind, e.detail)
+                break
             except Exception as e:
                 logger.warning("Page %s failed: %s", idx + 1, e)
                 results.append(

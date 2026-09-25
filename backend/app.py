@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 Config.validate()
 
 from routes import register_routes
-from utils.openrouter import get_api_config
 from utils.llm import check_api_key
 from models.database import init_db
 from utils.scheduler import scheduler
@@ -69,12 +68,11 @@ if __name__ == "__main__":
                 key, mask_secret(os.environ.get(key)),
             )
 
-        config = get_api_config()
         ok, summary = check_api_key()
         (logger.info if ok else logger.error)(
             "%s Key %s, text model %s, vision model %s",
-            summary, mask_secret(config["api_key"]),
-            Config.get_llm_text_model(), config["model"],
+            summary, mask_secret(Config.OPENROUTER_API_KEY),
+            Config.get_llm_text_model(), Config.get_llm_vision_model(),
         )
 
     logger.info("Starting LUMEN Financial Intelligence API...")

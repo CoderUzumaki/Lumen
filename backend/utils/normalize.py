@@ -1,53 +1,128 @@
-def clean_amount(value):
-    if value is None:
+"""Turn the vision model's loosely-typed JSON into a transaction row.
+
+The model returns whatever it read off the invoice: "Rs 1,121.00", "₹1121",
+"14/09/2026", "2 pcs", null items. Nothing here may raise on odd input; a
+field that can't be parsed becomes None.
+"""
+import logging
+import re
+from datetime import date, datetime
+
+from dateutil import parser as date_parser
+
+logger = logging.getLogger(__name__)
+
+_NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?|-?\.\d+")
+# Thousands separators other than commas: "CHF 1'250.00", "1’250", "1 121.00"
+# (plain, no-break, narrow no-break or thin space). Removed only between a
+# digit and exactly three digits, so "2 pcs" stays 2.
+_THOUSANDS_SEP = re.compile(r"(?<=\d)['\u2019\u00a0\u202f\u2009 ](?=\d{3}(?!\d))")
+# Text that starts with a 4-digit year: "2026/09/04", "2026-9-4".
+_YEAR_FIRST = re.compile(r"\d{4}\D")
+_MISSING = {"", "null", "none", "n/a", "na", "-", "unknown"}
+
+
+def _text(value):
+    """Strip a string field; treat "null"/"N/A" and non-strings like {} as missing."""
+    if value is None or isinstance(value, (dict, list)):
         return None
-    # Remove all common currency symbols and thousand separators
-    cleaned = str(value).strip()
-    
-    # Remove 3-letter currency codes (USD, EUR, GBP, INR, etc.)
-    import re
-    cleaned = re.sub(r'^[A-Z]{3}\s*', '', cleaned)  # Remove leading currency codes
-    cleaned = re.sub(r'\s*[A-Z]{3}$', '', cleaned)  # Remove trailing currency codes
-    
-    # Remove currency symbols
-    for symbol in ["$", "₹", "€", "£", "¥", "₩", "₪", "₱", "₦", "₴", "₡", "₵", "₲", "₸", "₹", "₺", "₼", "₽", "₾", "₿"]:
-        cleaned = cleaned.replace(symbol, "")
-    
-    # Remove thousand separators (commas, spaces, apostrophes)
-    cleaned = cleaned.replace(",", "").replace(" ", "").replace("'", "").strip()
-    return float(cleaned)
+    text = str(value).strip()
+    return None if text.lower() in _MISSING else text
+
+
+def clean_amount(value):
+    """Parse an amount like "Rs 1,121.00", "₹1,12,100", "CHF 1'250.00" or 12.5.
+
+    Returns a float, or None when there is no number in it.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    match = _NUMBER.search(_THOUSANDS_SEP.sub("", str(value)))
+    if not match:
+        return None
+    try:
+        return float(match.group().replace(",", ""))
+    except ValueError:
+        return None
+
+
+def parse_date(value):
+    """Return the date as ISO YYYY-MM-DD, or None.
+
+    Analytics compare `Transaction.date` as a string, so anything else
+    ("14/09/2026", "Sep 14, 2026") would sort and filter wrongly. Ambiguous
+    numeric dates are read day-first, as printed on Indian invoices, unless
+    they start with the year ("2026/09/04" is 4 September).
+    """
+    text = _text(value)
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10]).isoformat()
+    except ValueError:
+        pass
+    try:
+        parsed = date_parser.parse(
+            text,
+            dayfirst=not _YEAR_FIRST.match(text),
+            default=datetime(1900, 1, 1),
+        )
+    except (ValueError, OverflowError):
+        logger.info("Could not parse invoice date %r", text)
+        return None
+    if parsed.year == 1900:  # no year on the invoice; don't invent one
+        return None
+    return parsed.date().isoformat()
+
+
+def _quantity(value):
+    """ "2", 2, "2 pcs", "1.0" -> int >= 1 (the column is an integer)."""
+    amount = clean_amount(value)
+    if amount is None or amount <= 0:
+        return 1
+    return max(1, round(amount))
+
+
+def _items(raw):
+    if not isinstance(raw, list):
+        return []
+    items = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = _text(item.get("item_name") or item.get("name") or item.get("description"))
+        unit_price = clean_amount(item.get("price") if item.get("price") is not None else item.get("unit_price"))
+        if not name and unit_price is None:
+            continue
+        quantity = _quantity(item.get("quantity"))
+        items.append({
+            "item_name": name or "Item",
+            "quantity": quantity,
+            "unit_price": unit_price,
+            "total_price": round(unit_price * quantity, 2) if unit_price is not None else None,
+        })
+    return items
 
 
 def normalize_transaction(data):
+    if not isinstance(data, dict):
+        data = {}
     normalized = {}
 
     # Vendor > Customer fallback (but retain vendor_name priority)
-    vendor = data.get("vendor_name")
-    customer = data.get("customer_name")
-    normalized["vendor_name"] = vendor if vendor else customer
+    normalized["vendor_name"] = _text(data.get("vendor_name")) or _text(data.get("customer_name"))
 
-    normalized["invoice_number"] = data.get("invoice_number")
-    normalized["date"] = data.get("date")
-    normalized["category"] = data.get("category")
-    normalized["address"] = data.get("address")
+    normalized["invoice_number"] = _text(data.get("invoice_number"))
+    normalized["date"] = parse_date(data.get("date"))
+    normalized["category"] = _text(data.get("category")) or "Other"
+    normalized["address"] = _text(data.get("address"))
 
     normalized["total_amount"] = clean_amount(data.get("total_amount"))
     normalized["tax_amount"] = clean_amount(data.get("tax_amount"))
-    normalized["payment_method"] = data.get("payment_method") or "Unknown"
+    normalized["payment_method"] = _text(data.get("payment_method")) or "Unknown"
 
-    # Normalize items
-    items_norm = []
-    for item in data.get("items", []):
-        unit_price = clean_amount(item.get("price"))
-        quantity = int(item.get("quantity", 1))
-
-        items_norm.append({
-            "item_name": item.get("item_name"),
-            "quantity": quantity,
-            "unit_price": unit_price,
-            "total_price": unit_price * quantity
-        })
-
-    normalized["items"] = items_norm
+    normalized["items"] = _items(data.get("items"))
 
     return normalized

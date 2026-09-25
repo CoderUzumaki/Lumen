@@ -62,11 +62,16 @@ class AnalyticsService:
     @staticmethod
     def _get_period_stats(user_id, start_date, end_date):
         """Get statistics for a specific time period"""
+        # Transaction.date is a String column (ISO YYYY-MM-DD text), so it must be
+        # compared against strings, not date objects: Postgres has no >=(varchar, date)
+        # operator and raises UndefinedFunction, even though SQLite tolerates it.
+        start_iso = start_date.isoformat()
+        end_iso = end_date.isoformat()
         transactions = Transaction.query.filter(
             and_(
                 Transaction.user_id == user_id,
-                Transaction.date >= start_date,
-                Transaction.date <= end_date
+                Transaction.date >= start_iso,
+                Transaction.date <= end_iso
             )
         ).all()
 
@@ -186,31 +191,37 @@ class AnalyticsService:
     @staticmethod
     def _get_period_total(user_id, start_date, end_date):
         """Get total spending for a specific period"""
+        # Same String-vs-date fix as _get_period_stats: compare ISO strings.
+        start_iso = start_date.isoformat()
+        end_iso = end_date.isoformat()
         result = db.session.query(
             func.sum(Transaction.total_amount)
         ).filter(
             and_(
                 Transaction.user_id == user_id,
-                Transaction.date >= start_date,
-                Transaction.date <= end_date
+                Transaction.date >= start_iso,
+                Transaction.date <= end_iso
             )
         ).scalar()
-        
+
         return float(result or 0)
 
     @staticmethod
     def _get_period_transaction_count(user_id, start_date, end_date):
         """Get transaction count for a specific period"""
+        # Same String-vs-date fix as _get_period_stats: compare ISO strings.
+        start_iso = start_date.isoformat()
+        end_iso = end_date.isoformat()
         result = db.session.query(
             func.count(Transaction.id)
         ).filter(
             and_(
                 Transaction.user_id == user_id,
-                Transaction.date >= start_date,
-                Transaction.date <= end_date
+                Transaction.date >= start_iso,
+                Transaction.date <= end_iso
             )
         ).scalar()
-        
+
         return int(result or 0)
 
     @staticmethod

@@ -47,16 +47,17 @@ class EmailPollingScheduler:
         while self.running:
             try:
                 with self.app.app_context():
-                    logger.info("🔄 Starting email polling cycle...")
+                    logger.debug("🔄 Starting email polling cycle...")
                     from utils.email_poller import poll_all_users
-                    
+
                     results = poll_all_users()
-                    
+
                     # Log summary
                     total_processed = sum(r.get('processed', 0) for r in results)
                     total_errors = sum(r.get('errors', 0) for r in results)
-                    
-                    logger.info(
+
+                    log_func = logger.debug if len(results) == 0 else logger.info
+                    log_func(
                         f"✅ Polling cycle complete: {len(results)} users, "
                         f"{total_processed} invoices processed, {total_errors} errors"
                     )

@@ -123,6 +123,8 @@ def test_semantic_question_falls_back_to_sql_when_index_unavailable(monkeypatch)
             return "SEMANTIC"
 
     class Rag:
+        enabled = True
+
         def search(self, q, uid):
             return {"success": False, "error": "Semantic search is unavailable", "data": []}
 
@@ -142,18 +144,70 @@ def test_semantic_question_falls_back_to_sql_when_index_unavailable(monkeypatch)
     assert result["response"] == "No transactions yet."
 
 
-@pytest.fixture
-def authed_client(monkeypatch):
-    import utils.auth
-    from app import app
+def test_skips_classifier_when_semantic_search_disabled(monkeypatch):
+    import ai.hybrid_query_engine as hqe
 
-    monkeypatch.setattr(
-        utils.auth,
-        "verify_token",
-        lambda token: {"sub": "user-1", "email": "u@example.com", "role": "authenticated"},
-    )
-    app.config.update({"TESTING": True})
-    return app.test_client()
+    class Classifier:
+        def classify(self, q):
+            raise AssertionError("classifier should not be called")
+
+    class Rag:
+        enabled = False
+
+        def search(self, q, uid):
+            raise AssertionError("semantic search should not be called")
+
+    class Sql:
+        called = False
+
+        def query(self, q, uid):
+            Sql.called = True
+            return {"success": True, "data": [], "row_count": 0}
+
+    engine = hqe.HybridQueryEngine.__new__(hqe.HybridQueryEngine)
+    engine.classifier, engine.rag_system, engine.sql_agent = Classifier(), Rag(), Sql()
+    monkeypatch.setattr(hqe, "chat_completion", lambda *a, **k: "No transactions yet.")
+
+    result = engine.query("coffee purchases", "user-1")
+    assert Sql.called
+    assert result["query_type"] == "ANALYTICAL"
+
+
+def test_synthesis_prompt_serializes_results_as_compact_json(monkeypatch):
+    import ai.hybrid_query_engine as hqe
+
+    class Classifier:
+        def classify(self, q):
+            return "ANALYTICAL"
+
+    class Rag:
+        enabled = False
+
+        def search(self, q, uid):
+            raise AssertionError("semantic search should not be called")
+
+    class Sql:
+        def query(self, q, uid):
+            return {
+                "success": True,
+                "data": [{"vendor_name": "Berghotel Müller", "total_amount": 42}],
+                "row_count": 1,
+            }
+
+    engine = hqe.HybridQueryEngine.__new__(hqe.HybridQueryEngine)
+    engine.classifier, engine.rag_system, engine.sql_agent = Classifier(), Rag(), Sql()
+
+    prompts = []
+
+    def capture(prompt, **kwargs):
+        prompts.append(prompt)
+        return "Found one transaction."
+
+    monkeypatch.setattr(hqe, "chat_completion", capture)
+
+    engine.query("last bill", "user-1")
+    assert len(prompts) == 1
+    assert '"vendor_name":"Berghotel Müller"' in prompts[0]
 
 
 def test_chat_llm_auth_failure_is_503_not_401(authed_client, monkeypatch):
@@ -263,3 +317,37 @@ def test_find_shadowed_keys():
     file_values = {"OPENROUTER_API_KEY": "from-file", "PORT": "5000", "EMPTY": ""}
     environ = {"OPENROUTER_API_KEY": "stale-system-key", "PORT": "5000", "EMPTY": "x"}
     assert find_shadowed_keys(file_values, environ) == ["OPENROUTER_API_KEY"]
+
+
+def test_chat_steps_fit_the_request_budget(monkeypatch):
+    # gunicorn kills the worker at 120s: classify (15s, no retry) + SQL
+    # (30s, no retry) + answer (30s, one retry) is about 105s at worst.
+    import ai.hybrid_query_engine as hqe
+    import ai.query_classifier as qc
+    import ai.sql_agent as sa
+
+    calls = {}
+
+    def capture(name, reply):
+        def fake(prompt, **kwargs):
+            calls[name] = kwargs
+            return reply
+
+        return fake
+
+    monkeypatch.setattr(qc, "chat_completion", capture("classify", "ANALYTICAL"))
+    qc.QueryClassifier().classify("coffee at starbucks")
+
+    agent = sa.SQLAgent.__new__(sa.SQLAgent)
+    agent.dialect = "sqlite"
+    monkeypatch.setattr(sa, "chat_completion", capture("sql", "SELECT 1"))
+    agent.generate_sql("coffee", "user-1")
+
+    engine = hqe.HybridQueryEngine.__new__(hqe.HybridQueryEngine)
+    monkeypatch.setattr(hqe, "chat_completion", capture("answer", "ok"))
+    engine._synthesize_response("q", {"success": True, "data": []}, "sql")
+
+    assert (calls["classify"]["timeout"], calls["classify"]["retries"]) == (15, 0)
+    assert (calls["sql"]["timeout"], calls["sql"]["retries"]) == (30, 0)
+    assert calls["answer"]["timeout"] == 30
+    assert calls["answer"].get("retries", 1) == 1
