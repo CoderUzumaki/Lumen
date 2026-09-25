@@ -326,7 +326,7 @@ class SQLAgent:
             # still writes. Postgres gets a read-only transaction per query.
             event.listen(self.engine, "connect", _sqlite_query_only)
 
-    # Rules 2 and 8 differ by database; see _DIALECT_RULES.
+    # Rules 2, 8 and 10 differ by database; see _DIALECT_RULES.
     _DIALECT_RULES = {
         "sqlite": {
             "name": "SQLite",
@@ -336,6 +336,7 @@ class SQLAgent:
                 "       payment_method case-insensitively, e.g. LOWER(category) = 'groceries'\n"
                 "       or vendor_name LIKE '%starbucks%'"
             ),
+            "round_rule": "Round money with ROUND(x, 2), e.g. ROUND(SUM(total_amount), 2)",
         },
         "postgresql": {
             "name": "PostgreSQL",
@@ -348,6 +349,12 @@ class SQLAgent:
                 "Text `=` is case-sensitive: compare category, vendor_name and\n"
                 "       payment_method case-insensitively, e.g. LOWER(category) = 'groceries'\n"
                 "       or vendor_name ILIKE '%starbucks%'"
+            ),
+            # total_amount is double precision, and Postgres has no
+            # ROUND(double precision, integer).
+            "round_rule": (
+                "ROUND(x, 2) needs a numeric argument, so cast first:\n"
+                "       ROUND(SUM(total_amount)::numeric, 2)"
             ),
         },
     }
@@ -391,6 +398,7 @@ class SQLAgent:
     8. {case_rule}
     9. Wrap aggregates in COALESCE so empty results read as 0, e.g.
        COALESCE(SUM(total_amount), 0) AS total_spent
+    10. {round_rule}
 
     User Question: {query}
     Current Date: {current_date}
@@ -421,6 +429,7 @@ class SQLAgent:
                     dialect_name=rules["name"],
                     date_rule=rules["date_rule"],
                     case_rule=rules["case_rule"],
+                    round_rule=rules["round_rule"],
                     query=query,
                     user_id=safe_uid,
                     current_date=datetime.now().strftime("%Y-%m-%d"),
