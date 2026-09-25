@@ -42,7 +42,7 @@ openai
 
 # PDF/Image processing
 
-pypdfium2  # renders PDF pages; bundles pdfium, no Poppler needed
+pypdfium2>=5,<6  # renders PDF pages; bundles pdfium, no Poppler needed
 python-dateutil
 
 Pillow
