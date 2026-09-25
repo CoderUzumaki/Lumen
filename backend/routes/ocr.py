@@ -102,7 +102,8 @@ def extract_invoice_data():
     # Step 2: Normalize the OCR data (never raises; unparseable fields become None)
     normalized = normalize_transaction(structured_data)
     if normalized["total_amount"] is None and not normalized["vendor_name"]:
-        logger.info("OCR found no invoice data in %r: %s", file.filename, structured_data)
+        logger.info("OCR found no invoice data in %r", file.filename)
+        logger.debug("OCR reply for %r: %s", file.filename, structured_data)
         return api_error(
             "We couldn't find invoice details in this file. Please upload a clear photo or PDF of an invoice or receipt.",
             status=422,

@@ -46,16 +46,19 @@ def parse_json_reply(content: str) -> dict:
 
     Models wrap it in ```json fences or add a sentence before it despite the
     prompt, so take the outermost {...}. Raises LLMError(BAD_RESPONSE) when
-    there is no JSON object in the reply.
+    there is no JSON object in the reply. The reply is invoice content, so it
+    is logged at DEBUG only and kept out of the error detail (logged at ERROR).
     """
     text = re.sub(r"```(?:json)?", "", content or "").strip()
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end <= start:
-        raise LLMError(LLMError.BAD_RESPONSE, f"No JSON object in vision reply: {text[:200]!r}")
+        logger.debug("Vision reply without a JSON object: %r", text[:200])
+        raise LLMError(LLMError.BAD_RESPONSE, f"No JSON object in vision reply ({len(text)} chars)")
     try:
         data = json.loads(text[start : end + 1])
     except json.JSONDecodeError as e:
-        raise LLMError(LLMError.BAD_RESPONSE, f"Vision reply is not valid JSON ({e}): {text[:200]!r}") from e
+        logger.debug("Vision reply with invalid JSON: %r", text[:200])
+        raise LLMError(LLMError.BAD_RESPONSE, f"Vision reply is not valid JSON ({e})") from e
     if not isinstance(data, dict):
         raise LLMError(LLMError.BAD_RESPONSE, "Vision reply JSON is not an object")
     return data
@@ -83,5 +86,6 @@ def extract_and_structure_with_openrouter(image_base64, media_type="image/jpeg")
         return parse_json_reply(reply)
     except LLMError as e:
         # With `openrouter/free` a retry usually lands on a different model.
-        logger.info("Retrying invoice OCR after unparseable reply: %s", e.detail)
+        logger.info("Retrying invoice OCR after an unusable reply")
+        logger.debug("Unusable invoice OCR reply: %s", e.detail)
         return parse_json_reply(chat_completion(content, **call))

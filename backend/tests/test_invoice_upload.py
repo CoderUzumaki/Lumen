@@ -172,6 +172,19 @@ def test_parse_json_reply_rejects_non_objects(content):
     assert excinfo.value.kind == LLMError.BAD_RESPONSE
 
 
+def test_vision_reply_text_stays_out_of_info_logs(monkeypatch, caplog):
+    import logging
+
+    from utils import llm
+    from utils.openrouter import extract_and_structure_with_openrouter
+
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: _reply("Invoice for Mr Secret, Rs 500"))
+    with caplog.at_level(logging.INFO), pytest.raises(llm.LLMError) as excinfo:
+        extract_and_structure_with_openrouter("aGk=", "image/png")
+    assert "Mr Secret" not in excinfo.value.detail
+    assert not [r for r in caplog.records if "Mr Secret" in r.getMessage()]
+
+
 @pytest.mark.parametrize(
     "status, body, kind",
     [
@@ -403,6 +416,17 @@ def test_image_with_no_invoice_data_is_422(client, ocr):
     assert resp.status_code == 422
     assert resp.get_json()["code"] == "no_invoice_data"
     assert _rows() == []
+
+
+def test_no_invoice_data_log_leaves_out_the_ocr_reply(client, ocr, caplog):
+    import logging
+
+    ocr.result = {"vendor_name": None, "total_amount": None, "address": "Mr Secret, 12 MG Road"}
+    with caplog.at_level(logging.INFO, logger="routes.ocr"):
+        assert _upload(client, _png_bytes()).status_code == 422
+    messages = [r.getMessage() for r in caplog.records if r.name == "routes.ocr"]
+    assert any("no invoice data" in m for m in messages)
+    assert not any("Mr Secret" in m for m in messages)
 
 
 def test_save_failure_is_an_error_not_a_silent_success(client, ocr, monkeypatch):
