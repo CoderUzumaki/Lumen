@@ -1,11 +1,11 @@
 # Lumen — Stabilization & Build-Out Plan
 
-A modular, Claude-Code-executable to-do list. Each task is self-contained: scope, files, acceptance criteria, and dependencies are stated so you can hand any single task to a fresh session without context.
+A modular to-do list. Each task is self-contained: scope, files, acceptance criteria, and dependencies are stated so anyone can pick up a single task without extra context.
 
 ## How to use this document
 
 - Tasks are grouped into phases. Earlier phases unblock later ones — do not skip ahead.
-- Each task has a stable ID (e.g. `SEC-01`). Reference it in commits, PRs, and Claude prompts: *"Implement TODO `SEC-01` per TODO.md."*
+- Each task has a stable ID (e.g. `SEC-01`). Reference it in commits and PRs.
 - A task is **done** only when every line under **Acceptance** is satisfied and a smoke test passes.
 - Mark progress inline: `- [ ]` → `- [x]`.
 - If a task grows beyond ~1 day of work, split it before starting.
@@ -40,7 +40,7 @@ Foundation for everything else. After this, no value that varies by environment 
 
 ### CFG-01 — Centralize backend configuration ✅
 - [x] Rewrote `backend/config.py` to expose absolute paths (`DATABASE_PATH`, `DATABASE_URI`, `CHROMA_DB_PATH`), LLM identifiers (`LLM_VISION_MODEL`, `LLM_TEXT_MODEL`, `LLM_EMBEDDING_MODEL`), OpenRouter URLs (`OPENROUTER_BASE_URL`, `OPENROUTER_CHAT_URL`), CORS allowlist (`ALLOWED_ORIGINS`), and `DEFAULT_CURRENCY`. Removed all hardcoded constants from `models/database.py`, `routes/chat.py`, `ai/sql_agent.py`, `ai/query_classifier.py`, `ai/hybrid_query_engine.py`, `ai/rag_system.py`, `ai/anomaly_detection.py`, `ai/forecasting_agent.py`, `ai/analytics_orchestrator.py`, `utils/openrouter.py`, and `scripts/backfill_chromadb.py`. `Config.validate()` runs at startup in `app.py` and raises on missing `OPENROUTER_API_KEY`. The acceptance grep now returns only the two `config.py` defaults; smoke tests confirm validate() raises when the key is unset.
-- **Deviation from spec**: The TODO asked for a single `LLM_MODEL`, but OCR (`utils/openrouter.py`) needs a vision-capable model and the chat/SQL/anomaly call sites need a text-only model. Split into `LLM_VISION_MODEL` and `LLM_TEXT_MODEL` so each path can be sized independently (cheap nemotron for vision, claude for reasoning).
+- **Deviation from spec**: The TODO asked for a single `LLM_MODEL`, but OCR (`utils/openrouter.py`) needs a vision-capable model and the chat/SQL/anomaly call sites need a text-only model. Split into `LLM_VISION_MODEL` and `LLM_TEXT_MODEL` so each path can be sized independently (a cheap vision model for OCR, a stronger model for reasoning).
 - **Latent bug fixed in passing**: SQLAlchemy was writing to `sqlite:///lumen.db` (resolved to `backend/lumen.db` via cwd) while the AI agents read `instance/lumen.db` — **two different SQLite files**. Both now resolve to the same absolute `Config.DATABASE_PATH`, and `instance/` is auto-created at import time.
 
 ### CFG-02 — Strengthen `SECRET_KEY` handling ✅
@@ -271,9 +271,38 @@ Before declaring "stable" and starting Phase 6:
 
 ---
 
-## Working with Claude Code on this list
+## Go-live checklist
 
-- One task per session is ideal. Hand Claude the task ID and let it open just the files listed under that task.
+Deploy targets already exist: frontend on Vercel (`lumen-eta-ebon.vercel.app`, preview build on every PR) and a Render blueprint (`render.yaml`: API, email worker, Postgres).
+
+- [ ] **Promote the latest `refactor` build to production.** Production still serves `b96c52a` (July), from before email sign-in. Either merge `refactor` into Vercel's production branch (PR #1 `refactor → main`) or promote the latest preview in the Vercel dashboard.
+- [ ] **Vercel env vars:** `NEXT_PUBLIC_SUPABASE_URL=https://cdobezolkgswcxupcqqw.supabase.co`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_BACKEND_URL` (the deployed API URL, not localhost) and `NEXT_PUBLIC_APP_URL` (used by robots/sitemap).
+- [ ] **Supabase → Authentication → URL Configuration:** Site URL = production domain; Redirect URLs include `https://<prod-domain>/**` and `http://localhost:3000/**`.
+- [ ] **Supabase custom SMTP** (Resend, Postmark, …). The built-in sender only allows a few emails an hour.
+- [ ] **Backend on Render** from `render.yaml`: set `OPENROUTER_API_KEY`, `SUPABASE_URL`, `ALLOWED_ORIGINS` (the Vercel domain), `FRONTEND_URL`. Decide whether the frontend runs on Vercel or Render; the blueprint defines both.
+- [ ] **LLM capacity.** A free-tier OpenRouter key allows about 50 requests a day, and one Ask Lumen question uses 2–3. Free models took 15–40s per call and were often rate-limited or overloaded in testing. Before real users, add OpenRouter credits and set `LLM_TEXT_MODEL` to a fast paid model; the vision model can stay `openrouter/free` or move to paid too.
+
+---
+
+## UX & performance backlog (after functionality is stable)
+
+Goal: fully smooth navigation, in the spirit of X.com, where moving between tabs feels instant and nothing flashes.
+
+- [ ] **White flash between pages.** `frontend/src/app/loading.tsx` renders on `bg-gray-50` (near-white). Next.js shows it during every route change, so the dark app flashes white. Use the app background (`bg-background`) and a skeleton that matches the destination layout.
+- [ ] **Persistent app shell.** Every page mounts its own `DashboardShell` / `SidebarProvider` (`dashboardContent`, `analyticsContent`, `aiAnalyticsContent`, `chatbotContent`), so navigating rebuilds the whole sidebar and shell. Move the shell into a shared route-group layout (`app/(app)/layout.tsx`) so only the content area swaps and sidebar state survives.
+- [ ] **Instant route changes, X.com-style:**
+  - Keep `<Link>` prefetch on for sidebar links, and prefetch on hover or when links come into view.
+  - Cache fetched data client-side (SWR or TanStack Query) so revisiting a tab renders immediately and revalidates in the background.
+  - Use per-route `loading.tsx` skeletons instead of full-screen spinners.
+  - Use optimistic UI for chat and uploads.
+- [ ] **First click on a tab is slow in local dev.** That's Next.js compiling the route on demand in `next dev`. Production builds precompile every route, so check smoothness on a production build (`npm run build && npm start`) or a Vercel preview, not in dev.
+- [ ] **General UI/UX pass.** Layout and styling are broken in places; do a full design pass once features are stable.
+
+---
+
+## Working on this list
+
+- One task per branch/PR is ideal. Open just the files listed under that task.
 - Reference the **Depends on** field — if a dep isn't done, fix that first.
 - Update this file at the end of each session: tick the checkbox and add a one-line note under the task if anything changed.
 - When a task reveals a sibling problem out of scope, add it as a new entry (next free ID in that phase) rather than expanding the current task.

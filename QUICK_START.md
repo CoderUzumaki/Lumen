@@ -54,7 +54,8 @@ Set in `backend/.env`:
 SECRET_KEY=generate-a-long-random-string
 OPENROUTER_API_KEY=your_key
 SUPABASE_URL=https://your-project.supabase.co
-LLM_TEXT_MODEL=openrouter/free
+LLM_TEXT_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
+LLM_TEXT_FALLBACK_MODELS=nex-agi/nex-n2.5-pro:free,openrouter/free
 
 # Optional: Neon/Postgres (omit to use local SQLite)
 # DATABASE_URL=postgresql://...
